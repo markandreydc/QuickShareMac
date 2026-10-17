@@ -234,7 +234,7 @@
     "MenuReceivingOffTooltip" : {
       "localizations" : {
         "en" : {
-          "stringUnit" : { "state" : "translated", "value" : "QuickShareMac · Receiving off. Click to show transfers; right-click to enable receiving." }
+          "stringUnit" : { "state" : "translated", "value" : "QuickShareMac · Receiving off. Click for menu." }
         }
       }
     },
@@ -248,7 +248,7 @@
     "MenuReceivingOnTooltip" : {
       "localizations" : {
         "en" : {
-          "stringUnit" : { "state" : "translated", "value" : "QuickShareMac · Receiving on. Click to show transfers; right-click for controls." }
+          "stringUnit" : { "state" : "translated", "value" : "QuickShareMac · Receiving on. Click for menu." }
         }
       }
     },

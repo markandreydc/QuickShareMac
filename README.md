@@ -1,6 +1,6 @@
 # QuickShareMac
 
-<img src="quicksharemac.png" width="96" alt="QuickShareMac icon">
+<img src="images/quicksharemac.png" width="96" alt="QuickShareMac icon">
 
 Send files between your Mac and Android devices using **Quick Share** over your local network.
 
@@ -45,7 +45,7 @@ Select **Remember this device name** before accepting if you want a visual remin
 
 ### Background behavior and settings
 
-Closing the window does not quit the app. Click the menu bar or Dock icon to reopen it. Right-click the menu bar icon for quick receiving controls, file sending, Settings, and Quit.
+Closing the window does not quit the app. Click the Dock icon to reopen it, or click the menu bar icon and choose **Show QuickShareMac**. Both left-click and right-click open the standard macOS menu, with receiving controls, file sending, Settings, and Quit. The menu and monochrome icon follow the system appearance.
 
 Turning receiving off stops new incoming connections; transfers already in progress can finish. Outgoing transfers do not require receiving to be enabled.
 

@@ -12,6 +12,7 @@ import ServiceManagement
 @main
 class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemValidation{
 	private var statusItem:NSStatusItem?
+	private let statusMenu=StatusBarMenu()
 	private var mainWindow:NSWindow?
 	private var settingsWindow:NSWindow?
 	private let windowController=MainWindowViewController()
@@ -62,18 +63,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		NSApplication.shared.windowsMenu=windowMenu
 		NSApplication.shared.mainMenu=mainMenu
 		statusItem=NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-		let menuBarIcon:NSImage?
-		if #available(macOS 11.0, *){
-			menuBarIcon=NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: "QuickShareMac")
-		}else{
-			menuBarIcon=NSImage(named: "MenuBarIcon")
+		statusMenu.stateProvider={ [weak self] in
+			StatusBarMenu.State(receiving: NearbyConnectionManager.shared.isReceiving, canSendFiles: self?.windowController.sendController.sender.isTransferring != true)
 		}
-		menuBarIcon?.size=NSSize(width: 18, height: 18)
-		menuBarIcon?.isTemplate=true
-		statusItem?.button?.image=menuBarIcon
-		statusItem?.button?.target=self
-		statusItem?.button?.action=#selector(statusBarClicked(_:))
-		statusItem?.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+		statusMenu.onShow={ [weak self] in self?.showMainWindow(nil) }
+		statusMenu.onSendFiles={ [weak self] in self?.sendFiles(nil) }
+		statusMenu.onToggleReceiving={ [weak self] in self?.setReceiving(!NearbyConnectionManager.shared.isReceiving) }
+		statusMenu.onSettings={ [weak self] in self?.showSettings(nil) }
+		statusMenu.onQuit={NSApplication.shared.terminate(nil)}
+		if let statusItem=statusItem{statusMenu.attach(to: statusItem)}
 		statusItem?.behavior = .removalAllowed
 		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 640),
 							styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -150,29 +148,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		NSApplication.shared.activate(ignoringOtherApps: true)
 	}
 
-	@objc private func statusBarClicked(_ sender:NSStatusBarButton){
-		guard NSApp.currentEvent?.type == .rightMouseUp, let event=NSApp.currentEvent else {
-			showMainWindow(sender)
-			return
-		}
-		let menu=NSMenu()
-		let showItem=menu.addItem(withTitle: NSLocalizedString("ShowApp", value: "Show QuickShareMac", comment: ""), action: #selector(showMainWindow(_:)), keyEquivalent: "")
-		showItem.target=self
-		let sendItem=menu.addItem(withTitle: NSLocalizedString("SendFiles", value: "Send files…", comment: ""), action: #selector(sendFiles(_:)), keyEquivalent: "")
-		sendItem.target=self
-		let receiving=NearbyConnectionManager.shared.isReceiving
-		let receiveItem=menu.addItem(withTitle: receiving ? NSLocalizedString("MenuReceivingOn", value: "Receiving: On", comment: "") : NSLocalizedString("MenuReceivingOff", value: "Receiving: Off", comment: ""), action: #selector(toggleReceiving(_:)), keyEquivalent: "")
-		receiveItem.target=self
-		receiveItem.state=receiving ? .on : .off
-		let settingsItem=menu.addItem(withTitle: NSLocalizedString("Settings", value: "Settings…", comment: ""), action: #selector(showSettings(_:)), keyEquivalent: ",")
-		settingsItem.target=self
-		menu.addItem(.separator())
-		let quitItem=menu.addItem(withTitle: NSLocalizedString("Quit", value: "Quit QuickShareMac", comment: ""), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
-		quitItem.target=NSApplication.shared
-		NSMenu.popUpContextMenu(menu, with: event, for: sender)
-	}
-
-	@objc private func toggleReceiving(_ sender:NSMenuItem){setReceiving(!NearbyConnectionManager.shared.isReceiving)}
 	@objc private func openLoginItems(_ sender:Any?){
 		if #available(macOS 13.0, *){SMAppService.openSystemSettingsLoginItems()}
 		else{NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preferences.users")!)}
@@ -222,8 +197,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 
 	private func refreshWindow(){
 		let isReceiving=NearbyConnectionManager.shared.isReceiving
-		statusItem?.button?.alphaValue=1
-		statusItem?.button?.toolTip=isReceiving ? NSLocalizedString("MenuReceivingOnTooltip", value: "QuickShareMac · Receiving on. Click to show transfers; right-click for controls.", comment: "") : NSLocalizedString("MenuReceivingOffTooltip", value: "QuickShareMac · Receiving off. Click to show transfers; right-click to enable receiving.", comment: "")
+		statusMenu.refresh()
+		statusItem?.button?.toolTip=statusMenu.toolTip
 		statusItem?.button?.setAccessibilityLabel(statusItem?.button?.toolTip)
 		let launchAtLogin:Bool
 		let requiresLoginApproval:Bool

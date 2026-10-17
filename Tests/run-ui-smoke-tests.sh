@@ -13,6 +13,7 @@ xcrun swiftc -swift-version 5 -I "$BUILD" -L "$BUILD" \
   "$BUILD/QRCode.o" "$BUILD/QRCodeGenerator.o" "$BUILD/SwiftImageReadWrite.o" \
   "$ROOT/QuickShareMac/MainWindowViewController.swift" \
   "$ROOT/QuickShareMac/SendViewController.swift" \
+  "$ROOT/QuickShareMac/StatusBarMenu.swift" \
   "$ROOT/Shared/SendTransferViewController.swift" \
   "$ROOT/ShareExtension/ShareViewController.swift" \
   "$ROOT/Tests/UISmokeTests.swift" -o "$OUTPUT/ui-smoke-tests"

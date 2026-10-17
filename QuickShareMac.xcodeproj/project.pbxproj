@@ -41,6 +41,7 @@
 		69DCF49E2AB8C9A500CBE2CC /* libNearbyShare.dylib in Embed Libraries */ = {isa = PBXBuildFile; fileRef = 69DCF4812AB70D0600CBE2CC /* libNearbyShare.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		69E1A0002D01000100ABCDF1 /* MainWindowViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A0002D01000100ABCDF0 /* MainWindowViewController.swift */; };
 		69E1A1002D01000100ABCDF1 /* SendViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A1002D01000100ABCDF0 /* SendViewController.swift */; };
+		69E1A4002D01000100ABCDF1 /* StatusBarMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A4002D01000100ABCDF0 /* StatusBarMenu.swift */; };
 		69E1A2002D01000100ABCDF1 /* SendTransferViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A2002D01000100ABCDF0 /* SendTransferViewController.swift */; };
 		69E1A2002D01000100ABCDF2 /* SendTransferViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A2002D01000100ABCDF0 /* SendTransferViewController.swift */; };
 		69E1A3002D01000100ABCDF1 /* QRCode in Frameworks */ = {isa = PBXBuildFile; productRef = 69E1A3002D01000100ABCDF0 /* QRCode */; };
@@ -151,6 +152,7 @@
 		69DCF4812AB70D0600CBE2CC /* libNearbyShare.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = libNearbyShare.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		69E1A0002D01000100ABCDF0 /* MainWindowViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowViewController.swift; sourceTree = "<group>"; };
 		69E1A1002D01000100ABCDF0 /* SendViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendViewController.swift; sourceTree = "<group>"; };
+		69E1A4002D01000100ABCDF0 /* StatusBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarMenu.swift; sourceTree = "<group>"; };
 		69E1A2002D01000100ABCDF0 /* SendTransferViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendTransferViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -245,6 +247,7 @@
 				69DA9A1129E0BF5100A442DA /* AppDelegate.swift */,
 				69E1A0002D01000100ABCDF0 /* MainWindowViewController.swift */,
 				69E1A1002D01000100ABCDF0 /* SendViewController.swift */,
+				69E1A4002D01000100ABCDF0 /* StatusBarMenu.swift */,
 				69DA9A1329E0BF5200A442DA /* Assets.xcassets */,
 				697DDF122E44AAFB00B4749C /* Localizable.xcstrings */,
 				69DA9A1829E0BF5200A442DA /* QuickShareMac.entitlements */,
@@ -466,6 +469,7 @@
 				69DA9A1229E0BF5100A442DA /* AppDelegate.swift in Sources */,
 				69E1A0002D01000100ABCDF1 /* MainWindowViewController.swift in Sources */,
 				69E1A1002D01000100ABCDF1 /* SendViewController.swift in Sources */,
+				69E1A4002D01000100ABCDF1 /* StatusBarMenu.swift in Sources */,
 				69E1A2002D01000100ABCDF1 /* SendTransferViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

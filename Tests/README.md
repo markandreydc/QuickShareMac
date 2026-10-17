@@ -11,7 +11,8 @@ Tests/run-sending-integration-tests.sh
 The UI suite uses a fake sending service: it does not discover or contact devices.
 It covers Send/Receive navigation, file-only selection and drag-and-drop, Share
 extension link handling, approval,
-progress, cancellation, retry isolation, background completion, and history.
+progress, cancellation, retry isolation, background completion, history, and native
+menu bar behavior (menu attachment, appearance defaults, actions, and live state).
 
 The integration suite exercises the real encrypted file-transfer protocol on
 `127.0.0.1`. Received files are written into a disposable temporary directory,

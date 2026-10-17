@@ -172,7 +172,59 @@ struct UISmokeTests{
 		snapshot(window, "dark-approval")
 		expect(button("Accept", in: controller.view).isEnabled, "Approval must remain usable in dark mode")
 		testMainWindowSending()
+		testStatusBarMenu()
 		print("Passed \(checks) UI smoke checks")
+	}
+
+	static func testStatusBarMenu(){
+		let controller=StatusBarMenu()
+		var receiving=false
+		var canSendFiles=true
+		controller.stateProvider={StatusBarMenu.State(receiving: receiving, canSendFiles: canSendFiles)}
+		let item=NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+		defer{NSStatusBar.system.removeStatusItem(item)}
+		controller.attach(to: item)
+		expect(item.menu === controller.menu, "A native status-item menu must handle normal clicks")
+		expect(item.button?.action==nil && item.button?.target==nil, "Status clicks must not use a custom window-opening action")
+		expect(item.button?.image?.isTemplate==true, "The menu bar icon must let macOS choose its tint")
+		expect(controller.menu.appearance==nil, "The status menu must not force a light or dark appearance")
+		expect(controller.menu.items.allSatisfy({$0.view==nil && $0.attributedTitle==nil}), "Menu items must use native views and text colors")
+		controller.menuNeedsUpdate(controller.menu)
+		let off=controller.menu.items.first(where: {$0.title=="Receiving: Off"})!
+		expect(off.state == .off, "The menu must show receiving off without a checkmark")
+		var showed=false
+		controller.onShow={showed=true}
+		controller.menu.performActionForItem(at: controller.menu.indexOfItem(withTitle: "Show QuickShareMac"))
+		expect(showed, "Showing the window must remain available as a menu action")
+		var sends=0
+		controller.onSendFiles={sends+=1}
+		let sendIndex=controller.menu.indexOfItem(withTitle: "Send files…")
+		controller.menu.performActionForItem(at: sendIndex)
+		expect(sends==1, "The status menu's Send files action must be wired")
+		canSendFiles=false
+		controller.menuNeedsUpdate(controller.menu)
+		expect(!controller.menu.item(at: sendIndex)!.isEnabled, "Opening the menu during a transfer must disable another send")
+		controller.menu.performActionForItem(at: sendIndex)
+		expect(sends==1, "A disabled send action must not start another transfer")
+		controller.onToggleReceiving={receiving.toggle()}
+		controller.menu.performActionForItem(at: controller.menu.index(of: off))
+		expect(receiving && off.state == .on && off.title=="Receiving: On", "Receiving controls must refresh their title and checkmark")
+		expect(controller.toolTip.contains("Click for menu") && !controller.toolTip.contains("right-click"), "The tooltip must describe the new click behavior")
+		var settings=false
+		controller.onSettings={settings=true}
+		controller.menu.performActionForItem(at: controller.menu.indexOfItem(withTitle: "Settings…"))
+		expect(settings, "Settings must remain available in the native menu")
+		var quit=false
+		controller.onQuit={quit=true}
+		controller.menu.performActionForItem(at: controller.menu.indexOfItem(withTitle: "Quit QuickShareMac"))
+		expect(quit, "Quit must remain available in the native menu")
+		let original=NSApp.appearance
+		defer{NSApp.appearance=original}
+		for appearance in [NSAppearance.Name.aqua, .darkAqua]{
+			NSApp.appearance=NSAppearance(named: appearance)
+			controller.menuNeedsUpdate(controller.menu)
+			expect(controller.menu.appearance==nil && item.button?.image?.isTemplate==true, "System appearance changes must not install custom menu colors or icon tints")
+		}
 	}
 
 	static func testMainWindowSending(){
