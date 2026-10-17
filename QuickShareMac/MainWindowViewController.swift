@@ -319,6 +319,13 @@ final class MainWindowViewController:NSViewController{
 		WindowUI.pin(sendController.view, to: tabHost, inset: 0)
 		sendController.view.isHidden=true
 
+		let developerCredit=WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true)
+		developerCredit.identifier=NSUserInterfaceItemIdentifier("MainDeveloperCreditFooter")
+		developerCredit.alignment = .center
+		developerCredit.setContentHuggingPriority(.required, for: .vertical)
+		developerCredit.setContentCompressionResistancePriority(.required, for: .vertical)
+		WindowUI.fill(developerCredit, in: content)
+
 		let receiveCard=CardView()
 		receiveCard.wantsLayer=true
 		let receiveCardContent=WindowUI.stack(spacing: 5)

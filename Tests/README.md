@@ -19,6 +19,8 @@ Compact-window checks verify that approval controls remain reachable by scrollin
 without expanding the window, and that a new approval request scrolls back to the
 top. The upper-right pin is tested for normal/floating window levels, on/off state,
 tooltips, tab-switch persistence, restored state, and leaving other windows unaffected.
+The developer credit footer is checked on both the Receive and Send tabs for
+centering, bottom placement, resizing, and staying outside cards/scrolling content.
 Drag checks cover the window-wide overlay on both tabs, filename/count previews,
 copy-only cursor feedback, resizing/dark appearance, rejected folders/links/missing
 files, drop-time revalidation, active-transfer changes during a hover, cleanup on

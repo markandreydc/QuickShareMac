@@ -62,6 +62,25 @@ struct UISmokeTests{
 		controller.viewDidAppear()
 		expect(window.level == .floating && pinChanges==[true,false], "Restoring a saved pin setting must apply it without writing another user change")
 		controller.setAlwaysOnTop(false)
+		let credit=visible(controller.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="MainDeveloperCreditFooter"})!
+		func creditFrame()->NSRect{credit.convert(credit.bounds, to: controller.view)}
+		expect(credit.stringValue=="Developed by Mark Andrey · github.com/markandreydc" && credit.alignment == .center, "The main window must show the centered developer credit")
+		expect(abs(creditFrame().midX-controller.view.bounds.midX)<1 && abs(creditFrame().minY-controller.view.bounds.minY-20)<1, "The developer credit must sit at the bottom of the main window")
+		var creditAncestor=credit.superview
+		while let ancestor=creditAncestor{
+			expect(!(ancestor is CardView) && !(ancestor is NSScrollView), "The main developer credit must sit outside cards and scrolling content")
+			creditAncestor=ancestor.superview
+		}
+		controller.showSend()
+		layout(window)
+		expect(visible(controller.view).contains(where: {$0 === credit}) && abs(creditFrame().minY-controller.view.bounds.minY-20)<1, "The Send tab must keep the developer credit centered at the footer")
+		controller.showReceive()
+		layout(window)
+		window.setContentSize(NSSize(width: 700, height: 640))
+		layout(window)
+		expect(abs(creditFrame().midX-controller.view.bounds.midX)<1 && abs(creditFrame().minY-controller.view.bounds.minY-20)<1, "The developer credit must stay centered at the bottom when the window resizes")
+		window.setContentSize(MainWindowViewController.minimumSize)
+		layout(window)
 		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Studio Mac"}), "The main header must use the configured device name")
 		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue.contains("choose “Studio Mac”")}), "Receiving instructions must match the configured advertised name")
 		let duration=visible(controller.view).compactMap {$0 as? NSPopUpButton}.first!
