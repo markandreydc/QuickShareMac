@@ -2172,17 +2172,6 @@
         }
       }
     },
-    "SavedToFolder" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Received files are saved to %@"
-          }
-        }
-      }
-    },
     "SetUpLoginItem" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {

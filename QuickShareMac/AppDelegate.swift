@@ -334,7 +334,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			return (activeIncomingTransfers[$0.id]?.createdAt ?? .distantPast) < (activeIncomingTransfers[$1.id]?.createdAt ?? .distantPast)
 		}
 		windowController.update(receiving: isReceiving,
-								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]}, deviceName: LocalDeviceIdentity.shared.deviceName, duration: availability.duration, expiresAt: availability.expiresAt, receivedFilesFolderName: ReceivedFilesFolder.displayName)
+								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]}, deviceName: LocalDeviceIdentity.shared.deviceName, duration: availability.duration, expiresAt: availability.expiresAt)
 		if settingsWindow != nil{
 			settingsController.update(startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey), launchAtLogin: launchAtLogin, requiresLoginApproval: requiresLoginApproval, rememberedDeviceCount: rememberedDevices.count, customDeviceName: LocalDeviceIdentity.shared.customName, receivedFilesFolderName: ReceivedFilesFolder.displayName, receivedFilesFolderIsCustom: ReceivedFilesFolder.isCustom)
 			settingsController.updateUpdates(frequency: updates.frequency, checking: updates.isChecking, currentVersion: updates.currentVersion, availableRelease: updates.availableRelease, status: updates.statusText)

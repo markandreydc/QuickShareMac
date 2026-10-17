@@ -248,7 +248,6 @@ final class MainWindowViewController:NSViewController{
 	var onClearRecentTransfers:(()->Void)?
 	private let receivingSwitch=NSSwitch()
 	private let deviceNameLabel=WindowUI.label("", size: 12, secondary: true)
-	private let savedToLabel=WindowUI.label("", size: 11, secondary: true)
 	private let durationPopup=NSPopUpButton(frame: .zero, pullsDown: false)
 	private let expiryLabel=WindowUI.label("", size: 11, secondary: true)
 	private let statusLabel=WindowUI.label("", size: 15, weight: .semibold)
@@ -395,8 +394,6 @@ final class MainWindowViewController:NSViewController{
 		let clear=NSButton(title: NSLocalizedString("ClearRecent", value: "Clear", comment: ""), target: self, action: #selector(clearRecent(_:)))
 		clear.bezelStyle = .inline
 		recentHeading.addArrangedSubview(clear)
-		savedToLabel.stringValue=String(format: NSLocalizedString("SavedToFolder", value: "Received files are saved to %@", comment: ""), "Downloads")
-		WindowUI.fill(savedToLabel, in: receiveContent)
 	}
 
 	override func viewDidAppear(){
@@ -439,10 +436,9 @@ final class MainWindowViewController:NSViewController{
 	}
 	@objc private func tabChanged(_ sender:NSSegmentedControl){updateTab()}
 
-	func update(receiving:Bool, transfers:[IncomingTransferDisplay], deviceName:String = LocalDeviceIdentity.shared.deviceName, duration:ReceivingDuration = .indefinitely, expiresAt:Date?=nil, receivedFilesFolderName:String = "Downloads"){
+	func update(receiving:Bool, transfers:[IncomingTransferDisplay], deviceName:String = LocalDeviceIdentity.shared.deviceName, duration:ReceivingDuration = .indefinitely, expiresAt:Date?=nil){
 		_ = view
 		self.receiving=receiving
-		savedToLabel.stringValue=String(format: NSLocalizedString("SavedToFolder", value: "Received files are saved to %@", comment: ""), receivedFilesFolderName)
 		deviceNameLabel.stringValue=deviceName
 		deviceNameLabel.toolTip=deviceName
 		durationPopup.selectItem(withTag: duration.rawValue)

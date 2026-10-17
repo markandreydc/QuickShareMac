@@ -91,17 +91,7 @@ struct UISmokeTests{
 		controller.onOpenReceivedFiles={openedReceived=true}
 		openReceived.performClick(nil)
 		expect(openedReceived, "Open Received Files must open the configured save folder")
-		let savedTo=visible(controller.view).compactMap {$0 as? NSTextField}.first(where: {$0.stringValue=="Received files are saved to Downloads"})!
-		controller.update(receiving: true, transfers: [], deviceName: "Studio Mac", receivedFilesFolderName: "Shared Inbox")
-		expect(savedTo.stringValue=="Received files are saved to Shared Inbox", "The Receive footer must show the configured save folder")
-		var savedToAncestor=savedTo.superview
-		while let ancestor=savedToAncestor{
-			expect(!(ancestor is NSScrollView), "The save-folder footer must sit outside the transfer list scroll view")
-			savedToAncestor=ancestor.superview
-		}
-		expect(savedTo.convert(savedTo.bounds, to: controller.view).minY>creditFrame().minY, "The save-folder footer must sit above the developer credit")
 		controller.update(receiving: true, transfers: [], deviceName: "Studio Mac")
-		expect(savedTo.stringValue=="Received files are saved to Downloads", "The folder label must return to the default")
 		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Studio Mac"}), "The main header must use the configured device name")
 		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue.contains("choose “Studio Mac”")}), "Receiving instructions must match the configured advertised name")
 		let duration=visible(controller.view).compactMap {$0 as? NSPopUpButton}.first!
