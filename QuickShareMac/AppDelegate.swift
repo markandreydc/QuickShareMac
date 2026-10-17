@@ -115,6 +115,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			self?.refreshWindow()
 		}
 		windowController.onOpenSettings={ [weak self] in self?.showSettings(nil) }
+		windowController.onOpenReceivedFiles={ [weak self] in self?.openReceivedFilesFolder() }
 		settingsController.onStartReceivingOnLaunchChange={ [weak self] enabled in
 			guard let self=self else {return}
 			UserDefaults.standard.set(enabled, forKey: self.startReceivingKey)
@@ -139,11 +140,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			self?.respondToIncomingTransfer(id: id, decision: accepted)
 		}
 		settingsController.onForgetRememberedDevices={ [weak self] in self?.forgetRememberedDevices() }
+		settingsController.onChooseReceivedFilesFolder={ [weak self] in self?.chooseReceivedFilesFolder() }
+		settingsController.onUseDownloadsFolder={ [weak self] in self?.setReceivedFilesFolder(nil) }
 		windowController.onRevealTransfer={ [weak self] id in
 			guard let transfer=self?.recentlyFinishedTransfers[id], transfer.state == .completed else {return}
 			let urls=transfer.savedFileURLs.filter {FileManager.default.fileExists(atPath: $0.path)}
 			if !urls.isEmpty{NSWorkspace.shared.activateFileViewerSelecting(urls)}
-			else if let downloads=FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first{NSWorkspace.shared.open(downloads)}
+			else{NSWorkspace.shared.open(ReceivedFilesFolder.currentURL)}
 		}
 		windowController.onDismissTransfer={ [weak self] id in
 			self?.recentlyFinishedTransfers.removeValue(forKey: id)
@@ -156,6 +159,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			self?.refreshWindow()
 		}
 		NearbyConnectionManager.shared.mainAppDelegate=self
+		NearbyConnectionManager.shared.incomingDownloadDirectory=ReceivedFilesFolder.currentURL
 		if UserDefaults.standard.bool(forKey: startReceivingKey){setReceiving(true)}
 		refreshWindow()
 		showMainWindow(nil)
@@ -260,7 +264,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		NSWorkspace.shared.open(release.pageURL)
 	}
 
+	private func openReceivedFilesFolder(){NSWorkspace.shared.open(ReceivedFilesFolder.currentURL)}
+
+	private func chooseReceivedFilesFolder(){
+		guard let window=settingsWindow ?? mainWindow else {return}
+		let panel=NSOpenPanel()
+		panel.canChooseFiles=false
+		panel.canChooseDirectories=true
+		panel.allowsMultipleSelection=false
+		panel.canCreateDirectories=true
+		panel.prompt=NSLocalizedString("ChooseFolderPrompt", value: "Choose", comment: "")
+		panel.directoryURL=ReceivedFilesFolder.currentURL
+		panel.beginSheetModal(for: window){ [weak self] response in
+			guard response == .OK, let url=panel.url else {return}
+			self?.setReceivedFilesFolder(url)
+		}
+	}
+
+	private func setReceivedFilesFolder(_ url:URL?){
+		do{
+			try ReceivedFilesFolder.set(url)
+			NearbyConnectionManager.shared.incomingDownloadDirectory=ReceivedFilesFolder.currentURL
+			refreshWindow()
+		}catch{
+			showError(error)
+		}
+	}
+
 	private func refreshWindow(){
+		NearbyConnectionManager.shared.incomingDownloadDirectory=ReceivedFilesFolder.currentURL
 		availability.checkExpiration()
 		let isReceiving=NearbyConnectionManager.shared.isReceiving
 		statusMenu.refresh()
@@ -302,9 +334,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			return (activeIncomingTransfers[$0.id]?.createdAt ?? .distantPast) < (activeIncomingTransfers[$1.id]?.createdAt ?? .distantPast)
 		}
 		windowController.update(receiving: isReceiving,
-								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]}, deviceName: LocalDeviceIdentity.shared.deviceName, duration: availability.duration, expiresAt: availability.expiresAt)
+								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]}, deviceName: LocalDeviceIdentity.shared.deviceName, duration: availability.duration, expiresAt: availability.expiresAt, receivedFilesFolderName: ReceivedFilesFolder.displayName)
 		if settingsWindow != nil{
-			settingsController.update(startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey), launchAtLogin: launchAtLogin, requiresLoginApproval: requiresLoginApproval, rememberedDeviceCount: rememberedDevices.count, customDeviceName: LocalDeviceIdentity.shared.customName)
+			settingsController.update(startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey), launchAtLogin: launchAtLogin, requiresLoginApproval: requiresLoginApproval, rememberedDeviceCount: rememberedDevices.count, customDeviceName: LocalDeviceIdentity.shared.customName, receivedFilesFolderName: ReceivedFilesFolder.displayName, receivedFilesFolderIsCustom: ReceivedFilesFolder.isCustom)
 			settingsController.updateUpdates(frequency: updates.frequency, checking: updates.isChecking, currentVersion: updates.currentVersion, availableRelease: updates.availableRelease, status: updates.statusText)
 		}
 	}

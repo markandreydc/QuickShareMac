@@ -56,7 +56,7 @@ Alternatively, select files in Finder and choose **Share → QuickShareMac**. Li
 1. Enable receiving in the **Receive** tab.
 2. On Android, select files, open Quick Share, and choose your Mac’s displayed device name.
 3. QuickShareMac opens the incoming request. Verify the PIN, then choose **Accept** or **Decline**.
-4. Received files are saved to **Downloads**. Use **Show in Finder** on a completed transfer to locate them.
+4. Received files are saved to your chosen folder—**Downloads** by default. Use **Show in Finder** on a completed transfer to locate them, or **Open Received Files** next to the Receive/Send tabs to open the folder.
 
 Select **Remember this device name** before accepting if you want a visual reminder for future requests. Remembered names **do not verify identity or bypass approval**—always check the PIN. You can forget remembered names in **Settings…** (`⌘,`).
 
@@ -79,6 +79,8 @@ Turning receiving off stops new incoming connections; transfers already in progr
 In **General**, choose whether receiving starts when the app opens. On macOS 13 or later, you can also enable **Launch at login**. On older systems, add the app to Login Items in System Settings.
 
 Under **Device name** in Settings, choose **Use Mac’s name** or **Use a custom name**. The system option shows the name nearby devices will see; choosing Custom reveals an input prefilled with the current name. Click **Save changes** to apply your choice, or **Cancel** to restore the saved setting. Empty custom input shows guidance instead of a technical error, and Save stays disabled until the name is valid and changed. This changes only QuickShareMac’s identity, not your computer’s name. Discovery, receiving instructions, and outgoing handshakes use the chosen name, including the Share extension. The extension has read-only access to the separate preference containing that name.
+
+Under **Received files** in Settings, choose **Choose…** to pick any folder for incoming files—for example Desktop, Documents, or a folder of your own—or **Use Downloads** to restore the default. The Receive footer always shows the current folder, and **Open Received Files** next to the Receive/Send tabs opens it. If the chosen folder disappears, QuickShareMac falls back to Downloads.
 
 Recent transfer results last for the current app session, until you dismiss or clear them. They are not a permanent transfer log.
 

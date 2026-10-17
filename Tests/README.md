@@ -33,7 +33,12 @@ Settings update-frequency selection and status-menu update actions, busy states,
 also covered, without making update requests or opening a browser.
 Settings checks also cover General/Updates/About navigation, grouped controls,
 preserving the selected page on refresh, About credits/version, resizing,
-scrollable validation messages, and dark appearance.
+scrollable validation messages, and dark appearance. The received-files save
+folder is covered through the Settings callbacks, folder-name display, hidden
+reset state, and default restoration, plus bookmark persistence, missing-folder
+rejection, and the Downloads fallback in the store. The Receive tab's save-folder
+footer and the Open Received Files button in the tab row are checked for
+placement and wiring.
 Manual-update result dialogs are exercised with both closed and open Settings
 windows: they must stay standalone, preserve Settings visibility/navigation,
 deduplicate repeated presentation, and open release URLs only on explicit action.

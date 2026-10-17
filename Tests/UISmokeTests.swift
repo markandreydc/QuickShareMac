@@ -81,6 +81,27 @@ struct UISmokeTests{
 		expect(abs(creditFrame().midX-controller.view.bounds.midX)<1 && abs(creditFrame().minY-controller.view.bounds.minY-20)<1, "The developer credit must stay centered at the bottom when the window resizes")
 		window.setContentSize(MainWindowViewController.minimumSize)
 		layout(window)
+		let openReceived=button("Open Received Files", in: controller.view)
+		let tabsControl=visible(controller.view).compactMap {$0 as? NSSegmentedControl}.first!
+		let tabsFrame=tabsControl.convert(tabsControl.bounds, to: controller.view)
+		let openFrame=openReceived.convert(openReceived.bounds, to: controller.view)
+		expect(abs(openFrame.midY-tabsFrame.midY)<6 && openFrame.minX>tabsFrame.maxX && openFrame.midX>controller.view.bounds.midX, "Open Received Files must share the Receive/Send row on the right")
+		expect(!visible(controller.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Open Downloads"}), "The old Open Downloads button must be removed")
+		var openedReceived=false
+		controller.onOpenReceivedFiles={openedReceived=true}
+		openReceived.performClick(nil)
+		expect(openedReceived, "Open Received Files must open the configured save folder")
+		let savedTo=visible(controller.view).compactMap {$0 as? NSTextField}.first(where: {$0.stringValue=="Received files are saved to Downloads"})!
+		controller.update(receiving: true, transfers: [], deviceName: "Studio Mac", receivedFilesFolderName: "Shared Inbox")
+		expect(savedTo.stringValue=="Received files are saved to Shared Inbox", "The Receive footer must show the configured save folder")
+		var savedToAncestor=savedTo.superview
+		while let ancestor=savedToAncestor{
+			expect(!(ancestor is NSScrollView), "The save-folder footer must sit outside the transfer list scroll view")
+			savedToAncestor=ancestor.superview
+		}
+		expect(savedTo.convert(savedTo.bounds, to: controller.view).minY>creditFrame().minY, "The save-folder footer must sit above the developer credit")
+		controller.update(receiving: true, transfers: [], deviceName: "Studio Mac")
+		expect(savedTo.stringValue=="Received files are saved to Downloads", "The folder label must return to the default")
 		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Studio Mac"}), "The main header must use the configured device name")
 		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue.contains("choose “Studio Mac”")}), "Receiving instructions must match the configured advertised name")
 		let duration=visible(controller.view).compactMap {$0 as? NSPopUpButton}.first!
@@ -177,7 +198,22 @@ struct UISmokeTests{
 		layout(settingsWindow)
 		expect(settings.selectedSection == .general, "Settings must open on General by default")
 		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Check for Updates…"}), "Update controls must not clutter General settings")
-		expect(visible(settings.view).compactMap({$0 as? CardView}).count==3, "General settings must group device name, startup, and remembered names")
+		expect(visible(settings.view).compactMap({$0 as? CardView}).count==4, "General settings must group device name, startup, remembered names, and received files")
+		let folderLabel=visible(settings.view).compactMap({$0 as? NSTextField}).first(where: {$0.identifier?.rawValue=="ReceivedFilesFolder"})!
+		expect(folderLabel.stringValue=="Downloads" && visible(settings.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Save received files to:"}), "Settings must show the received-files folder with Downloads as the default")
+		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Use Downloads"}), "Use Downloads must stay hidden while the default folder is active")
+		var folderChoices=0
+		settings.onChooseReceivedFilesFolder={folderChoices+=1}
+		button("Choose…", in: settings.view).performClick(nil)
+		expect(folderChoices==1, "Choose… must open the folder picker through the settings callback")
+		var folderResets=0
+		settings.onUseDownloadsFolder={folderResets+=1}
+		settings.update(startReceivingOnLaunch: true, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 0, receivedFilesFolderName: "Shared Inbox", receivedFilesFolderIsCustom: true)
+		expect(folderLabel.stringValue=="Shared Inbox", "Settings must show the custom received-files folder")
+		button("Use Downloads", in: settings.view).performClick(nil)
+		expect(folderResets==1, "Use Downloads must reset through the settings callback")
+		settings.update(startReceivingOnLaunch: true, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 0)
+		expect(folderLabel.stringValue=="Downloads" && !visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Use Downloads"}), "Settings must restore the default folder state")
 		snapshot(settingsWindow, "settings-general")
 		let sections=descendants(settings.view).compactMap {$0 as? NSSegmentedControl}.first!
 		expect((0..<sections.segmentCount).map({sections.label(forSegment: $0)!})==["General","Updates","About"], "Settings must expose General, Updates, and About sections")
@@ -399,6 +435,7 @@ struct UISmokeTests{
 		testStatusBarMenu()
 		testUpdateResultPresentation()
 		testIdentityAndAvailability()
+		testReceivedFilesFolder()
 		print("Passed \(checks) UI smoke checks")
 	}
 
@@ -592,6 +629,34 @@ struct UISmokeTests{
 		availability.stopped()
 		availability.select(.tenMinutes)
 		expect(ReceivingAvailability(preferences: preferences).duration == .tenMinutes, "The selected duration must persist, without persisting a live receiving session")
+	}
+
+	static func testReceivedFilesFolder(){
+		let suiteName="quickshare-received-folder-tests-\(UUID().uuidString)"
+		let folderDefaults=UserDefaults(suiteName: suiteName)!
+		ReceivedFilesFolder.defaults=folderDefaults
+		ReceivedFilesFolder.resetCache()
+		defer{
+			ReceivedFilesFolder.defaults = .standard
+			ReceivedFilesFolder.resetCache()
+			folderDefaults.removePersistentDomain(forName: suiteName)
+		}
+		expect(ReceivedFilesFolder.currentURL==ReceivedFilesFolder.defaultURL && !ReceivedFilesFolder.isCustom && ReceivedFilesFolder.displayName=="Downloads", "The save folder must default to Downloads")
+		let directory=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-shared-inbox-\(UUID().uuidString)")
+		try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer{try? FileManager.default.removeItem(at: directory)}
+		try! ReceivedFilesFolder.set(directory)
+		expect(ReceivedFilesFolder.currentURL.resolvingSymlinksInPath()==directory.resolvingSymlinksInPath() && ReceivedFilesFolder.isCustom, "A chosen folder must become the save destination")
+		expect(ReceivedFilesFolder.displayName==directory.lastPathComponent, "The chosen folder name must be shown in Settings and the Receive footer")
+		ReceivedFilesFolder.resetCache()
+		expect(ReceivedFilesFolder.currentURL.resolvingSymlinksInPath()==directory.resolvingSymlinksInPath(), "The chosen folder must survive a relaunch")
+		try! ReceivedFilesFolder.set(ReceivedFilesFolder.defaultURL)
+		expect(!ReceivedFilesFolder.isCustom && ReceivedFilesFolder.currentURL==ReceivedFilesFolder.defaultURL, "Choosing Downloads itself must restore the default")
+		try! ReceivedFilesFolder.set(directory)
+		try! ReceivedFilesFolder.set(nil)
+		expect(!ReceivedFilesFolder.isCustom, "Resetting must clear the custom folder")
+		let missing=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-missing-\(UUID().uuidString)")
+		expect((try? ReceivedFilesFolder.set(missing))==nil, "Missing folders must be rejected")
 	}
 
 	static func testMainWindowSending(){

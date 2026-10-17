@@ -44,6 +44,13 @@
     "DeviceNameSetting" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Device name" } } } },
     "SaveDeviceName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Save name" } } } },
     "UseMacName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Use Mac’s name" } } } },
+    "ReceivedFilesSettings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Received files" } } } },
+    "SaveReceivedFilesTo" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Save received files to:" } } } },
+    "ReceivedFilesFolderExplanation" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Incoming files are saved to this folder. The default is Downloads." } } } },
+    "ReceivedFilesFolderMissing" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "That folder no longer exists." } } } },
+    "ChooseFolder" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose…" } } } },
+    "ChooseFolderPrompt" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose" } } } },
+    "UseDownloads" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Use Downloads" } } } },
     "InvalidDeviceName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter a device name without control characters, up to 171 UTF-8 bytes." } } } },
     "ConnectingBeforeApproval" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Opening the network connection and verifying Quick Share. A transfer request has not reached the phone yet." } } }
@@ -303,10 +310,10 @@
         }
       }
     },
-    "OpenDownloads" : {
+    "OpenReceivedFiles" : {
       "localizations" : {
         "en" : {
-          "stringUnit" : { "state" : "translated", "value" : "Open Downloads" }
+          "stringUnit" : { "state" : "translated", "value" : "Open Received Files" }
         }
       }
     },
@@ -2165,13 +2172,13 @@
         }
       }
     },
-    "SavedToDownloads" : {
+    "SavedToFolder" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Received files are saved to Downloads"
+            "value" : "Received files are saved to %@"
           }
         }
       }

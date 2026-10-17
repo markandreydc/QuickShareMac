@@ -12,6 +12,7 @@ xcrun swiftc -swift-version 5 -I "$BUILD" -L "$BUILD" \
   -Xlinker -rpath -Xlinker "$BUILD" -lNearbyShare \
   "$BUILD/QRCode.o" "$BUILD/QRCodeGenerator.o" "$BUILD/SwiftImageReadWrite.o" \
   "$ROOT/QuickShareMac/MainWindowViewController.swift" \
+  "$ROOT/QuickShareMac/ReceivedFilesFolder.swift" \
   "$ROOT/QuickShareMac/SendViewController.swift" \
   "$ROOT/QuickShareMac/StatusBarMenu.swift" \
   "$ROOT/QuickShareMac/ReceivingAvailability.swift" \

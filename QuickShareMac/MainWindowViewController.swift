@@ -238,6 +238,7 @@ final class MainWindowViewController:NSViewController{
 	var onReceivingChange:((Bool)->Void)?
 	var onDurationChange:((ReceivingDuration)->Void)?
 	var onOpenSettings:(()->Void)?
+	var onOpenReceivedFiles:(()->Void)?
 	var onAlwaysOnTopChange:((Bool)->Void)?
 	private(set) var isAlwaysOnTop=false
 	private let pinButton=NSButton()
@@ -247,6 +248,7 @@ final class MainWindowViewController:NSViewController{
 	var onClearRecentTransfers:(()->Void)?
 	private let receivingSwitch=NSSwitch()
 	private let deviceNameLabel=WindowUI.label("", size: 12, secondary: true)
+	private let savedToLabel=WindowUI.label("", size: 11, secondary: true)
 	private let durationPopup=NSPopUpButton(frame: .zero, pullsDown: false)
 	private let expiryLabel=WindowUI.label("", size: 11, secondary: true)
 	private let statusLabel=WindowUI.label("", size: 15, weight: .semibold)
@@ -309,7 +311,14 @@ final class MainWindowViewController:NSViewController{
 		tabs.target=self
 		tabs.action=#selector(tabChanged(_:))
 		tabs.setAccessibilityLabel(NSLocalizedString("TransferMode", value: "Transfer mode", comment: ""))
-		content.addArrangedSubview(tabs)
+		let tabsRow=WindowUI.stack(.horizontal)
+		tabsRow.addArrangedSubview(tabs)
+		tabsRow.addArrangedSubview(WindowUI.spacer())
+		let openReceived=NSButton(title: NSLocalizedString("OpenReceivedFiles", value: "Open Received Files", comment: ""), target: self, action: #selector(openReceivedFiles(_:)))
+		openReceived.identifier=NSUserInterfaceItemIdentifier("OpenReceivedFiles")
+		openReceived.bezelStyle = .inline
+		tabsRow.addArrangedSubview(openReceived)
+		WindowUI.fill(tabsRow, in: content)
 		let tabHost=NSView()
 		WindowUI.fill(tabHost, in: content)
 		tabHost.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -386,13 +395,8 @@ final class MainWindowViewController:NSViewController{
 		let clear=NSButton(title: NSLocalizedString("ClearRecent", value: "Clear", comment: ""), target: self, action: #selector(clearRecent(_:)))
 		clear.bezelStyle = .inline
 		recentHeading.addArrangedSubview(clear)
-		let footer=WindowUI.stack(.horizontal)
-		footer.addArrangedSubview(WindowUI.label(NSLocalizedString("SavedToDownloads", value: "Received files are saved to Downloads", comment: ""), size: 11, secondary: true))
-		footer.addArrangedSubview(WindowUI.spacer())
-		let downloads=NSButton(title: NSLocalizedString("OpenDownloads", value: "Open Downloads", comment: ""), target: self, action: #selector(openDownloads(_:)))
-		downloads.bezelStyle = .inline
-		footer.addArrangedSubview(downloads)
-		WindowUI.fill(footer, in: receiveContent)
+		savedToLabel.stringValue=String(format: NSLocalizedString("SavedToFolder", value: "Received files are saved to %@", comment: ""), "Downloads")
+		WindowUI.fill(savedToLabel, in: receiveContent)
 	}
 
 	override func viewDidAppear(){
@@ -435,9 +439,10 @@ final class MainWindowViewController:NSViewController{
 	}
 	@objc private func tabChanged(_ sender:NSSegmentedControl){updateTab()}
 
-	func update(receiving:Bool, transfers:[IncomingTransferDisplay], deviceName:String = LocalDeviceIdentity.shared.deviceName, duration:ReceivingDuration = .indefinitely, expiresAt:Date?=nil){
+	func update(receiving:Bool, transfers:[IncomingTransferDisplay], deviceName:String = LocalDeviceIdentity.shared.deviceName, duration:ReceivingDuration = .indefinitely, expiresAt:Date?=nil, receivedFilesFolderName:String = "Downloads"){
 		_ = view
 		self.receiving=receiving
+		savedToLabel.stringValue=String(format: NSLocalizedString("SavedToFolder", value: "Received files are saved to %@", comment: ""), receivedFilesFolderName)
 		deviceNameLabel.stringValue=deviceName
 		deviceNameLabel.toolTip=deviceName
 		durationPopup.selectItem(withTag: duration.rawValue)
@@ -500,9 +505,7 @@ final class MainWindowViewController:NSViewController{
 	@objc private func enableReceiving(_ sender:NSButton){onReceivingChange?(true)}
 	@objc private func openSettings(_ sender:NSButton){onOpenSettings?()}
 	@objc private func clearRecent(_ sender:NSButton){onClearRecentTransfers?()}
-	@objc private func openDownloads(_ sender:NSButton){
-		if let url=FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first{NSWorkspace.shared.open(url)}
-	}
+	@objc private func openReceivedFiles(_ sender:NSButton){onOpenReceivedFiles?()}
 }
 
 final class SettingsViewController:NSViewController, NSTextFieldDelegate{
@@ -516,6 +519,8 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	var onLaunchAtLoginChange:((Bool)->Void)?
 	var onOpenLoginItems:(()->Void)?
 	var onForgetRememberedDevices:(()->Void)?
+	var onChooseReceivedFilesFolder:(()->Void)?
+	var onUseDownloadsFolder:(()->Void)?
 	var onDeviceNameChange:((String?) throws -> Void)?
 	var onCheckForUpdates:(()->Void)?
 	var onUpdateCheckFrequencyChange:((UpdateCheckFrequency)->Void)?
@@ -544,6 +549,9 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	private let loginHelpButton=NSButton(title: NSLocalizedString("SetUpLoginItem", value: "Set up login item in System Settings…", comment: ""), target: nil, action: nil)
 	private let rememberedCountLabel=WindowUI.label("", secondary: true)
 	private let forgetButton=NSButton(title: NSLocalizedString("ForgetDevices", value: "Forget all", comment: ""), target: nil, action: nil)
+	private let receivedFilesFolderLabel=WindowUI.label("Downloads", size: 12)
+	private let chooseFolderButton=NSButton(title: NSLocalizedString("ChooseFolder", value: "Choose…", comment: ""), target: nil, action: nil)
+	private let useDownloadsButton=NSButton(title: NSLocalizedString("UseDownloads", value: "Use Downloads", comment: ""), target: nil, action: nil)
 
 	override func loadView(){
 		view=WindowBackgroundView(frame: NSRect(origin: .zero, size: Self.defaultSize))
@@ -618,6 +626,24 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		forgetButton.action=#selector(forgetDevices(_:))
 		rememberedRow.addArrangedSubview(forgetButton)
 		WindowUI.fill(rememberedRow, in: remembered)
+
+		let receivedFiles=card(NSLocalizedString("ReceivedFilesSettings", value: "Received files", comment: ""), in: general)
+		let folderRow=WindowUI.stack(.horizontal)
+		folderRow.addArrangedSubview(WindowUI.label(NSLocalizedString("SaveReceivedFilesTo", value: "Save received files to:", comment: ""), size: 12, secondary: true))
+		receivedFilesFolderLabel.identifier=NSUserInterfaceItemIdentifier("ReceivedFilesFolder")
+		folderRow.addArrangedSubview(receivedFilesFolderLabel)
+		folderRow.addArrangedSubview(WindowUI.spacer())
+		chooseFolderButton.bezelStyle = .inline
+		chooseFolderButton.target=self
+		chooseFolderButton.action=#selector(chooseReceivedFilesFolder(_:))
+		folderRow.addArrangedSubview(chooseFolderButton)
+		useDownloadsButton.bezelStyle = .inline
+		useDownloadsButton.target=self
+		useDownloadsButton.action=#selector(useDownloadsFolder(_:))
+		useDownloadsButton.isHidden=true
+		folderRow.addArrangedSubview(useDownloadsButton)
+		WindowUI.fill(folderRow, in: receivedFiles)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("ReceivedFilesFolderExplanation", value: "Incoming files are saved to this folder. The default is Downloads.", comment: ""), size: 11, secondary: true), in: receivedFiles)
 
 		let updatePage=page(.updates)
 		let updates=card(NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""), in: updatePage)
@@ -724,7 +750,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		if let section=Section(rawValue: sender.selectedSegment){show(section)}
 	}
 
-	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int, customDeviceName:String?=nil, systemDeviceName:String = LocalDeviceIdentity.shared.systemDeviceName){
+	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int, customDeviceName:String?=nil, systemDeviceName:String = LocalDeviceIdentity.shared.systemDeviceName, receivedFilesFolderName:String = "Downloads", receivedFilesFolderIsCustom:Bool = false){
 		_ = view
 		let hadNameDraft=hasNameDraftChanges
 		let savedNameChanged=savedCustomName != customDeviceName
@@ -741,6 +767,8 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		if #available(macOS 13.0, *){loginHelpButton.isHidden = !requiresLoginApproval}
 		rememberedCountLabel.stringValue=String.localizedStringWithFormat(NSLocalizedString("RememberedDevicesCount", value: "%d remembered device names", comment: ""), rememberedDeviceCount)
 		forgetButton.isEnabled=rememberedDeviceCount>0
+		receivedFilesFolderLabel.stringValue=receivedFilesFolderName
+		useDownloadsButton.isHidden = !receivedFilesFolderIsCustom
 	}
 
 	@objc private func startReceivingChanged(_ sender:NSButton){onStartReceivingOnLaunchChange?(sender.state == .on)}
@@ -763,6 +791,8 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	@objc private func launchAtLoginChanged(_ sender:NSButton){onLaunchAtLoginChange?(sender.state == .on)}
 	@objc private func openLoginItems(_ sender:NSButton){onOpenLoginItems?()}
 	@objc private func forgetDevices(_ sender:NSButton){onForgetRememberedDevices?()}
+	@objc private func chooseReceivedFilesFolder(_ sender:NSButton){onChooseReceivedFilesFolder?()}
+	@objc private func useDownloadsFolder(_ sender:NSButton){onUseDownloadsFolder?()}
 	private var hasNameDraftChanges:Bool{
 		usesCustomName != (savedCustomName != nil) || (usesCustomName && nameField.stringValue != savedCustomName)
 	}

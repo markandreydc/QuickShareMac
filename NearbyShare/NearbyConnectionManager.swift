@@ -206,6 +206,7 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 	private var shareExtensionDelegates:[ShareExtensionDelegate]=[]
 	private var outgoingTransfers:[String:OutgoingTransferInfo]=[:]
 	public var mainAppDelegate:(any MainAppDelegate)?
+	public var incomingDownloadDirectory:URL?
 	private var discoveryRefCount=0
 	
 	private var browser:NWBrowser?
@@ -242,7 +243,7 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 				return
 			}
 			let id=UUID().uuidString
-			let conn=InboundNearbyConnection(connection: connection, id: id)
+			let conn=InboundNearbyConnection(connection: connection, id: id, downloadDirectory: incomingDownloadDirectory)
 			self.activeConnections[id]=conn
 			conn.delegate=self
 			conn.start()
