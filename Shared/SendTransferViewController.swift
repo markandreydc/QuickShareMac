@@ -193,6 +193,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		pinLabel.setAccessibilityLabel(NSLocalizedString("VerificationPIN", value: "Verification PIN", comment: ""))
 		ShareUI.fill(pinLabel, in: progressView)
 		progressBar.style = .bar
+		progressBar.isIndeterminate=false
 		progressBar.minValue=0
 		progressBar.maxValue=100
 		ShareUI.fill(progressBar, in: progressView)
@@ -515,7 +516,8 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		terminal=true
 		timeout?.cancel()
 		progressBar.stopAnimation(nil)
-		progressBar.isHidden=true
+		progressBar.doubleValue=100
+		progressBar.isHidden=false
 		pinLabel.isHidden=true
 		deviceIcon.image=NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
 		deviceIcon.contentTintColor = .systemGreen
@@ -542,8 +544,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		deviceIcon.image=imageForDeviceType(device.type)
 		deviceIcon.contentTintColor = .labelColor
 		progressBar.isHidden=false
-		progressBar.isIndeterminate=true
-		progressBar.startAnimation(nil)
+		progressBar.doubleValue=0
 		progressState.stringValue=NSLocalizedString("Connecting", value: "Connecting…", comment: "")
 		progressHelp.stringValue=NSLocalizedString("ConnectingBeforeApproval", value: "Opening the network connection and verifying Quick Share. A transfer request has not reached the phone yet.", comment: "")
 		setState(.connecting)
