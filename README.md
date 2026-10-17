@@ -4,7 +4,7 @@
 
 The app opens a window, remains available in the menu bar, and saves files to your downloads folder.
 
-The window shows incoming transfers and their progress and lets you turn receiving on and off. Click the menu bar icon or the Dock icon to reopen the window after closing it; receiving continues in the background. Turning receiving off stops new connections, but transfers already in progress can finish. Incoming transfers still require approval through a notification.
+The window shows incoming transfers and their progress and lets you turn receiving on and off. Click the menu bar icon or the Dock icon to reopen the window after closing it; receiving continues in the background. Turning receiving off stops new connections, but transfers already in progress can finish. When a transfer arrives, the window opens with its PIN and Accept/Decline controls. No notification permission is needed.
 
 The window also lets you choose whether receiving starts when the app opens (on by default). On macOS 13 or later, you can enable **Launch at login** there too. On older versions of macOS, add the app as a login item in System Settings instead.
 
@@ -81,7 +81,7 @@ Yes. Drag the icon off the menu bar while holding cmd. To bring it back, launch 
 
 #### I'm sending something to my Mac, the Android device displays a PIN code, but nothing happens on the Mac
 
-Make sure you have "do not disturb" off. The notification may also sometimes (rarely) end up in the notification center without being shown as a popup first — I'm not sure why this happens.
+Make sure QuickShareMac is running with receiving enabled. Incoming requests open the app window, where you can verify the PIN and choose Accept or Decline.
 
 #### Why is the app not notarized?
 

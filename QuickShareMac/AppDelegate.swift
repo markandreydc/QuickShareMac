@@ -6,12 +6,11 @@
 //
 
 import Cocoa
-import UserNotifications
 import NearbyShare
 import ServiceManagement
 
 @main
-class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, MainAppDelegate{
+class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 	private var statusItem:NSStatusItem?
 	private var mainWindow:NSWindow?
 	private let windowController=MainWindowViewController()
@@ -51,22 +50,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 			NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preferences.users")!)
 		}
 		windowController.onQuit={NSApplication.shared.terminate(nil)}
-		
-		let nc=UNUserNotificationCenter.current()
-		nc.requestAuthorization(options: [.alert, .sound]) { granted, err in
-			if !granted{
-				DispatchQueue.main.async {
-					self.showNotificationsDeniedAlert()
-				}
-			}
+		windowController.onTransferDecision={ [weak self] id, accepted in
+			self?.respondToIncomingTransfer(id: id, accepted: accepted)
 		}
-		nc.delegate=self
-		let incomingTransfersCategory=UNNotificationCategory(identifier: "INCOMING_TRANSFERS", actions: [
-			UNNotificationAction(identifier: "ACCEPT", title: NSLocalizedString("Accept", comment: ""), options: UNNotificationActionOptions.authenticationRequired),
-			UNNotificationAction(identifier: "DECLINE", title: NSLocalizedString("Decline", comment: ""))
-		], intentIdentifiers: [])
-		let errorsCategory=UNNotificationCategory(identifier: "ERRORS", actions: [], intentIdentifiers: [])
-		nc.setNotificationCategories([incomingTransfersCategory, errorsCategory])
 		NearbyConnectionManager.shared.mainAppDelegate=self
 		if UserDefaults.standard.bool(forKey: startReceivingKey){setReceiving(true)}
 		refreshWindow()
@@ -130,7 +116,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 		}else{
 			launchAtLogin=false
 		}
-		let active=activeIncomingTransfers.values.map { info -> IncomingTransferDisplay in
+		let active=activeIncomingTransfers.map { id, info -> IncomingTransferDisplay in
 			let progress:Double?
 			let status:String
 			if !info.accepted{
@@ -144,12 +130,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 				progress=nil
 				status=NSLocalizedString("Receiving", value: "Receiving…", comment: "")
 			}
-			return IncomingTransferDisplay(deviceName: info.device.name, description: info.description, status: status, progress: progress)
+			return IncomingTransferDisplay(deviceName: info.device.name, description: info.description, status: status, progress: progress,
+										   pendingID: info.accepted ? nil : id, pinCode: info.accepted ? nil : info.transfer.pinCode)
+		}
+		let orderedActive=active.sorted {
+			if ($0.pendingID != nil) != ($1.pendingID != nil){return $0.pendingID != nil}
+			return $0.deviceName < $1.deviceName
 		}
 		windowController.update(receiving: isReceiving,
 								 startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey),
 								 launchAtLogin: launchAtLogin,
-								 transfers: active.sorted(by: {$0.deviceName < $1.deviceName})+recentlyFinishedTransfers.values.sorted(by: {$0.deviceName < $1.deviceName}))
+								 transfers: orderedActive+recentlyFinishedTransfers.values.sorted(by: {$0.deviceName < $1.deviceName}))
 	}
 	
 	func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -162,45 +153,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 		return false
 	}
 
-    func applicationWillTerminate(_ aNotification: Notification) {
-		UNUserNotificationCenter.current().removeAllDeliveredNotifications()
-    }
-
-    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
-        return true
-    }
-	
-	func showNotificationsDeniedAlert(){
-		let alert=NSAlert()
-		alert.alertStyle = .critical
-		alert.messageText=NSLocalizedString("NotificationsDenied.Title", value: "Notification Permission Required", comment: "")
-		alert.informativeText=NSLocalizedString("NotificationsDenied.Message", value: "QuickShareMac needs to be able to display notifications for incoming file transfers. Please allow notifications in System Settings.", comment: "")
-		alert.addButton(withTitle: NSLocalizedString("NotificationsDenied.OpenSettings", value: "Open settings", comment: ""))
-		alert.addButton(withTitle: NSLocalizedString("Quit", value: "Quit QuickShareMac", comment: ""))
-		let result=alert.runModal()
-		if result==NSApplication.ModalResponse.alertFirstButtonReturn{
-			NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
-		}else if result==NSApplication.ModalResponse.alertSecondButtonReturn{
-			NSApplication.shared.terminate(nil)
-		}
+	func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
+		return true
 	}
-	
-	func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-		DispatchQueue.main.async {
-			guard let transferID=response.notification.request.content.userInfo["transferID"] as? String else {
-				completionHandler()
-				return
-			}
-			let accepted=response.actionIdentifier=="ACCEPT"
-			NearbyConnectionManager.shared.submitUserConsent(transferID: transferID, accept: accepted)
-			if accepted{
-				self.activeIncomingTransfers[transferID]?.accepted=true
-			}else{
-				self.activeIncomingTransfers.removeValue(forKey: transferID)
-			}
-			self.refreshWindow()
-			completionHandler()
+
+	private func respondToIncomingTransfer(id:String, accepted:Bool){
+		guard let transfer=activeIncomingTransfers[id], !transfer.accepted else {return}
+		NearbyConnectionManager.shared.submitUserConsent(transferID: id, accept: accepted)
+		if accepted{
+			activeIncomingTransfers[id]?.accepted=true
+		}else{
+			activeIncomingTransfers.removeValue(forKey: id)
 		}
+		refreshWindow()
 	}
 	
 	func obtainUserConsent(for transfer: TransferMetadata, from device: RemoteDeviceInfo) {
@@ -212,25 +177,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 		}else{
 			fileStr=String.localizedStringWithFormat(NSLocalizedString("NFiles", value: "%d files", comment: ""), transfer.files.count)
 		}
-		let notificationContent=UNMutableNotificationContent()
-		notificationContent.title="QuickShareMac"
-		notificationContent.subtitle=String(format:NSLocalizedString("PinCode", value: "PIN: %@", comment: ""), arguments: [transfer.pinCode!])
-		notificationContent.body=String(format: NSLocalizedString("DeviceSendingFiles", value: "%1$@ is sending you %2$@", comment: ""), arguments: [device.name, fileStr])
-		notificationContent.sound = .default
-		notificationContent.categoryIdentifier="INCOMING_TRANSFERS"
-		notificationContent.userInfo=["transferID": transfer.id]
-		if #available(macOS 11.0, *){
-			QSMNotificationCenterHackery.removeDefaultAction(notificationContent)
-		}
-		let notificationReq=UNNotificationRequest(identifier: "transfer_"+transfer.id, content: notificationContent, trigger: nil)
-		UNUserNotificationCenter.current().add(notificationReq)
 		var totalBytes:Int64=0
 		for file in transfer.files{
 			let (sum, overflow)=totalBytes.addingReportingOverflow(max(0, file.size))
 			totalBytes=overflow ? Int64.max : sum
 		}
 		self.activeIncomingTransfers[transfer.id]=TransferInfo(device: device, transfer: transfer, description: fileStr, totalBytes: totalBytes)
-		refreshWindow()
+		showMainWindow(nil)
 	}
 
 	func incomingTransfer(id:String, didReceiveBytes count:Int64){
@@ -245,35 +198,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 	
 	func incomingTransfer(id: String, didFinishWith error: Error?) {
 		guard let transfer=self.activeIncomingTransfers[id] else {return}
-		if let error=error{
-			let notificationContent=UNMutableNotificationContent()
-			notificationContent.title=String(format: NSLocalizedString("TransferError", value: "Failed to receive files from %@", comment: ""), arguments: [transfer.device.name])
-			if let ne=(error as? NearbyError){
-				switch ne{
-				case .inputOutput:
-					notificationContent.body="I/O Error";
-				case .protocolError(_):
-					notificationContent.body=NSLocalizedString("Error.Protocol", value: "Communication error", comment: "")
-				case .requiredFieldMissing:
-					notificationContent.body=NSLocalizedString("Error.Protocol", value: "Communication error", comment: "")
-				case .ukey2:
-					notificationContent.body=NSLocalizedString("Error.Crypto", value: "Encryption error", comment: "")
-				case .canceled(reason: _):
-					break; // can't happen for incoming transfers
-				}
-			}else{
-				notificationContent.body=error.localizedDescription
-			}
-			notificationContent.categoryIdentifier="ERRORS"
-			UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "transferError_"+id, content: notificationContent, trigger: nil))
-		}
-		UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["transfer_"+id])
 		self.activeIncomingTransfers.removeValue(forKey: id)
 		let completed=error==nil && (transfer.totalBytes==0 || transfer.receivedBytes>=transfer.totalBytes)
-		let status=completed ? NSLocalizedString("TransferFinished", value: "Transfer finished", comment: "") : NSLocalizedString("TransferInterrupted", value: "Transfer interrupted", comment: "")
-		recentlyFinishedTransfers[id]=IncomingTransferDisplay(deviceName: transfer.device.name, description: transfer.description, status: status, progress: completed ? 1 : 0)
+		let status:String
+		if completed{
+			status=NSLocalizedString("TransferFinished", value: "Transfer finished", comment: "")
+		}else if let error=error{
+			status=String(format: NSLocalizedString("TransferFailedReason", value: "Transfer failed: %@", comment: ""), error.localizedDescription)
+		}else{
+			status=NSLocalizedString("TransferInterrupted", value: "Transfer interrupted", comment: "")
+		}
+		recentlyFinishedTransfers[id]=IncomingTransferDisplay(deviceName: transfer.device.name, description: transfer.description, status: status, progress: completed ? 1 : 0, pendingID: nil, pinCode: nil)
 		refreshWindow()
-		DispatchQueue.main.asyncAfter(deadline: .now()+5) {
+		if error != nil{showMainWindow(nil)}
+		DispatchQueue.main.asyncAfter(deadline: .now()+(completed ? 5 : 15)) {
 			self.recentlyFinishedTransfers.removeValue(forKey: id)
 			self.refreshWindow()
 		}

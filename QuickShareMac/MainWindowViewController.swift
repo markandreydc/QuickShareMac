@@ -5,6 +5,8 @@ struct IncomingTransferDisplay{
 	let description:String
 	let status:String
 	let progress:Double?
+	let pendingID:String?
+	let pinCode:String?
 }
 
 private final class CardView:NSView{
@@ -33,6 +35,7 @@ final class MainWindowViewController:NSViewController{
 	var onLaunchAtLoginChange:((Bool)->Void)?
 	var onOpenLoginItems:(()->Void)?
 	var onQuit:(()->Void)?
+	var onTransferDecision:((String,Bool)->Void)?
 
 	private let receivingSwitch=NSSwitch()
 	private let startReceivingButton=NSButton(checkboxWithTitle: NSLocalizedString("StartReceivingOnLaunch", value: "Start receiving when app opens", comment: ""), target: nil, action: nil)
@@ -209,7 +212,8 @@ final class MainWindowViewController:NSViewController{
 		statusLabel.textColor = .secondaryLabelColor
 		statusDot.layer?.backgroundColor=(receiving ? NSColor.systemGreen : NSColor.tertiaryLabelColor).cgColor
 
-		let document=FlippedDocumentView(frame: NSRect(x: 0, y: 0, width: 476, height: max(180, CGFloat(transfers.count)*82)))
+		let listHeight=transfers.reduce(CGFloat(0)) { $0 + ($1.pendingID == nil ? 82 : 150) }
+		let document=FlippedDocumentView(frame: NSRect(x: 0, y: 0, width: 476, height: max(180, listHeight)))
 		if transfers.isEmpty{
 			let empty=NSStackView()
 			empty.orientation = .vertical
@@ -268,12 +272,35 @@ final class MainWindowViewController:NSViewController{
 				let status=NSTextField(labelWithString: transfer.status)
 				status.font=NSFont.systemFont(ofSize: 11)
 				status.textColor = .secondaryLabelColor
+				status.lineBreakMode = .byTruncatingTail
 				row.addArrangedSubview(status)
+				if let id=transfer.pendingID{
+					if let pin=transfer.pinCode{
+						let pinLabel=NSTextField(labelWithString: String(format: NSLocalizedString("PinCode", value: "PIN: %@", comment: ""), pin))
+						pinLabel.font=NSFont.systemFont(ofSize: 13, weight: .semibold)
+						row.addArrangedSubview(pinLabel)
+						let verify=NSTextField(labelWithString: NSLocalizedString("VerifyPin", value: "Check that the PIN matches on the sending device.", comment: ""))
+						verify.font=NSFont.systemFont(ofSize: 11)
+						verify.textColor = .secondaryLabelColor
+						row.addArrangedSubview(verify)
+					}
+					let actions=NSStackView()
+					actions.orientation = .horizontal
+					actions.spacing=8
+					let accept=NSButton(title: NSLocalizedString("Accept", value: "Accept", comment: ""), target: self, action: #selector(acceptTransfer(_:)))
+					accept.identifier=NSUserInterfaceItemIdentifier(id)
+					let decline=NSButton(title: NSLocalizedString("Decline", value: "Decline", comment: ""), target: self, action: #selector(declineTransfer(_:)))
+					decline.identifier=NSUserInterfaceItemIdentifier(id)
+					actions.addArrangedSubview(accept)
+					actions.addArrangedSubview(decline)
+					row.addArrangedSubview(actions)
+				}
 				rows.addArrangedSubview(row)
 				NSLayoutConstraint.activate([
 					row.widthAnchor.constraint(equalTo: rows.widthAnchor),
 					title.widthAnchor.constraint(equalTo: row.widthAnchor),
-					progress.widthAnchor.constraint(equalTo: row.widthAnchor)
+					progress.widthAnchor.constraint(equalTo: row.widthAnchor),
+					status.widthAnchor.constraint(equalTo: row.widthAnchor)
 				])
 			}
 		}
@@ -285,4 +312,12 @@ final class MainWindowViewController:NSViewController{
 	@objc private func launchAtLoginChanged(_ sender:NSButton){onLaunchAtLoginChange?(sender.state == .on)}
 	@objc private func openLoginItems(_ sender:NSButton){onOpenLoginItems?()}
 	@objc private func quit(_ sender:NSButton){onQuit?()}
+	@objc private func acceptTransfer(_ sender:NSButton){
+		guard let id=sender.identifier?.rawValue else {return}
+		onTransferDecision?(id, true)
+	}
+	@objc private func declineTransfer(_ sender:NSButton){
+		guard let id=sender.identifier?.rawValue else {return}
+		onTransferDecision?(id, false)
+	}
 }
