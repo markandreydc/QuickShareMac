@@ -1,13 +1,13 @@
 //
-//  NDNotificationCenterHackery.m
-//  NearDrop
+//  QSMNotificationCenterHackery.m
+//  QuickShareMac
 //
 //  Created by Grishka on 10.04.2023.
 //
 
 #import <UserNotifications/UserNotifications.h>
 #import <AppKit/AppKit.h>
-#import "NDNotificationCenterHackery.h"
+#import "QSMNotificationCenterHackery.h"
 
 @interface UNMutableNotificationCategory : UNNotificationCategory
 @property(copy) NSString *actionsMenuTitle;
@@ -33,7 +33,7 @@
 @property(copy) UNNotificationIcon *icon;
 @end
 
-@implementation NDNotificationCenterHackery
+@implementation QSMNotificationCenterHackery
 
 + (void)removeDefaultAction:(UNMutableNotificationContent*) content{
 	content.hasDefaultAction=false;

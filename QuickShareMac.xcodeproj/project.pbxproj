@@ -15,8 +15,8 @@
 		697DDF0F2E4422B300B4749C /* QrCodeBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 697DDF0E2E4422B300B4749C /* QrCodeBackgroundView.swift */; };
 		697DDF132E44AAFB00B4749C /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 697DDF122E44AAFB00B4749C /* Localizable.xcstrings */; };
 		697DDF152E44AAFB00B4749C /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 697DDF142E44AAFB00B4749C /* Localizable.xcstrings */; };
-		697DDF172E44AAFB00B4749C /* NearDrop-InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 697DDF162E44AAFB00B4749C /* NearDrop-InfoPlist.xcstrings */; };
-		698DFB0329E362140064F247 /* NDNotificationCenterHackery.m in Sources */ = {isa = PBXBuildFile; fileRef = 698DFB0229E362140064F247 /* NDNotificationCenterHackery.m */; };
+		697DDF172E44AAFB00B4749C /* QuickShareMac-InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 697DDF162E44AAFB00B4749C /* QuickShareMac-InfoPlist.xcstrings */; };
+		698DFB0329E362140064F247 /* QSMNotificationCenterHackery.m in Sources */ = {isa = PBXBuildFile; fileRef = 698DFB0229E362140064F247 /* QSMNotificationCenterHackery.m */; };
 		699B03452AB5FBA300E0D718 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 699B03442AB5FBA300E0D718 /* Assets.xcassets */; };
 		699DEBA62AB0573200115D22 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 699DEBA52AB0573200115D22 /* ShareViewController.swift */; };
 		699DEBA92AB0573200115D22 /* ShareViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = 699DEBA72AB0573200115D22 /* ShareViewController.xib */; };
@@ -120,14 +120,14 @@
 		697DDF0E2E4422B300B4749C /* QrCodeBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeBackgroundView.swift; sourceTree = "<group>"; };
 		697DDF122E44AAFB00B4749C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		697DDF142E44AAFB00B4749C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
-		697DDF162E44AAFB00B4749C /* NearDrop-InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = "NearDrop-InfoPlist.xcstrings"; path = "NearDrop/NearDrop-InfoPlist.xcstrings"; sourceTree = "<group>"; };
+		697DDF162E44AAFB00B4749C /* QuickShareMac-InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = "QuickShareMac-InfoPlist.xcstrings"; path = "QuickShareMac/QuickShareMac-InfoPlist.xcstrings"; sourceTree = "<group>"; };
 		697DDF182E44AAFB00B4749C /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = mul.lproj/ShareViewController.xcstrings; sourceTree = "<group>"; };
 		698DFAE529E2F91A0064F247 /* NearbyConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyConnection.swift; sourceTree = "<group>"; };
 		698DFAED29E353220064F247 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
 		698DFAEF29E353220064F247 /* UserNotificationsUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotificationsUI.framework; path = System/Library/Frameworks/UserNotificationsUI.framework; sourceTree = SDKROOT; };
-		698DFB0029E362140064F247 /* NearDrop-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NearDrop-Bridging-Header.h"; sourceTree = "<group>"; };
-		698DFB0129E362140064F247 /* NDNotificationCenterHackery.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NDNotificationCenterHackery.h; sourceTree = "<group>"; };
-		698DFB0229E362140064F247 /* NDNotificationCenterHackery.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = NDNotificationCenterHackery.m; sourceTree = "<group>"; };
+		698DFB0029E362140064F247 /* QuickShareMac-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "QuickShareMac-Bridging-Header.h"; sourceTree = "<group>"; };
+		698DFB0129E362140064F247 /* QSMNotificationCenterHackery.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = QSMNotificationCenterHackery.h; sourceTree = "<group>"; };
+		698DFB0229E362140064F247 /* QSMNotificationCenterHackery.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = QSMNotificationCenterHackery.m; sourceTree = "<group>"; };
 		699B03442AB5FBA300E0D718 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		699DEBA12AB0573200115D22 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		699DEBA52AB0573200115D22 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
@@ -136,10 +136,10 @@
 		699DEBAB2AB0573200115D22 /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		69B5994C30598C1300449F58 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		69D2C32E29E7898C00EC7E30 /* MainMenu.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = MainMenu.xib; sourceTree = "<group>"; };
-		69DA9A0E29E0BF5100A442DA /* NearDrop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NearDrop.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		69DA9A0E29E0BF5100A442DA /* QuickShareMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QuickShareMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		69DA9A1129E0BF5100A442DA /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		69DA9A1329E0BF5200A442DA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		69DA9A1829E0BF5200A442DA /* NearDrop.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NearDrop.entitlements; sourceTree = "<group>"; };
+		69DA9A1829E0BF5200A442DA /* QuickShareMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = QuickShareMac.entitlements; sourceTree = "<group>"; };
 		69DA9A1E29E0C0B300A442DA /* NearbyConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyConnectionManager.swift; sourceTree = "<group>"; };
 		69DA9A2029E0CC4E00A442DA /* Data+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Data+Extensions.swift"; sourceTree = "<group>"; };
 		69DA9A2229E17F0400A442DA /* InboundNearbyConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboundNearbyConnection.swift; sourceTree = "<group>"; };
@@ -209,8 +209,8 @@
 		69DA9A0529E0BF5100A442DA = {
 			isa = PBXGroup;
 			children = (
-				697DDF162E44AAFB00B4749C /* NearDrop-InfoPlist.xcstrings */,
-				69DA9A1029E0BF5100A442DA /* NearDrop */,
+				697DDF162E44AAFB00B4749C /* QuickShareMac-InfoPlist.xcstrings */,
+				69DA9A1029E0BF5100A442DA /* QuickShareMac */,
 				699DEBA22AB0573200115D22 /* ShareExtension */,
 				69DCF4822AB70D0600CBE2CC /* NearbyShare */,
 				698DFAEC29E353220064F247 /* Frameworks */,
@@ -221,27 +221,27 @@
 		69DA9A0F29E0BF5100A442DA /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				69DA9A0E29E0BF5100A442DA /* NearDrop.app */,
+				69DA9A0E29E0BF5100A442DA /* QuickShareMac.app */,
 				699DEBA12AB0573200115D22 /* ShareExtension.appex */,
 				69DCF4812AB70D0600CBE2CC /* libNearbyShare.dylib */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		69DA9A1029E0BF5100A442DA /* NearDrop */ = {
+		69DA9A1029E0BF5100A442DA /* QuickShareMac */ = {
 			isa = PBXGroup;
 			children = (
 				69B5994C30598C1300449F58 /* Info.plist */,
 				69DA9A1129E0BF5100A442DA /* AppDelegate.swift */,
 				69DA9A1329E0BF5200A442DA /* Assets.xcassets */,
 				697DDF122E44AAFB00B4749C /* Localizable.xcstrings */,
-				698DFB0129E362140064F247 /* NDNotificationCenterHackery.h */,
-				698DFB0229E362140064F247 /* NDNotificationCenterHackery.m */,
-				69DA9A1829E0BF5200A442DA /* NearDrop.entitlements */,
-				698DFB0029E362140064F247 /* NearDrop-Bridging-Header.h */,
+				698DFB0129E362140064F247 /* QSMNotificationCenterHackery.h */,
+				698DFB0229E362140064F247 /* QSMNotificationCenterHackery.m */,
+				69DA9A1829E0BF5200A442DA /* QuickShareMac.entitlements */,
+				698DFB0029E362140064F247 /* QuickShareMac-Bridging-Header.h */,
 				69D2C32E29E7898C00EC7E30 /* MainMenu.xib */,
 			);
-			path = NearDrop;
+			path = QuickShareMac;
 			sourceTree = "<group>";
 		};
 		69DA9A2729E18CB500A442DA /* Protobuf */ = {
@@ -304,9 +304,9 @@
 			productReference = 699DEBA12AB0573200115D22 /* ShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
-		69DA9A0D29E0BF5100A442DA /* NearDrop */ = {
+		69DA9A0D29E0BF5100A442DA /* QuickShareMac */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 69DA9A1B29E0BF5200A442DA /* Build configuration list for PBXNativeTarget "NearDrop" */;
+			buildConfigurationList = 69DA9A1B29E0BF5200A442DA /* Build configuration list for PBXNativeTarget "QuickShareMac" */;
 			buildPhases = (
 				69DA9A0A29E0BF5100A442DA /* Sources */,
 				69DA9A0B29E0BF5100A442DA /* Frameworks */,
@@ -321,11 +321,11 @@
 				699DEBAD2AB0573200115D22 /* PBXTargetDependency */,
 				69DCF4972AB8BF7B00CBE2CC /* PBXTargetDependency */,
 			);
-			name = NearDrop;
+			name = QuickShareMac;
 			packageProductDependencies = (
 			);
-			productName = NearDrop;
-			productReference = 69DA9A0E29E0BF5100A442DA /* NearDrop.app */;
+			productName = QuickShareMac;
+			productReference = 69DA9A0E29E0BF5100A442DA /* QuickShareMac.app */;
 			productType = "com.apple.product-type.application";
 		};
 		69DCF4802AB70D0600CBE2CC /* NearbyShare */ = {
@@ -371,7 +371,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 69DA9A0929E0BF5100A442DA /* Build configuration list for PBXProject "NearDrop" */;
+			buildConfigurationList = 69DA9A0929E0BF5100A442DA /* Build configuration list for PBXProject "QuickShareMac" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -406,7 +406,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				69DA9A0D29E0BF5100A442DA /* NearDrop */,
+				69DA9A0D29E0BF5100A442DA /* QuickShareMac */,
 				699DEBA02AB0573200115D22 /* ShareExtension */,
 				69DCF4802AB70D0600CBE2CC /* NearbyShare */,
 			);
@@ -431,7 +431,7 @@
 			files = (
 				69DA9A1429E0BF5200A442DA /* Assets.xcassets in Resources */,
 				697DDF132E44AAFB00B4749C /* Localizable.xcstrings in Resources */,
-				697DDF172E44AAFB00B4749C /* NearDrop-InfoPlist.xcstrings in Resources */,
+				697DDF172E44AAFB00B4749C /* QuickShareMac-InfoPlist.xcstrings in Resources */,
 				69D2C32F29E7898C00EC7E30 /* MainMenu.xib in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -452,7 +452,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				698DFB0329E362140064F247 /* NDNotificationCenterHackery.m in Sources */,
+				698DFB0329E362140064F247 /* QSMNotificationCenterHackery.m in Sources */,
 				69DA9A1229E0BF5100A442DA /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -519,7 +519,7 @@
 				CURRENT_PROJECT_VERSION = 12;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = NearDrop;
+				INFOPLIST_KEY_CFBundleDisplayName = QuickShareMac;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -528,7 +528,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
 				MARKETING_VERSION = 2.2.2;
-				PRODUCT_BUNDLE_IDENTIFIER = me.grishka.NearDrop.ShareExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = me.grishka.QuickShareMac.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -545,7 +545,7 @@
 				CURRENT_PROJECT_VERSION = 12;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = NearDrop;
+				INFOPLIST_KEY_CFBundleDisplayName = QuickShareMac;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -554,7 +554,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
 				MARKETING_VERSION = 2.2.2;
-				PRODUCT_BUNDLE_IDENTIFIER = me.grishka.NearDrop.ShareExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = me.grishka.QuickShareMac.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -688,7 +688,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = NearDrop/NearDrop.entitlements;
+				CODE_SIGN_ENTITLEMENTS = QuickShareMac/QuickShareMac.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
@@ -696,11 +696,12 @@
 				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = NearDrop/Info.plist;
+				INFOPLIST_FILE = QuickShareMac/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = QuickShareMac;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "NearDrop needs access to your local network to send and receive files.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "QuickShareMac needs access to your local network to send and receive files.";
 				INFOPLIST_KEY_NSMainNibFile = MainMenu;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -709,11 +710,11 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
 				MARKETING_VERSION = 2.2.2;
-				PRODUCT_BUNDLE_IDENTIFIER = me.grishka.NearDrop;
+				PRODUCT_BUNDLE_IDENTIFIER = me.grishka.QuickShareMac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "NearDrop/NearDrop-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "QuickShareMac/QuickShareMac-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 			};
@@ -726,7 +727,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = NearDrop/NearDrop.entitlements;
+				CODE_SIGN_ENTITLEMENTS = QuickShareMac/QuickShareMac.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
@@ -734,11 +735,12 @@
 				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = NearDrop/Info.plist;
+				INFOPLIST_FILE = QuickShareMac/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = QuickShareMac;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "NearDrop needs access to your local network to send and receive files.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "QuickShareMac needs access to your local network to send and receive files.";
 				INFOPLIST_KEY_NSMainNibFile = MainMenu;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -747,11 +749,11 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
 				MARKETING_VERSION = 2.2.2;
-				PRODUCT_BUNDLE_IDENTIFIER = me.grishka.NearDrop;
+				PRODUCT_BUNDLE_IDENTIFIER = me.grishka.QuickShareMac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "NearDrop/NearDrop-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "QuickShareMac/QuickShareMac-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
@@ -800,7 +802,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		69DA9A0929E0BF5100A442DA /* Build configuration list for PBXProject "NearDrop" */ = {
+		69DA9A0929E0BF5100A442DA /* Build configuration list for PBXProject "QuickShareMac" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				69DA9A1929E0BF5200A442DA /* Debug */,
@@ -809,7 +811,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		69DA9A1B29E0BF5200A442DA /* Build configuration list for PBXNativeTarget "NearDrop" */ = {
+		69DA9A1B29E0BF5200A442DA /* Build configuration list for PBXNativeTarget "QuickShareMac" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				69DA9A1C29E0BF5200A442DA /* Debug */,

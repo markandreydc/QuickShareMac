@@ -8,13 +8,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         }
       },
@@ -27,13 +27,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "NearDrop needs access to your local network to send and receive files."
+            "value" : "QuickShareMac needs access to your local network to send and receive files."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop необходим доступ к устройствам в вашей локальной сети для приёма и передачи файлов."
+            "value" : "QuickShareMac необходим доступ к устройствам в вашей локальной сети для приёма и передачи файлов."
           }
         }
       }

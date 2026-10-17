@@ -51,7 +51,7 @@ Gw
                     </connections>
                 </button>
                 <stackView distribution="fill" orientation="horizontal" alignment="top" spacing="5" horizontalStackHuggingPriority="249.99998474121094" verticalStackHuggingPriority="249.99998474121094" detachesHiddenViews="YES" translatesAutoresizingMaskIntoConstraints="NO" id="1xF-vr-5sH">
-                    <rect key="frame" x="160" y="222" width="84" height="16"/>
+                    <rect key="frame" x="135" y="222" width="134" height="16"/>
                     <subviews>
                         <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="4M6-D5-WIf">
                             <rect key="frame" x="0.0" y="0.0" width="16" height="16"/>
@@ -59,11 +59,11 @@ Gw
                                 <constraint firstAttribute="width" constant="16" id="BOe-aZ-Njc"/>
                                 <constraint firstAttribute="height" constant="16" id="zLg-1a-wlZ"/>
                             </constraints>
-                            <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="NearDropIcon" id="q3u-Am-ZIA"/>
+                            <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="QuickShareMacIcon" id="q3u-Am-ZIA"/>
                         </imageView>
                         <textField focusRingType="none" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="aNc-0i-CWK">
-                            <rect key="frame" x="19" y="0.0" width="67" height="16"/>
-                            <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="left" title="NearDrop" allowsEditingTextAttributes="YES" id="0xp-rC-2gr">
+                            <rect key="frame" x="19" y="0.0" width="115" height="16"/>
+                            <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="left" title="QuickShareMac" allowsEditingTextAttributes="YES" id="0xp-rC-2gr">
                                 <font key="font" metaFont="systemBold"/>
                                 <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
                                 <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
@@ -355,6 +355,6 @@ Gw
     </objects>
     <resources>
         <image name="NSCaution" width="32" height="32"/>
-        <image name="NearDropIcon" width="16" height="16"/>
+        <image name="QuickShareMacIcon" width="16" height="16"/>
     </resources>
 </document>

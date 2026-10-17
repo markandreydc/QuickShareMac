@@ -199,7 +199,7 @@ Payload transfer frames are wrapped into offline frames of type `PAYLOAD_TRANSFE
 	* **flags**: if `LAST_CHUNK` (bit 0) is set, the transfer is complete and this is the last chunk
 	* **body**: the data bytes themselves
 
-Android does this thing where it sends 2 payload transfer frames in succession for each negotiation message: the first contains the entire message, the second contains 0 bytes but has the `LAST_CHUNK` flag set. I replicated this behavior in NearDrop.
+Android does this thing where it sends 2 payload transfer frames in succession for each negotiation message: the first contains the entire message, the second contains 0 bytes but has the `LAST_CHUNK` flag set. I replicated this behavior in QuickShareMac.
 
 ### The "paired key encryption", whatever that is
 
@@ -207,7 +207,7 @@ The client and the server send each other a "paired key encryption" frame, wrapp
 
 After that, the client and the server send each other a "paired key result" frame. Both have `status` set to `UNABLE`. Whatever.
 
-These and following protobuf messages are specific to Nearby Share and [are defined here](/NearDrop/ProtobufSource/wire_format.proto).
+These and following protobuf messages are specific to Nearby Share and [are defined here](/NearbyShare/ProtobufSource/wire_format.proto).
 
 ### The transfer metadata aka introduction
 

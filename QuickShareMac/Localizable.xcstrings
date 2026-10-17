@@ -1023,109 +1023,109 @@
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "يحتاج NearDrop إلى القدرة على عرض الإشعارات لنقل الملفات الواردة. يرجى السماح بالإشعارات في إعدادات النظام."
+            "value" : "يحتاج QuickShareMac إلى القدرة على عرض الإشعارات لنقل الملفات الواردة. يرجى السماح بالإشعارات في إعدادات النظام."
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop benötigt die Erlaubnis Mitteilungen für eingehende Datenransfers anzuzeigen. Bitte erlaube Mitteilungen in den Systemeinstellungen."
+            "value" : "QuickShareMac benötigt die Erlaubnis Mitteilungen für eingehende Datenransfers anzuzeigen. Bitte erlaube Mitteilungen in den Systemeinstellungen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "NearDrop needs to be able to display notifications for incoming file transfers. Please allow notifications in System Settings."
+            "value" : "QuickShareMac needs to be able to display notifications for incoming file transfers. Please allow notifications in System Settings."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop necesita poder mostrar notificaciones para las transferencias de archivos entrantes. Permita las notificaciones en la configuración del sistema."
+            "value" : "QuickShareMac necesita poder mostrar notificaciones para las transferencias de archivos entrantes. Permita las notificaciones en la configuración del sistema."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop doit pouvoir afficher des notifications pour les transferts de fichiers entrants. Veuillez autoriser les notifications dans les paramètres système."
+            "value" : "QuickShareMac doit pouvoir afficher des notifications pour les transferts de fichiers entrants. Veuillez autoriser les notifications dans les paramètres système."
           }
         },
         "hu" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A NearDrop-nak szüksége van értesítéseket küldeni a bejövő fájlok fogadásához. Kérlek engedélyezd az értesítésekhez való hozzáférést a Rendszerbeállításokban."
+            "value" : "A QuickShareMac-nak szüksége van értesítéseket küldeni a bejövő fájlok fogadásához. Kérlek engedélyezd az értesítésekhez való hozzáférést a Rendszerbeállításokban."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop deve essere in grado di visualizzare le notifiche per i trasferimenti di file in entrata. Consenti le notifiche nelle Impostazioni di sistema."
+            "value" : "QuickShareMac deve essere in grado di visualizzare le notifiche per i trasferimenti di file in entrata. Consenti le notifiche nelle Impostazioni di sistema."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDropでファイル受信の通知を表示できる必要があります。システム設定で通知を許可してください。"
+            "value" : "QuickShareMacでファイル受信の通知を表示できる必要があります。システム設定で通知を許可してください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop에서 파일 수신에 대한 알림을 표시할 수 있어야 합니다. 시스템 설정에서 알림을 허용하세요."
+            "value" : "QuickShareMac에서 파일 수신에 대한 알림을 표시할 수 있어야 합니다. 시스템 설정에서 알림을 허용하세요."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop moet meldingen kunnen weergeven voor inkomende bestandsoverdrachten. Sta meldingen toe in de systeeminstellingen."
+            "value" : "QuickShareMac moet meldingen kunnen weergeven voor inkomende bestandsoverdrachten. Sta meldingen toe in de systeeminstellingen."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "O NearDrop precisa ser capaz de exibir notificações para o recebimento de arquivos. Por favor, habilite as notificações em Ajustes do Sistema."
+            "value" : "O QuickShareMac precisa ser capaz de exibir notificações para o recebimento de arquivos. Por favor, habilite as notificações em Ajustes do Sistema."
           }
         },
         "pt-PT" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "O NearDrop precisa ser capaz de mostrar notificações para receber ficheiros. Por favor, active as notificações em Definições do Sistema."
+            "value" : "O QuickShareMac precisa ser capaz de mostrar notificações para receber ficheiros. Por favor, active as notificações em Definições do Sistema."
           }
         },
         "ro" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop trebuie să poată afișa notificări pentru transferurile de fișiere primite. Vă rugăm să permiteți notificările în Setările Sistemului."
+            "value" : "QuickShareMac trebuie să poată afișa notificări pentru transferurile de fișiere primite. Vă rugăm să permiteți notificările în Setările Sistemului."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop необходима возможность показывать уведомления о входящих файлах. Пожалуйста, разрешите уведомления в Системных настройках."
+            "value" : "QuickShareMac необходима возможность показывать уведомления о входящих файлах. Пожалуйста, разрешите уведомления в Системных настройках."
           }
         },
         "th" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop ไม่สามารถแสดงการแจ้งเตือนไฟล์ที่เข้ามาได้ โปรดให้สิทธิ์การแจ้งเตือน ในการตั้งค่าระบบ"
+            "value" : "QuickShareMac ไม่สามารถแสดงการแจ้งเตือนไฟล์ที่เข้ามาได้ โปรดให้สิทธิ์การแจ้งเตือน ในการตั้งค่าระบบ"
           }
         },
         "uk" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop потрібна можливість показувати сповіщення про вхідні файли. Будь ласка, дозвольте сповіщення у Системних налаштуваннях."
+            "value" : "QuickShareMac потрібна можливість показувати сповіщення про вхідні файли. Будь ласка, дозвольте сповіщення у Системних налаштуваннях."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop 需显示是否接收文件传输的通知。请在 系统设置 中允许通知。"
+            "value" : "QuickShareMac 需显示是否接收文件传输的通知。请在 系统设置 中允许通知。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop 需要顯示檔案傳入的通知，請在系統設定中允許通知。"
+            "value" : "QuickShareMac 需要顯示檔案傳入的通知，請在系統設定中允許通知。"
           }
         }
       }
@@ -1475,109 +1475,109 @@
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "إنهاء NearDrop"
+            "value" : "إنهاء QuickShareMac"
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop Beenden"
+            "value" : "QuickShareMac Beenden"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Quit NearDrop"
+            "value" : "Quit QuickShareMac"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Salir de NearDrop"
+            "value" : "Salir de QuickShareMac"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Quitter NearDrop"
+            "value" : "Quitter QuickShareMac"
           }
         },
         "hu" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop bezárása"
+            "value" : "QuickShareMac bezárása"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esci da NearDrop"
+            "value" : "Esci da QuickShareMac"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDropを終了"
+            "value" : "QuickShareMacを終了"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop 종료"
+            "value" : "QuickShareMac 종료"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop afsluiten"
+            "value" : "QuickShareMac afsluiten"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sair do NearDrop"
+            "value" : "Sair do QuickShareMac"
           }
         },
         "pt-PT" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sair do NearDrop"
+            "value" : "Sair do QuickShareMac"
           }
         },
         "ro" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Închide NearDrop"
+            "value" : "Închide QuickShareMac"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Завершить NearDrop"
+            "value" : "Завершить QuickShareMac"
           }
         },
         "th" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ออก NearDrop"
+            "value" : "ออก QuickShareMac"
           }
         },
         "uk" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Завершити NearDrop"
+            "value" : "Завершити QuickShareMac"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "退出 NearDrop"
+            "value" : "退出 QuickShareMac"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "退出 NearDrop"
+            "value" : "退出 QuickShareMac"
           }
         }
       }

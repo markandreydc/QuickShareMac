@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "69DA9A0D29E0BF5100A442DA"
-               BuildableName = "NearDrop.app"
-               BlueprintName = "NearDrop"
-               ReferencedContainer = "container:NearDrop.xcodeproj">
+               BuildableName = "QuickShareMac.app"
+               BlueprintName = "QuickShareMac"
+               ReferencedContainer = "container:QuickShareMac.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -44,9 +44,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "69DA9A0D29E0BF5100A442DA"
-            BuildableName = "NearDrop.app"
-            BlueprintName = "NearDrop"
-            ReferencedContainer = "container:NearDrop.xcodeproj">
+            BuildableName = "QuickShareMac.app"
+            BlueprintName = "QuickShareMac"
+            ReferencedContainer = "container:QuickShareMac.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -61,9 +61,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "69DA9A0D29E0BF5100A442DA"
-            BuildableName = "NearDrop.app"
-            BlueprintName = "NearDrop"
-            ReferencedContainer = "container:NearDrop.xcodeproj">
+            BuildableName = "QuickShareMac.app"
+            BlueprintName = "QuickShareMac"
+            ReferencedContainer = "container:QuickShareMac.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

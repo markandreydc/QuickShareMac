@@ -1,6 +1,6 @@
 //
 //  InboundNearbyConnection.swift
-//  NearDrop
+//  QuickShareMac
 //
 //  Created by Grishka on 08.04.2023.
 //

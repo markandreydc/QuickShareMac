@@ -2,67 +2,67 @@
   "sourceLanguage" : "en",
   "strings" : {
     "0xp-rC-2gr.title" : {
-      "comment" : "Class = \"NSTextFieldCell\"; title = \"NearDrop\"; ObjectID = \"0xp-rC-2gr\";",
+      "comment" : "Class = \"NSTextFieldCell\"; title = \"QuickShareMac\"; ObjectID = \"0xp-rC-2gr\";",
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         },
         "pt-PT" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         },
         "ro" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         },
         "uk" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NearDrop"
+            "value" : "QuickShareMac"
           }
         }
       },

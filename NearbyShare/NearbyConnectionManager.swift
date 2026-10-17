@@ -1,6 +1,6 @@
 //
 //  NearbyConnectionManager.swift
-//  NearDrop
+//  QuickShareMac
 //
 //  Created by Grishka on 08.04.2023.
 //
@@ -487,4 +487,3 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 		outgoingTransfers.removeValue(forKey: connection.id)
 	}
 }
-
