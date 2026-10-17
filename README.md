@@ -101,6 +101,14 @@ When macOS requests access, allow **Local Network** communication. You can revie
 
 For a build from an unidentified developer, follow [Apple’s instructions for opening an app from an unknown developer](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac). Local development builds are not notarized.
 
+If macOS blocks the app after installation, you can remove its quarantine flag in Terminal. **Only do this if you trust the download**, since it bypasses the quarantine-based Gatekeeper check:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/QuickShareMac.app"
+```
+
+Then open QuickShareMac again from Applications.
+
 If upgrading from NearDrop or an earlier build with a different app identity, review local-network permissions and Login Items again. The upstream NearDrop Homebrew package installs NearDrop, not this fork.
 
 ## Build from source
