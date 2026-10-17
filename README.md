@@ -68,7 +68,7 @@ Recent transfer results last for the current app session, until you dismiss or c
 
 ### Check for updates
 
-Choose **Check for Updates…** in the menu bar menu, the QuickShareMac application menu, or Settings. QuickShareMac compares its installed version with the latest stable [GitHub release](https://github.com/markandreydc/QuickShareMac/releases). It handles version tags such as `v1.0.0`, `v1.1`, and `v1` numerically, ignores build metadata, and does not offer prereleases or downgrades.
+Choose **Check for Updates…** in the menu bar menu, the QuickShareMac application menu, or Settings. Results appear in a standalone dialog without opening Settings or changing its selected section. QuickShareMac compares its installed version with the latest stable [GitHub release](https://github.com/markandreydc/QuickShareMac/releases). It handles version tags such as `v1.0.0`, `v1.1`, and `v1` numerically, ignores build metadata, and does not offer prereleases or downgrades.
 
 **Automatically check for updates daily** is **off by default**. When enabled, the app checks at most once every 24 hours while running (including after launch or wake). Background checks show an available update in Settings and the menu without interrupting transfers with a dialog. Manual checks can run between daily checks; duplicate in-flight requests and GitHub rate-limit retries are suppressed. Known available updates are cached between launches.
 

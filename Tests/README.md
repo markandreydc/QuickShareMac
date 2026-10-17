@@ -22,6 +22,9 @@ also covered, without making update requests or opening a browser.
 Settings checks also cover General/Updates/About navigation, grouped controls,
 preserving the selected page on refresh, About credits/version, resizing,
 scrollable validation messages, and dark appearance.
+Manual-update result dialogs are exercised with both closed and open Settings
+windows: they must stay standalone, preserve Settings visibility/navigation,
+deduplicate repeated presentation, and open release URLs only on explicit action.
 
 The integration suite exercises the real encrypted file-transfer protocol on
 `127.0.0.1`. Received files are written into a disposable temporary directory,

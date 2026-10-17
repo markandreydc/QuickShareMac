@@ -263,6 +263,7 @@ struct UISmokeTests{
 		expect(button("Accept", in: controller.view).isEnabled, "Approval must remain usable in dark mode")
 		testMainWindowSending()
 		testStatusBarMenu()
+		testUpdateResultPresentation()
 		testIdentityAndAvailability()
 		print("Passed \(checks) UI smoke checks")
 	}
@@ -353,6 +354,50 @@ struct UISmokeTests{
 			NSApp.appearance=NSAppearance(named: appearance)
 			controller.menuNeedsUpdate(controller.menu)
 			expect(controller.menu.appearance==nil && item.button?.image?.isTemplate==true, "System appearance changes must not install custom menu colors or icon tints")
+		}
+	}
+
+	static func testUpdateResultPresentation(){
+		let settings=SettingsViewController()
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: SettingsViewController.defaultSize), styleMask: [.titled], backing: .buffered, defer: false)
+		window.contentViewController=settings
+		settings.show(.about)
+		defer{window.orderOut(nil)}
+		let release=UpdateRelease(tagName: "v1.1.0", pageURL: URL(string: "https://github.com/markandreydc/QuickShareMac/releases/tag/v1.1.0")!)
+		let cases:[(Result<UpdateChecker.Outcome,UpdateCheckError>,String,Bool,URL?)]=[
+			(.success(.upToDate),"You're up to date.",false,nil),
+			(.success(.noRelease),"No published stable release is available yet.",false,nil),
+			(.failure(.offline),"Couldn't check for updates",false,nil),
+			(.success(.available(release)),"A QuickShareMac update is available",false,nil),
+			(.success(.available(release)),"A QuickShareMac update is available",true,release.pageURL),
+			(.failure(.server),"Couldn't check for updates",true,UpdateChecker.releasesURL)
+		]
+		for (index,test) in cases.enumerated(){
+			// Also cover an already-open Settings window: checking must neither
+			// navigate away from About nor attach a sheet to it.
+			if index==cases.count-1{window.orderFront(nil)}
+			let settingsWasVisible=window.isVisible
+			let presenter=UpdateResultPresenter()
+			var opened:[URL]=[]
+			presenter.openURL={opened.append($0)}
+			var inspected=false
+			let dismiss=Timer(timeInterval: 0.05, repeats: false){ _ in
+				guard let alert=presenter.alert else {fatalError("The update result must display an alert")}
+				inspected=true
+				expect(alert.messageText==test.1, "Manual check results must retain the correct message")
+				expect(alert.window.isVisible && alert.window.sheetParent==nil, "Update results must use a standalone native dialog, not a Settings sheet")
+				expect(window.isVisible==settingsWasVisible && window.attachedSheet==nil, "Checking for updates must not open Settings or attach a sheet to it")
+				expect(settings.selectedSection == .about, "Update results must not navigate Settings to another section")
+				presenter.show(test.0, currentVersion: "1.0.0")
+				expect(presenter.alert === alert, "Repeated checks must reuse the existing result dialog")
+				let button=test.2 ? alert.buttons[0] : alert.buttons.last!
+				button.performClick(nil)
+			}
+			RunLoop.main.add(dismiss, forMode: .modalPanel)
+			presenter.show(test.0, currentVersion: "1.0.0")
+			dismiss.invalidate()
+			expect(inspected && presenter.alert==nil, "Dismissing a result must clear its presentation state")
+			expect(opened==(test.3.map {[$0]} ?? []), "Only View Release may open the expected GitHub page")
 		}
 	}
 

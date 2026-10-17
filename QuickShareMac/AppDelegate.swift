@@ -20,7 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private let availability=ReceivingAvailability()
 	private let updates=UpdateChecker()
 	private var checkUpdatesMenuItem:NSMenuItem?
-	private var updateAlert:NSAlert?
+	private let updateResults=UpdateResultPresenter()
 	private var wakeObserver:NSObjectProtocol?
 	private var activeIncomingTransfers:[String:TransferInfo]=[:]
 	private var recentlyFinishedTransfers:[String:IncomingTransferDisplay]=[:]
@@ -115,7 +115,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		settingsController.onViewRelease={ [weak self] in self?.viewUpdateRelease() }
 		settingsController.onAutomaticUpdateChecksChange={ [weak self] enabled in self?.updates.setAutomaticChecks(enabled) }
 		updates.onChange={ [weak self] in self?.refreshWindow() }
-		updates.onResult={ [weak self] result, manual in if manual{self?.showUpdateResult(result)} }
+		updates.onResult={ [weak self] result, manual in
+			guard let self=self, manual else {return}
+			self.updateResults.show(result, currentVersion: self.updates.currentVersion)
+		}
 		settingsController.onDeviceNameChange={ [weak self] name in
 			do{
 				try LocalDeviceIdentity.shared.setCustomName(name)
@@ -240,46 +243,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	}
 
 	@objc private func checkForUpdates(_ sender:Any?){
-		if let alert=updateAlert{alert.window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return}
+		if updateResults.activateExistingAlert(){return}
 		updates.check()
 	}
 	private func viewUpdateRelease(){
 		guard let release=updates.availableRelease, release.isValid else {return}
 		NSWorkspace.shared.open(release.pageURL)
-	}
-	private func showUpdateResult(_ result:Result<UpdateChecker.Outcome,UpdateCheckError>){
-		guard updateAlert==nil else {return}
-		showSettings(nil)
-		settingsController.show(.updates)
-		guard let window=settingsWindow, window.attachedSheet==nil else {return}
-		let alert=NSAlert()
-		var destination:URL?
-		switch result{
-		case .success(.available(let release)):
-			alert.messageText=NSLocalizedString("UpdateAvailableTitle", value: "A QuickShareMac update is available", comment: "")
-			alert.informativeText=String(format: NSLocalizedString("UpdateAvailableMessage", value: "QuickShareMac %@ is available. You have %@.\n\nOpen the release page to download the update. Quit QuickShareMac after your transfers finish before replacing the app.", comment: ""), release.tagName, updates.currentVersion)
-			destination=release.pageURL
-		case .success(.upToDate):
-			alert.messageText=NSLocalizedString("UpdateUpToDate", value: "You're up to date.", comment: "")
-			alert.informativeText=String(format: NSLocalizedString("UpdateCurrentMessage", value: "You're using QuickShareMac %@. No newer stable release is available.", comment: ""), updates.currentVersion)
-		case .success(.noRelease):
-			alert.messageText=NSLocalizedString("UpdateNoRelease", value: "No published stable release is available yet.", comment: "")
-			alert.informativeText=NSLocalizedString("UpdateNoReleaseMessage", value: "Check again after a stable GitHub release has been published. A tag alone is not a release.", comment: "")
-		case .failure(let error):
-			alert.alertStyle = .warning
-			alert.messageText=NSLocalizedString("UpdateCheckFailed", value: "Couldn't check for updates", comment: "")
-			alert.informativeText=error.localizedDescription
-			destination=UpdateChecker.releasesURL
-		}
-		if destination != nil{
-			alert.addButton(withTitle: NSLocalizedString("ViewRelease", value: "View Release", comment: ""))
-			alert.addButton(withTitle: NSLocalizedString("UpdateLater", value: "Later", comment: ""))
-		}else{alert.addButton(withTitle: NSLocalizedString("UpdateOK", value: "OK", comment: ""))}
-		updateAlert=alert
-		alert.beginSheetModal(for: window){ [weak self] response in
-			self?.updateAlert=nil
-			if response == .alertFirstButtonReturn, let destination=destination{NSWorkspace.shared.open(destination)}
-		}
 	}
 
 	private func refreshWindow(){
