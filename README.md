@@ -14,10 +14,11 @@ Developed by Mark Andrey · github.com/markandreydc
 
 ## Features
 
-- **Send files** from the main window, by drag-and-drop, or through Finder’s Share menu.
+- **Send files and folders** from the main window, by drag-and-drop, or through Finder’s Share menu. Folders are compressed into ZIP files automatically.
 - **Receive files** with explicit approval and a PIN check for each transfer.
 - **Connect with a QR code** to help your Android device become discoverable.
-- View transfer progress, cancel outgoing transfers, and retry by choosing a recipient again.
+- View transfer progress with speed and time-remaining estimates, cancel outgoing transfers, and retry by choosing a recipient again.
+- Get a notification for incoming requests instead of having the app steal focus while you work elsewhere.
 - Keep recent incoming and outgoing transfer results for the current app session.
 - Reveal completed downloads in Finder.
 - Continue transfers in the background when switching tabs or closing the window.
@@ -40,14 +41,14 @@ Both devices must be on the **same Wi-Fi/local network**. Keep your Android devi
 ### Send files to Android
 
 1. Open QuickShareMac and select **Send**.
-2. Click **Send files…** or drag files onto either the Receive or Send tab. A window-wide **Drop to send** overlay previews the filename or file count and explains that you choose a nearby device next. Drop to open Send and begin device discovery—nothing is sent automatically. You can also use **File → Send files…** (`⌘O`).
+2. Click **Send files…** or drag files or folders onto either the Receive or Send tab. A window-wide **Drop to send** overlay previews the filename or file count and explains that you choose a nearby device next; dragging a folder shows **Compress & send** instead. Drop to open Send and begin device discovery—nothing is sent automatically. You can also use **File → Send files…** (`⌘O`).
 3. Open Quick Share on your Android device and choose its receiving mode, if available.
 4. Select the device in QuickShareMac, or choose **Connect with QR code…** and scan the code with your phone’s camera.
 5. Check that the PIN matches on both devices, then accept on Android.
 
-The Send tab is **files only**. To send a folder, compress it in Finder and send the ZIP file instead.
+Folders are compressed into ZIP files automatically. Each dropped or chosen folder becomes its own ZIP—named after the folder, matching Finder’s **Compress** result—and files chosen alongside folders are sent as they are. The Send tab shows a spinner with **Compressing “FolderName”…** while this happens; large folders can take a moment before device discovery begins. To send a folder without compression, compress it in Finder yourself and select the ZIP. The macOS Share menu still lists QuickShareMac for files only, so send folders from the main window.
 
-During dragging, folders, unreadable files, and unsupported content show a specific explanation instead of an accepted-drop highlight. While an outgoing transfer is active, drops are blocked until you finish or cancel it. Leaving the window or canceling the drag dismisses the overlay without changing your selection.
+During dragging, unreadable files and unsupported content show a specific explanation instead of an accepted-drop highlight. While an outgoing transfer is active, drops are blocked until you finish or cancel it. Leaving the window or canceling the drag dismisses the overlay without changing your selection.
 
 Alternatively, select files in Finder and choose **Share → QuickShareMac**. Links can still be shared through the macOS Share extension, such as Safari’s Share menu; there is no link-sharing control in the main Send tab.
 
@@ -57,6 +58,10 @@ Alternatively, select files in Finder and choose **Share → QuickShareMac**. Li
 2. On Android, select files, open Quick Share, and choose your Mac’s displayed device name.
 3. QuickShareMac opens the incoming request. Verify the PIN, then choose **Accept** or **Decline**.
 4. Received files are saved to your chosen folder—**Downloads** by default. Use **Show in Finder** on a completed transfer to locate them, or **Open Received Files** next to the Receive/Send tabs to open the folder.
+
+While a transfer runs, the progress row shows the percentage, bytes transferred, transfer speed, and an estimated time remaining once enough samples arrive.
+
+Incoming requests do not steal focus. When QuickShareMac is not the active app, the request is announced with a notification—and the Dock icon bounces—instead of pulling its window to the front. Click the notification to open the approval card, then verify the PIN and choose **Accept** or **Decline**. The request waits for your decision either way. If notifications are turned off for QuickShareMac in System Settings, the window comes forward instead so a pending request is never missed. The app asks for notification permission the first time receiving is enabled.
 
 Select **Remember this device name** before accepting if you want a visual reminder for future requests. Remembered names **do not verify identity or bypass approval**—always check the PIN. You can forget remembered names in **Settings…** (`⌘,`).
 
@@ -192,7 +197,8 @@ This is intentional: receiving and active transfers continue in the background. 
 - **Transfers are local network only.** Wi-Fi Direct, Bluetooth transfers, and internet relay are not implemented. Update checks optionally contact GitHub, as described above.
 - **Visible on your network while receiving is enabled.** Contact-only visibility is not supported.
 - **Approval is always required.** Remembered device names are not persistent, verified sender identities.
-- **Folders must be compressed first.** Send a ZIP file rather than a directory.
+- **Folders are compressed with `ditto` before sending.** Each folder becomes its own ZIP file; the original folder is never modified. The Share menu extension still accepts files only—send folders from the main window or compress them in Finder first.
+- **Notifications describe requests but never accept them.** The PIN check always happens in the main window.
 - **Not AirDrop.** This app implements part of the Quick Share/Nearby Share protocol, not Apple’s AirDrop protocol.
 
 [Protocol documentation](PROTOCOL.md) is available separately.

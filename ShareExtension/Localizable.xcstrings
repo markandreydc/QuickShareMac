@@ -853,6 +853,27 @@
         }
       }
     },
+    "TimeRemainingHours" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "About %d h remaining" }
+        }
+      }
+    },
+    "TimeRemainingMinutes" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "About %d min remaining" }
+        }
+      }
+    },
+    "TimeRemainingSeconds" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "About %d sec remaining" }
+        }
+      }
+    },
     "TransferCanceled" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {

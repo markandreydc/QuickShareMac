@@ -62,7 +62,21 @@ protocol SendingService:AnyObject{
 
 extension NearbyConnectionManager:SendingService{}
 
-enum OutgoingState{case idle, choosingDevice, connecting, awaitingApproval, sending, completed, failed, canceled}
+/// Compresses a folder into a ZIP file before it is sent. The main app injects
+/// a real implementation; contexts that cannot run one (the Share extension)
+/// leave it nil, which keeps folders rejected there with an explanation.
+protocol FolderCompressing:AnyObject{
+	func compress(folder:URL, into directory:URL, completion:@escaping (Result<URL,Error>)->Void)
+	func cancel()
+}
+
+enum OutgoingState{case idle, choosingDevice, compressing, connecting, awaitingApproval, sending, completed, failed, canceled}
+
+struct FolderCompressionStatus:Equatable{
+	let name:String
+	let index:Int
+	let total:Int
+}
 
 struct OutgoingTransferResult{
 	let id:UUID
@@ -75,17 +89,25 @@ struct OutgoingTransferResult{
 
 class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 	var service:SendingService=NearbyConnectionManager.shared
+	var folderCompressor:FolderCompressing?
 	var continuesInBackground=false
 	var embeddedInMainWindow=false
 	private var discoveryVisible=true
 	var onResult:((OutgoingTransferResult)->Void)?
 	var onStateChange:((OutgoingState)->Void)?
 	var onDone:((Error?)->Void)?
+	var onPreparationError:((Error)->Void)?
 	var onOpenNetworkSettings:(()->Void)?
 	private(set) var state:OutgoingState = .idle
+	/// The items actually being sent; folders are replaced by their ZIP files
+	/// once compression finishes.
+	var preparedItems:[URL]{urls}
+	/// The progress of the folder currently being compressed, if any.
+	private(set) var compressionProgress:FolderCompressionStatus?
 	var isTransferring:Bool{state == .connecting || state == .awaitingApproval || state == .sending}
 	var hasItems:Bool{!urls.isEmpty}
 	private var urls:[URL]=[]
+	private var sourceSelection:[URL]=[]
 	private var scopedURLs:[URL]=[]
 	private var foundDevices:[RemoteDeviceInfo]=[]
 	private var chosenDevice:RemoteDeviceInfo?
@@ -100,6 +122,11 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 	private var transferID=UUID()
 	private var attempt:SendingAttemptDelegate?
 	private var timeout:DispatchWorkItem?
+	private var compressionGeneration=UUID()
+	private var compressionFiles:[URL]=[]
+	private var compressionFileBytes:Int64=0
+	private var compressedDirectory:URL?
+	private let rateEstimator=TransferRateEstimator()
 	private let filesIcon=NSImageView()
 	private let filesLabel=ShareUI.label(NSLocalizedString("PreparingFiles", value: "Preparing files…", comment: ""))
 	private let contentWrap=NSView()
@@ -248,18 +275,26 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		}
 		// A text field may also submit when hiding its row ends editing. Preserve
 		// the current discovery session if the same selection arrives twice.
-		if state == .choosingDevice && urls==items{return}
+		if sourceSelection==items && (state == .choosingDevice || state == .compressing){return}
 		var scopes:[URL]=[]
+		var files:[URL]=[]
+		var folders:[URL]=[]
 		var bytes:Int64=0
 		do{
 			for url in items where url.isFileURL{
 				if url.startAccessingSecurityScopedResource(){scopes.append(url)}
 				let values=try url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey])
-				guard values.isDirectory != true else {throw selectionError(NSLocalizedString("FolderNotSupported", value: "Folders cannot be sent. Compress the folder in Finder, then share the ZIP file.", comment: ""))}
-				guard values.isRegularFile==true, FileManager.default.isReadableFile(atPath: url.path) else {throw selectionError(NSLocalizedString("UnreadableSelection", value: "One of the selected files is not readable. Choose it again in Finder.", comment: ""))}
-				let (sum, overflow)=bytes.addingReportingOverflow(Int64(values.fileSize ?? 0))
-				guard !overflow else {throw selectionError(NSLocalizedString("SelectionTooLarge", value: "The selected files are too large to send together.", comment: ""))}
-				bytes=sum
+				if values.isDirectory==true{
+					guard folderCompressor != nil else {throw selectionError(NSLocalizedString("FolderNotSupported", value: "Folders cannot be sent. Compress the folder in Finder, then share the ZIP file.", comment: ""))}
+					guard FileManager.default.isReadableFile(atPath: url.path) else {throw selectionError(NSLocalizedString("UnreadableSelection", value: "One of the selected files is not readable. Choose it again in Finder.", comment: ""))}
+					folders.append(url)
+				}else{
+					guard values.isRegularFile==true, FileManager.default.isReadableFile(atPath: url.path) else {throw selectionError(NSLocalizedString("UnreadableSelection", value: "One of the selected files is not readable. Choose it again in Finder.", comment: ""))}
+					let (sum, overflow)=bytes.addingReportingOverflow(Int64(values.fileSize ?? 0))
+					guard !overflow else {throw selectionError(NSLocalizedString("SelectionTooLarge", value: "The selected files are too large to send together.", comment: ""))}
+					bytes=sum
+					files.append(url)
+				}
 			}
 		}catch{
 			for url in scopes{url.stopAccessingSecurityScopedResource()}
@@ -269,9 +304,20 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		stopDiscovery()
 		closeQrSheet()
 		releaseScopes()
+		releaseCompressedItems()
 		scopedURLs=scopes
+		sourceSelection=items
+		if folders.isEmpty{
+			applySelection(items: items, totalBytes: bytes)
+		}else{
+			beginCompression(folders: folders, files: files, fileBytes: bytes)
+		}
+	}
+
+	/// Starts the regular discovery flow for a fully prepared selection.
+	private func applySelection(items:[URL], totalBytes:Int64){
 		urls=items
-		totalBytes=bytes
+		self.totalBytes=totalBytes
 		resetForDiscovery()
 		if items.count==1, let url=items.first{
 			filesLabel.stringValue=url.isFileURL ? url.lastPathComponent : url.absoluteString
@@ -282,6 +328,72 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		}
 		filesLabel.toolTip=items.map {$0.isFileURL ? $0.lastPathComponent : $0.absoluteString}.joined(separator: "\n")
 		if discoveryVisible{beginDiscovery()}
+	}
+
+	/// Compresses every chosen folder into its own ZIP file before discovery
+	/// begins. Files chosen alongside folders are sent as-is.
+	private func beginCompression(folders:[URL], files:[URL], fileBytes:Int64){
+		guard let _=folderCompressor else {return}
+		// The previous selection is gone, and its device list must not accept
+		// clicks while the new ZIPs are being prepared.
+		urls.removeAll()
+		discoveryView.isHidden=true
+		progressView.isHidden=true
+		let generation=UUID()
+		compressionGeneration=generation
+		compressionFiles=files
+		compressionFileBytes=fileBytes
+		let directory=FileManager.default.temporaryDirectory.appendingPathComponent("QuickShareMac-Send-\(generation.uuidString)", isDirectory: true)
+		compressedDirectory=directory
+		compressionProgress=FolderCompressionStatus(name: folders[0].lastPathComponent, index: 1, total: folders.count)
+		setState(.compressing)
+		compressNext(folders: folders, index: 0, zips: [], directory: directory, generation: generation)
+	}
+
+	private func compressNext(folders:[URL], index:Int, zips:[URL], directory:URL, generation:UUID){
+		guard generation==compressionGeneration, let compressor=folderCompressor else {return}
+		if index>=folders.count{
+			var bytes=compressionFileBytes
+			for zip in zips{
+				let size=(try? zip.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+				let (sum, overflow)=bytes.addingReportingOverflow(Int64(size))
+				bytes=overflow ? Int64.max : sum
+			}
+			compressionProgress=nil
+			applySelection(items: compressionFiles+zips, totalBytes: bytes)
+			return
+		}
+		compressionProgress=FolderCompressionStatus(name: folders[index].lastPathComponent, index: index+1, total: folders.count)
+		onStateChange?(state)
+		compressor.compress(folder: folders[index], into: directory){ [weak self] result in
+			guard let self=self, generation==self.compressionGeneration else{return}
+			switch result{
+			case .success(let zip): self.compressNext(folders: folders, index: index+1, zips: zips+[zip], directory: directory, generation: generation)
+			case .failure(let error): self.failCompression(error, generation: generation)
+			}
+		}
+	}
+
+	private func failCompression(_ error:Error, generation:UUID){
+		guard generation==compressionGeneration else{return}
+		releaseCompressedItems()
+		sourceSelection=[]
+		urls.removeAll()
+		setState(.idle)
+		onPreparationError?(error)
+	}
+
+	/// Terminates any compression in progress and removes the temporary ZIPs of
+	/// the previous selection. Temp files from a replaced or finished selection
+	/// are never reused; retries recompress from the original folders.
+	private func releaseCompressedItems(){
+		compressionGeneration=UUID()
+		compressionProgress=nil
+		compressionFiles=[]
+		compressionFileBytes=0
+		folderCompressor?.cancel()
+		if let directory=compressedDirectory{try? FileManager.default.removeItem(at: directory)}
+		compressedDirectory=nil
 	}
 
 	func setDiscoveryVisible(_ visible:Bool){
@@ -305,6 +417,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		attemptID=UUID()
 		attempt=nil
 		chosenDevice=nil
+		rateEstimator.reset()
 		lastError=nil
 		terminal=false
 		requestEnded=false
@@ -346,6 +459,8 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		stopDiscovery()
 		closeQrSheet()
 		releaseScopes()
+		releaseCompressedItems()
+		sourceSelection.removeAll()
 		urls.removeAll()
 		chosenDevice=nil
 		attempt=nil
@@ -355,6 +470,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 	deinit{
 		timeout?.cancel()
 		for url in scopedURLs{url.stopAccessingSecurityScopedResource()}
+		folderCompressor?.cancel()
 	}
 
 	// Kept separate from attachment preparation so previews can render without networking.
@@ -507,8 +623,12 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		progressBar.doubleValue=fraction*100
 		let percent=String.localizedStringWithFormat(NSLocalizedString("SendingPercent", value: "Sending · %d%%", comment: ""), Int(fraction*100))
 		if totalBytes>0{
-			let bytes=ByteCountFormatter.string(fromByteCount: Int64(min(Double(Int64.max-1024), Double(totalBytes)*fraction)), countStyle: .file)
+			let sentBytes=min(Double(Int64.max-1024), Double(totalBytes)*fraction)
+			let bytes=ByteCountFormatter.string(fromByteCount: Int64(sentBytes), countStyle: .file)
 			progressState.stringValue="\(percent) · \(bytes) / \(ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file))"
+			if let rate=rateEstimator.update(bytes: sentBytes), rate>0, let remaining=rateEstimator.estimatedRemaining(totalBytes: Double(totalBytes)){
+				progressHelp.stringValue="\(TransferRateFormat.speed(rate)) · \(TransferRateFormat.remaining(remaining))"
+			}
 		}else{progressState.stringValue=percent}
 	}
 	func transferFinished(){
@@ -612,7 +732,10 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 
 	private func recordResult(){
 		guard let device=chosenDevice else {return}
-		onResult?(OutgoingTransferResult(id: transferID, deviceName: device.name, itemDescription: filesLabel.stringValue, urls: urls, state: state, status: progressState.stringValue))
+		// History keeps the original selection so retrying recompresses folders
+		// instead of pointing at temporary ZIPs that no longer exist.
+		let recordedURLs=sourceSelection.isEmpty ? urls : sourceSelection
+		onResult?(OutgoingTransferResult(id: transferID, deviceName: device.name, itemDescription: filesLabel.stringValue, urls: recordedURLs, state: state, status: progressState.stringValue))
 	}
 
 	private func armTimeout(seconds:Double){

@@ -14,6 +14,8 @@ xcrun swiftc -swift-version 5 -I "$BUILD" -L "$BUILD" \
   "$ROOT/QuickShareMac/MainWindowViewController.swift" \
   "$ROOT/QuickShareMac/ReceivedFilesFolder.swift" \
   "$ROOT/QuickShareMac/SendViewController.swift" \
+  "$ROOT/QuickShareMac/FolderCompressor.swift" \
+  "$ROOT/QuickShareMac/IncomingRequestNotifications.swift" \
   "$ROOT/QuickShareMac/StatusBarMenu.swift" \
   "$ROOT/QuickShareMac/ReceivingAvailability.swift" \
   "$ROOT/QuickShareMac/UpdateChecker.swift" \

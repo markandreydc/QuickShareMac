@@ -73,8 +73,20 @@
     "ChooseFiles" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose files" } } }
     },
+    "ChooseFilesOrFolders" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose" } } }
+    },
     "ChooseNearbyDevice" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a nearby device" } } }
+    },
+    "CompressingFolder" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Compressing “%@”…" } } }
+    },
+    "CompressingFolderHelp" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Folders are compressed into ZIP files before sending. Large folders can take a moment." } } }
+    },
+    "CompressingFolderStep" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Folder %d of %d. Folders are compressed into ZIP files before sending." } } }
     },
     "Connecting" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting…" } } }
@@ -97,6 +109,18 @@
     "DropFilesToSend" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Drop files here to send" } } }
     },
+    "DropFolderCount" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d folders" } } }
+    },
+    "DropFolderHelp" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Folders are compressed into ZIP files before sending." } } }
+    },
+    "DropFolderTitle" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Compress & send" } } }
+    },
+    "DropItemsCount" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d items" } } }
+    },
     "EditMenu" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit" } } }
     },
@@ -108,6 +132,9 @@
     },
     "FinishCurrentTransfer" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Finish or cancel the current transfer before choosing other items." } } }
+    },
+    "FolderCompressionFailed" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The folder “%@” could not be compressed. Check that it can be read, then try again." } } }
     },
     "FolderNotSupported" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Folders cannot be sent. Compress the folder in Finder, then share the ZIP file." } } }
@@ -199,6 +226,15 @@
     "SentToDevice" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "To %@" } } }
     },
+    "TimeRemainingHours" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "About %d h remaining" } } }
+    },
+    "TimeRemainingMinutes" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "About %d min remaining" } } }
+    },
+    "TimeRemainingSeconds" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "About %d sec remaining" } } }
+    },
     "TransferCanceled" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Canceled" } } }
     },
@@ -207,6 +243,12 @@
     },
     "TransferMode" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Transfer mode" } } }
+    },
+    "TransferNotificationBody" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@. Open QuickShareMac to check the PIN, then accept or decline." } } }
+    },
+    "TransferNotificationTitle" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Transfer request from %@" } } }
     },
     "TransferTimedOut" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Timed out" } } }

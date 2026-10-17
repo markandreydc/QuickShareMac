@@ -49,6 +49,9 @@
 		69E1A9002D01000100ABCDF1 /* ReceivedFilesFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A9002D01000100ABCDF0 /* ReceivedFilesFolder.swift */; };
 		69E1A2002D01000100ABCDF1 /* SendTransferViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A2002D01000100ABCDF0 /* SendTransferViewController.swift */; };
 		69E1A2002D01000100ABCDF2 /* SendTransferViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A2002D01000100ABCDF0 /* SendTransferViewController.swift */; };
+		69F1B1012D02000100ABC001 /* FolderCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69F1B1002D02000100ABC001 /* FolderCompressor.swift */; };
+		69F1B2012D02000100ABC002 /* IncomingRequestNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69F1B2002D02000100ABC002 /* IncomingRequestNotifications.swift */; };
+		69F1B3012D02000100ABC003 /* TransferRateEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69F1B3002D02000100ABC003 /* TransferRateEstimator.swift */; };
 		69E1A3002D01000100ABCDF1 /* QRCode in Frameworks */ = {isa = PBXBuildFile; productRef = 69E1A3002D01000100ABCDF0 /* QRCode */; };
 /* End PBXBuildFile section */
 
@@ -164,6 +167,9 @@
 		69E1A4002D01000100ABCDF0 /* StatusBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarMenu.swift; sourceTree = "<group>"; };
 		69E1A9002D01000100ABCDF0 /* ReceivedFilesFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedFilesFolder.swift; sourceTree = "<group>"; };
 		69E1A2002D01000100ABCDF0 /* SendTransferViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendTransferViewController.swift; sourceTree = "<group>"; };
+		69F1B1002D02000100ABC001 /* FolderCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderCompressor.swift; sourceTree = "<group>"; };
+		69F1B2002D02000100ABC002 /* IncomingRequestNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingRequestNotifications.swift; sourceTree = "<group>"; };
+		69F1B3002D02000100ABC003 /* TransferRateEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferRateEstimator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -262,6 +268,8 @@
 				69E1A1002D01000100ABCDF0 /* SendViewController.swift */,
 				69E1A4002D01000100ABCDF0 /* StatusBarMenu.swift */,
 				69E1A9002D01000100ABCDF0 /* ReceivedFilesFolder.swift */,
+				69F1B1002D02000100ABC001 /* FolderCompressor.swift */,
+				69F1B2002D02000100ABC002 /* IncomingRequestNotifications.swift */,
 				69DA9A1329E0BF5200A442DA /* Assets.xcassets */,
 				697DDF122E44AAFB00B4749C /* Localizable.xcstrings */,
 				69DA9A1829E0BF5200A442DA /* QuickShareMac.entitlements */,
@@ -295,6 +303,7 @@
 				698DFAE529E2F91A0064F247 /* NearbyConnection.swift */,
 				69DA9A2029E0CC4E00A442DA /* Data+Extensions.swift */,
 				697DDEEB2E43986400B4749C /* SymmetricKey+Extensions.swift */,
+				69F1B3002D02000100ABC003 /* TransferRateEstimator.swift */,
 			);
 			path = NearbyShare;
 			sourceTree = "<group>";
@@ -489,6 +498,8 @@
 				69E1A1002D01000100ABCDF1 /* SendViewController.swift in Sources */,
 				69E1A4002D01000100ABCDF1 /* StatusBarMenu.swift in Sources */,
 				69E1A9002D01000100ABCDF1 /* ReceivedFilesFolder.swift in Sources */,
+				69F1B1012D02000100ABC001 /* FolderCompressor.swift in Sources */,
+				69F1B2012D02000100ABC002 /* IncomingRequestNotifications.swift in Sources */,
 				69E1A2002D01000100ABCDF1 /* SendTransferViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -511,6 +522,7 @@
 				69DCF48A2AB70E8C00CBE2CC /* wire_format.pb.swift in Sources */,
 				697DDEEC2E43986400B4749C /* SymmetricKey+Extensions.swift in Sources */,
 				69DCF4932AB70E9700CBE2CC /* Data+Extensions.swift in Sources */,
+				69F1B3012D02000100ABC003 /* TransferRateEstimator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

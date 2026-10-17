@@ -11,8 +11,8 @@ Tests/run-update-checker-tests.sh
 ```
 
 The UI suite uses a fake sending service: it does not discover or contact devices.
-It covers Send/Receive navigation, file-only selection and drag-and-drop, Share
-extension link handling, approval,
+It covers Send/Receive navigation, file/folder selection and drag-and-drop, Share
+extension link and folder handling, approval,
 progress, cancellation, retry isolation, background completion, history, and native
 menu bar behavior (menu attachment, appearance defaults, actions, and live state).
 Compact-window checks verify that approval controls remain reachable by scrolling
@@ -22,9 +22,20 @@ tooltips, tab-switch persistence, restored state, and leaving other windows unaf
 The developer credit footer is checked on both the Receive and Send tabs for
 centering, bottom placement, resizing, and staying outside cards/scrolling content.
 Drag checks cover the window-wide overlay on both tabs, filename/count previews,
-copy-only cursor feedback, resizing/dark appearance, rejected folders/links/missing
-files, drop-time revalidation, active-transfer changes during a hover, cleanup on
-exit/cancel/window removal, and recipient selection without automatic sending.
+copy-only cursor feedback, resizing/dark appearance, folder accept-with-compression,
+rejected links/missing files, drop-time revalidation, active-transfer changes during
+a hover, cleanup on exit/cancel/window removal, and recipient selection without
+automatic sending.
+Folder compression is exercised end-to-end with `ditto`: a temporary folder tree is
+compressed, the ZIP is checked for its name, PK signature, and included parent
+folder, a missing folder must fail with a named error, and the Send flow must present
+and transfer a ZIP (not the folder) after the spinner phase. The rate estimator is
+checked for baseline, exact, throttled, smoothed, and restarted samples plus
+speed/ETA wording. Incoming-request presentation is checked for the active-app,
+background-with-notifications, and no-notifications fallbacks, and the notification
+copy is verified to name the device and point at the PIN check. History retry is
+covered for folders: **Send again** recompresses the original folder instead of
+pointing at deleted temporary ZIPs.
 It also checks explicit system/custom device-name choices, prefilled custom input,
 Save/Cancel draft handling, refresh isolation, friendly inline validation,
 save confirmation/failure handling, and name persistence; read-only visibility details,

@@ -1,8 +1,8 @@
 import Cocoa
 
 enum FileDropFeedback:Equatable{
-	case ready([URL]), folder, busy, unsupported, unreadable
-	var canDrop:Bool{if case .ready=self{return true}; return false}
+	case ready([URL]), folder([URL]), busy, unsupported, unreadable
+	var canDrop:Bool{if case .ready=self{return true}; if case .folder=self{return true}; return false}
 }
 
 private final class DropOutlineView:NSView{
@@ -69,10 +69,18 @@ private final class FileDropOverlay:NSVisualEffectView{
 			title.stringValue=NSLocalizedString("DropToSend", value: "Drop to send", comment: "")
 			subtitle.stringValue=NSLocalizedString("DropChooseDeviceNext", value: "Choose a nearby device next", comment: "")
 			details.stringValue=urls.count==1 ? urls[0].lastPathComponent : String.localizedStringWithFormat(NSLocalizedString("DropFileCount", value: "%d files", comment: ""), urls.count)
-		case .folder:
-			symbol="folder"
-			title.stringValue=NSLocalizedString("DropFolderTitle", value: "Can’t send folders", comment: "")
-			subtitle.stringValue=NSLocalizedString("DropFolderHelp", value: "Compress this folder into a ZIP first.", comment: "")
+		case .folder(let urls):
+			symbol="doc.zipper"
+			title.stringValue=NSLocalizedString("DropFolderTitle", value: "Compress & send", comment: "")
+			subtitle.stringValue=NSLocalizedString("DropFolderHelp", value: "Folders are compressed into ZIP files before sending.", comment: "")
+			let folders=urls.filter {url in (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true}
+			if urls.count==1{
+				details.stringValue=urls[0].lastPathComponent
+			}else if folders.count==urls.count{
+				details.stringValue=String.localizedStringWithFormat(NSLocalizedString("DropFolderCount", value: "%d folders", comment: ""), folders.count)
+			}else{
+				details.stringValue=String.localizedStringWithFormat(NSLocalizedString("DropItemsCount", value: "%d items", comment: ""), urls.count)
+			}
 		case .busy:
 			symbol="clock"
 			title.stringValue=NSLocalizedString("DropBusyTitle", value: "Transfer in progress", comment: "")
@@ -121,6 +129,7 @@ final class SendDropView:WindowBackgroundView{
 	private static func fileFeedback(from pasteboard:NSPasteboard)->FileDropFeedback{
 		let urls=urls(from: pasteboard)
 		guard !urls.isEmpty else {return .unsupported}
+		var folderCount=0
 		for url in urls{
 			var scoped=false
 			defer{if scoped{url.stopAccessingSecurityScopedResource()}}
@@ -135,15 +144,18 @@ final class SendDropView:WindowBackgroundView{
 					guard scoped else {return .unreadable}
 					values=try url.resourceValues(forKeys: keys)
 				}
-				if values.isDirectory==true{return .folder}
-				guard values.isRegularFile==true else {return .unreadable}
+				if values.isDirectory==true{
+					folderCount+=1
+				}else{
+					guard values.isRegularFile==true else {return .unreadable}
+				}
 				if !FileManager.default.isReadableFile(atPath: url.path){
 					if !scoped{scoped=url.startAccessingSecurityScopedResource()}
 					guard FileManager.default.isReadableFile(atPath: url.path) else {return .unreadable}
 				}
 			}catch{return .unreadable}
 		}
-		return .ready(urls)
+		return folderCount>0 ? .folder(urls) : .ready(urls)
 	}
 	@discardableResult func previewDrop(from pasteboard:NSPasteboard, sourceOperationMask:NSDragOperation = .copy)->NSDragOperation{
 		if dragPasteboard !== pasteboard || cachedChangeCount != pasteboard.changeCount{
@@ -169,8 +181,11 @@ final class SendDropView:WindowBackgroundView{
 	}
 	@discardableResult func receiveDrop(from pasteboard:NSPasteboard, sourceOperationMask:NSDragOperation = .copy)->Bool{
 		endDropPreview()
-		guard acceptsItems, sourceOperationMask.contains(.copy), case .ready(let urls)=Self.fileFeedback(from: pasteboard) else {return false}
-		return onURLs?(urls) ?? false
+		guard acceptsItems, sourceOperationMask.contains(.copy) else {return false}
+		switch Self.fileFeedback(from: pasteboard){
+		case .ready(let urls), .folder(let urls): return onURLs?(urls) ?? false
+		default: return false
+		}
 	}
 	override func draggingEntered(_ sender:NSDraggingInfo) -> NSDragOperation{
 		previewDrop(from: sender.draggingPasteboard, sourceOperationMask: sender.draggingSourceOperationMask)
@@ -199,6 +214,7 @@ final class SendViewController:NSViewController{
 	private let selectionHelp=WindowUI.label("", size: 12, secondary: true)
 	private var selectedFiles:[URL]=[]
 	private let chooseButton=NSButton(title: NSLocalizedString("SendFiles", value: "Send files…", comment: ""), target: nil, action: nil)
+	private let preparingSpinner=NSProgressIndicator()
 	private let history=WindowUI.stack(spacing: 10)
 	private let historyHeading=WindowUI.stack(.horizontal)
 	private var historyButtons:[NSButton]=[]
@@ -229,13 +245,22 @@ final class SendViewController:NSViewController{
 		chooseButton.bezelStyle = .rounded
 		chooseButton.target=self
 		chooseButton.action=#selector(chooseFiles(_:))
-		selectionContent.addArrangedSubview(chooseButton)
+		preparingSpinner.style = .spinning
+		preparingSpinner.controlSize = .small
+		preparingSpinner.isIndeterminate=true
+		preparingSpinner.isHidden=true
+		let chooseRow=WindowUI.stack(.horizontal)
+		chooseRow.addArrangedSubview(preparingSpinner)
+		chooseRow.addArrangedSubview(chooseButton)
+		chooseRow.addArrangedSubview(WindowUI.spacer())
+		selectionContent.addArrangedSubview(chooseRow)
 		errorLabel.textColor = .systemRed
 		WindowUI.fill(errorLabel, in: selectionContent)
 		errorLabel.isHidden=true
 		WindowUI.fill(selection, in: content)
 		sender.continuesInBackground=true
 		sender.embeddedInMainWindow=true
+		sender.folderCompressor=DittoFolderCompressor()
 		sender.setDiscoveryVisible(false)
 		sender.onResult={ [weak self] result in self?.record(result) }
 		sender.onStateChange={ [weak self] _ in
@@ -243,6 +268,14 @@ final class SendViewController:NSViewController{
 			self?.updateControls()
 		}
 		sender.onDone={ [weak self] _ in self?.clearSelection() }
+		sender.onPreparationError={ [weak self] error in
+			guard let self=self else{return}
+			self.errorLabel.stringValue=error.localizedDescription
+			self.errorLabel.isHidden=false
+			self.selectedFiles=[]
+			self.senderCard.isHidden=true
+			self.updateControls()
+		}
 		addChild(sender)
 		senderCard.wantsLayer=true
 		WindowUI.pin(sender.view, to: senderCard, inset: 16)
@@ -288,10 +321,10 @@ final class SendViewController:NSViewController{
 		guard !self.sender.isTransferring, let window=view.window else {return}
 		let panel=NSOpenPanel()
 		panel.canChooseFiles=true
-		panel.canChooseDirectories=false
+		panel.canChooseDirectories=true
 		panel.allowsMultipleSelection=true
 		panel.treatsFilePackagesAsDirectories=true
-		panel.prompt=NSLocalizedString("ChooseFiles", value: "Choose files", comment: "")
+		panel.prompt=NSLocalizedString("ChooseFilesOrFolders", value: "Choose", comment: "")
 		panel.beginSheetModal(for: window){ [weak self] response in
 			if response == .OK{self?.selectItems(panel.urls)}
 		}
@@ -304,9 +337,22 @@ final class SendViewController:NSViewController{
 	}
 	private func updateControls(){
 		let enabled = !sender.isTransferring
-		chooseButton.isEnabled=enabled
-		if sender.state == .choosingDevice && !selectedFiles.isEmpty{
-			selectionTitle.stringValue=selectedFiles.count==1 ? selectedFiles[0].lastPathComponent : String.localizedStringWithFormat(NSLocalizedString("FilesReadyToSend", value: "%d files ready to send", comment: ""), selectedFiles.count)
+		let compressing = sender.state == .compressing
+		chooseButton.isEnabled=enabled && !compressing
+		if compressing{
+			preparingSpinner.startAnimation(nil)
+		}else{
+			preparingSpinner.stopAnimation(nil)
+		}
+		preparingSpinner.isHidden = !compressing
+		let displayItems=sender.preparedItems.isEmpty ? selectedFiles : sender.preparedItems
+		if compressing, let progress=sender.compressionProgress{
+			selectionTitle.stringValue=String(format: NSLocalizedString("CompressingFolder", value: "Compressing “%@”…", comment: ""), progress.name)
+			selectionHelp.stringValue=progress.total>1
+				? String.localizedStringWithFormat(NSLocalizedString("CompressingFolderStep", value: "Folder %d of %d. Folders are compressed into ZIP files before sending.", comment: ""), progress.index, progress.total)
+				: NSLocalizedString("CompressingFolderHelp", value: "Folders are compressed into ZIP files before sending. Large folders can take a moment.", comment: "")
+		}else if sender.state == .choosingDevice && !displayItems.isEmpty{
+			selectionTitle.stringValue=displayItems.count==1 ? displayItems[0].lastPathComponent : String.localizedStringWithFormat(NSLocalizedString("FilesReadyToSend", value: "%d files ready to send", comment: ""), displayItems.count)
 			selectionHelp.stringValue=NSLocalizedString("DropReadyChooseDevice", value: "Choose a nearby device. Nothing is sent until you choose a recipient.", comment: "")
 		}else if !enabled{
 			selectionTitle.stringValue=NSLocalizedString("DropBusyTitle", value: "Transfer in progress", comment: "")

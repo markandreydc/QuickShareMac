@@ -22,6 +22,14 @@ struct UISmokeTests{
 		window.contentView?.needsLayout=true
 		window.contentView?.layoutSubtreeIfNeeded()
 	}
+	@discardableResult static func waitUntil(timeout:TimeInterval = 15, _ condition:()->Bool)->Bool{
+		let deadline=Date().addingTimeInterval(timeout)
+		while !condition(){
+			if Date()>deadline{return false}
+			RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+		}
+		return true
+	}
 	static func transfer(_ id:String, _ state:IncomingTransferState, pin:String = "1234", remembered:Bool = false, progress:Double = 0.5) -> IncomingTransferDisplay{
 		IncomingTransferDisplay(id: id, deviceName: "Android \(id)", description: "A photograph with a longer filename.jpg · 10 MB", status: state == .failed ? "The connection was interrupted before the transfer could finish." : "Transfer status", state: state, progress: state == .receiving ? progress : nil, pinCode: pin, remembered: remembered, receivedBytes: Int64(progress*10000000), totalBytes: 10000000, savedFileURLs: [URL(fileURLWithPath: "/Users/Shared/photo.jpg")])
 	}
@@ -421,7 +429,10 @@ struct UISmokeTests{
 		snapshot(window, "dark-approval")
 		expect(button("Accept", in: controller.view).isEnabled, "Approval must remain usable in dark mode")
 		testMainWindowSending()
+		testFolderCompression()
 		testFileDropExperience()
+		testTransferRateEstimator()
+		testIncomingRequestPresentation()
 		testStatusBarMenu()
 		testUpdateResultPresentation()
 		testIdentityAndAvailability()
@@ -670,7 +681,15 @@ struct UISmokeTests{
 		defer{try? FileManager.default.removeItem(at: file)}
 		expect(main.sendController.selectItems([file]), "Selecting a file must prepare the Send flow")
 		expect(service.discoveryStarts==1 && service.attempts.isEmpty, "Choosing items must discover, not automatically send (discovery: \(service.discoveryStarts), transfers: \(service.attempts.count))")
-		expect(!main.sendController.selectItems([URL(fileURLWithPath: "/")]), "Folders must be rejected before connecting")
+		let folder=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-send-folder-\(UUID().uuidString)")
+		try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+		try! Data("inside".utf8).write(to: folder.appendingPathComponent("inside.txt"))
+		defer{try? FileManager.default.removeItem(at: folder)}
+		expect(main.sendController.selectItems([folder]), "Folders must be accepted by compressing them into a ZIP")
+		expect(main.sendController.sender.state == .compressing, "Folder selections must compress before discovery")
+		expect(waitUntil{main.sendController.sender.state == .choosingDevice}, "Folder compression must finish and prepare the ZIP for sending")
+		expect(main.sendController.sender.preparedItems.count==1 && main.sendController.sender.preparedItems[0].pathExtension=="zip", "The folder must be replaced by a ZIP before sending")
+		expect(service.discoveryStarts==2, "The compressed folder must go through discovery like any other selection")
 		expect(!main.sendController.selectItems([URL(string: "mailto:someone@example.com")!]), "Unsupported link schemes must be rejected")
 		expect(!main.sendController.selectItems([URL(string: "https://user:password@example.com")!]), "Links containing credentials must be rejected")
 		let device=RemoteDeviceInfo(name: "Android test phone", type: .phone, id: "test-device")
@@ -680,6 +699,7 @@ struct UISmokeTests{
 		expect(collection.numberOfItems(inSection: 0)==1, "Discovery must deduplicate device updates")
 		main.sendController.sender.selectDevice(device)
 		expect(main.sendController.sender.state == .connecting && service.attempts.count==1, "Choosing a device must start a transfer")
+		expect(service.attemptURLs.last?.first?.pathExtension=="zip", "The transfer must send the compressed ZIP rather than the folder")
 		let sendProgress=visible(main.view).compactMap {$0 as? NSProgressIndicator}.first!
 		expect(sendProgress.style == .bar && !sendProgress.isIndeterminate && sendProgress.doubleValue==0, "Sending must use an empty determinate bar, not a loading animation")
 		expect(!(main.view as! SendDropView).acceptsItems, "The window must not advertise replacement drops during an active transfer")
@@ -725,7 +745,8 @@ struct UISmokeTests{
 		layout(window)
 		snapshot(window, "main-send-complete")
 		button("Send again…", in: main.view).performClick(nil)
-		expect(main.sendController.sender.state == .choosingDevice && service.attempts.count==2, "History Send again must ask for a recipient")
+		expect(waitUntil{main.sendController.sender.state == .choosingDevice}, "Send again must recompress the folder and ask for a recipient")
+		expect(service.attempts.count==2, "Send again must not automatically resend")
 		service.canStart=false
 		main.sendController.sender.selectDevice(device)
 		expect(main.sendController.sender.state == .failed, "A vanished recipient must fail immediately rather than hang")
@@ -813,14 +834,21 @@ struct UISmokeTests{
 		expect(drop.receiveDrop(from: pasteboard) && selectionTitle()=="2 files ready to send", "Multiple dropped files must show a ready-to-send summary")
 		expect(descendants(main.view).compactMap({$0 as? SendDropView}).count==1, "Send must not introduce a nested drag target that limits the overlay to its card")
 		main.showReceive()
+		let startsBeforeFolderDrop=service.discoveryStarts
 		write([directory])
-		expect(drop.previewDrop(from: pasteboard).isEmpty && drop.dropFeedback == .folder, "Folders must be rejected before dropping")
-		expect(shows("Compress this folder into a ZIP first."), "Folder rejection must explain how to send it")
+		expect(drop.previewDrop(from: pasteboard) == .copy && drop.dropFeedback == .folder([directory]), "Folder drags must be accepted for automatic compression")
+		expect(shows("Compress & send") && shows("Folders are compressed into ZIP files before sending.") && shows(directory.lastPathComponent), "Folder drops must explain the ZIP behavior and preview the folder name")
 		snapshot(window, "drop-folder")
-		expect(!drop.receiveDrop(from: pasteboard) && selectionTitle()=="2 files ready to send", "Rejected folders must not replace the previous selection")
-		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==0, "Rejected drops must not switch tabs")
+		expect(drop.receiveDrop(from: pasteboard), "Dropping a folder must start compression and prepare Send")
+		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==1, "A folder drop must switch to Send")
+		expect(waitUntil{main.sendController.sender.state == .choosingDevice}, "Dropping a folder must finish compressing before discovery")
+		expect(selectionTitle()==directory.lastPathComponent+".zip", "The folder must be presented as a ZIP file once compressed")
+		expect(service.discoveryStarts>startsBeforeFolderDrop, "The compressed folder must start discovery")
 		write([first,directory])
-		expect(drop.previewDrop(from: pasteboard).isEmpty && drop.dropFeedback == .folder, "A mixed file/folder drag must reject the whole selection")
+		expect(drop.previewDrop(from: pasteboard) == .copy && drop.dropFeedback == .folder([first,directory]), "A mixed file/folder drag must be accepted")
+		expect(shows("2 items"), "Mixed drags must preview how many items are being sent")
+		expect(drop.receiveDrop(from: pasteboard), "A mixed file/folder drop must keep files and compress folders")
+		expect(waitUntil{selectionTitle()=="2 files ready to send"}, "Mixed drops must keep files and add the compressed folder")
 		write([first,URL(string: "https://example.com")!])
 		expect(drop.previewDrop(from: pasteboard).isEmpty && drop.dropFeedback == .unsupported && shows("Files only"), "Mixed web links and files must not be silently truncated")
 		pasteboard.clearContents()
@@ -851,6 +879,65 @@ struct UISmokeTests{
 		_ = drop.previewDrop(from: pasteboard)
 		window.contentViewController=nil
 		expect(overlay.isHidden && drop.dropFeedback==nil, "Removing the view from its window must clear an abandoned preview")
+	}
+
+	static func testFolderCompression(){
+		let root=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-zip-tests-\(UUID().uuidString)")
+		let folder=root.appendingPathComponent("Projects")
+		try! FileManager.default.createDirectory(at: folder.appendingPathComponent("Nested"), withIntermediateDirectories: true)
+		try! Data("notes".utf8).write(to: folder.appendingPathComponent("notes.txt"))
+		try! Data("deep".utf8).write(to: folder.appendingPathComponent("Nested/deep.txt"))
+		let destination=root.appendingPathComponent("out")
+		defer{try? FileManager.default.removeItem(at: root)}
+		let compressor=DittoFolderCompressor()
+		var result:Result<URL,Error>?
+		compressor.compress(folder: folder, into: destination){result=$0}
+		expect(waitUntil{result != nil}, "Compressing a folder must finish")
+		guard case .success(let zip)=result! else {fatalError("Folder compression failed: \(String(describing: result))")}
+		expect(zip.lastPathComponent=="Projects.zip", "The ZIP must be named after the folder")
+		expect(FileManager.default.fileExists(atPath: zip.path), "The ZIP must exist in the requested directory")
+		let data=try! Data(contentsOf: zip)
+		expect(data.count>0 && data.prefix(2)==Data([0x50,0x4B]), "Folder compression must produce a real ZIP archive")
+		expect(data.range(of: Data("Projects/".utf8)) != nil, "The ZIP must contain the folder itself, not just its contents")
+		expect(data.range(of: Data("notes.txt".utf8)) != nil, "The ZIP must contain the folder contents")
+		var failure:Result<URL,Error>?
+		compressor.compress(folder: root.appendingPathComponent("Missing"), into: destination){failure=$0}
+		expect(waitUntil{failure != nil}, "Compressing a missing folder must finish with a failure")
+		if case .failure(let error)=failure!{
+			expect((try? failure!.get())==nil && error.localizedDescription.contains("Missing"), "Compression failures must name the folder and not report success")
+		}else{
+			expect(false, "Compressing a missing folder must fail")
+		}
+	}
+
+	static func testTransferRateEstimator(){
+		let estimator=TransferRateEstimator()
+		expect(estimator.rate==nil, "No rate must be reported before samples arrive")
+		expect(estimator.update(bytes: 0, at: 100)==nil, "The first sample must only establish a baseline")
+		let first=estimator.update(bytes: 1_000_000, at: 101)
+		expect(first != nil && abs(first!-1_000_000)<1, "One second of progress must report its exact rate")
+		expect(estimator.estimatedRemaining(totalBytes: 3_000_000).map {abs($0-2)<0.01}==true, "Remaining time must divide the remaining bytes by the rate")
+		expect(estimator.update(bytes: 1_500_000, at: 101.1)==first, "Samples closer than a quarter second must be ignored")
+		let smoothed=estimator.update(bytes: 4_000_000, at: 102)
+		expect(smoothed != nil && abs(smoothed!-1_600_000)<1000, "Instantaneous spikes must be smoothed into the reported rate")
+		expect(estimator.update(bytes: 0, at: 103)==nil, "Restarting a transfer must clear the old rate")
+		expect(estimator.estimatedRemaining(totalBytes: 3_000_000)==nil, "A restarted transfer must not report a stale estimate")
+		expect(TransferRateFormat.speed(1_500_000).hasSuffix("/s"), "Speed must be presented per second")
+		expect(TransferRateFormat.remaining(45)=="About 45 sec remaining", "Short estimates must round to seconds")
+		expect(TransferRateFormat.remaining(120)=="About 2 min remaining", "Longer estimates must round to minutes")
+		expect(TransferRateFormat.remaining(7200)=="About 2 h remaining", "Hours-long estimates must round to hours")
+		expect(TransferRateFormat.remaining(-5)=="About 1 sec remaining", "Absurd estimates must stay readable")
+	}
+
+	static func testIncomingRequestPresentation(){
+		expect(IncomingRequestPresentation.preferred(appIsActive: true, canDeliverNotifications: true) == .showWindow, "An active app must show the approval card directly")
+		expect(IncomingRequestPresentation.preferred(appIsActive: true, canDeliverNotifications: false) == .showWindow, "Without notifications the window must always come forward")
+		expect(IncomingRequestPresentation.preferred(appIsActive: false, canDeliverNotifications: true) == .notify, "A background app with notifications must not steal focus")
+		expect(IncomingRequestPresentation.preferred(appIsActive: false, canDeliverNotifications: false) == .showWindow, "Without notifications a pending request must never be missed")
+		let notification=IncomingTransferNotification.make(deviceName: "Pixel 8", description: "holiday.jpg", transferID: "abc-123")
+		expect(notification.title.contains("Pixel 8"), "The notification must name the sending device")
+		expect(notification.body.contains("holiday.jpg") && notification.body.contains("PIN"), "The notification must describe the items and point at the PIN check")
+		expect(notification.transferID=="abc-123", "The notification must carry the transfer ID so it can be cleared when the request ends")
 	}
 
 	static func testConnectionErrorUI(){
@@ -888,12 +975,13 @@ private final class FakeSendingService:SendingService{
 	var canStart=true
 	weak var discoveryDelegate:ShareExtensionDelegate?
 	var attempts:[ShareExtensionDelegate]=[]
+	var attemptURLs:[[URL]]=[]
 	func startDeviceDiscovery(){discoveryStarts+=1}
 	func stopDeviceDiscovery(){discoveryStops+=1}
 	func addShareExtensionDelegate(_ delegate:ShareExtensionDelegate){discoveryDelegate=delegate}
 	func removeShareExtensionDelegate(_ delegate:ShareExtensionDelegate){discoveryDelegate=nil}
 	func startOutgoingTransfer(deviceID:String, delegate:ShareExtensionDelegate, urls:[URL]) -> Bool{
-		if canStart{attempts.append(delegate)}
+		if canStart{attempts.append(delegate); attemptURLs.append(urls)}
 		return canStart
 	}
 	func cancelOutgoingTransfer(id:String){cancellations+=1}

@@ -8,9 +8,10 @@
 import Cocoa
 import NearbyShare
 import ServiceManagement
+import UserNotifications
 
 @main
-class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemValidation{
+class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemValidation, UNUserNotificationCenterDelegate{
 	private var statusItem:NSStatusItem?
 	private let statusMenu=StatusBarMenu()
 	private var mainWindow:NSWindow?
@@ -28,6 +29,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private let startReceivingKey="StartReceivingOnLaunch"
 	private let rememberedDevicesKey="RememberedDeviceNames"
 	private var rememberedDevices:Set<String>=[]
+	private let notifications=UNUserNotificationCenter.current()
+	private var notificationsAuthorized=false
+	private var notificationPermissionRequested=false
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
 		UserDefaults.standard.register(defaults: [startReceivingKey:true])
@@ -161,6 +165,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		NearbyConnectionManager.shared.mainAppDelegate=self
 		NearbyConnectionManager.shared.incomingDownloadDirectory=ReceivedFilesFolder.currentURL
 		if UserDefaults.standard.bool(forKey: startReceivingKey){setReceiving(true)}
+		notifications.delegate=self
+		refreshNotificationAuthorization()
 		refreshWindow()
 		showMainWindow(nil)
 		updates.start()
@@ -170,6 +176,70 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		refreshWindow()
 		mainWindow?.makeKeyAndOrderFront(sender)
 		NSApplication.shared.activate(ignoringOtherApps: true)
+	}
+
+	/// The notification permission is requested the first time receiving turns
+	/// on so the system prompt has context. The status decides whether incoming
+	/// requests are announced with a banner or by bringing the window forward.
+	private func refreshNotificationAuthorization(){
+		notifications.getNotificationSettings{ [weak self] settings in
+			DispatchQueue.main.async{
+				guard let self=self else{return}
+				switch settings.authorizationStatus{
+				case .authorized, .provisional, .ephemeral:
+					self.notificationsAuthorized=true
+				case .notDetermined:
+					self.notificationsAuthorized=false
+					if NearbyConnectionManager.shared.isReceiving{self.requestNotificationAuthorization()}
+				default:
+					self.notificationsAuthorized=false
+				}
+			}
+		}
+	}
+
+	private func requestNotificationAuthorization(){
+		guard !notificationPermissionRequested else {return}
+		notificationPermissionRequested=true
+		notifications.requestAuthorization(options: [.alert, .sound]){ [weak self] granted, _ in
+			DispatchQueue.main.async{
+				guard let self=self else{return}
+				self.notificationsAuthorized=granted
+				self.refreshWindow()
+			}
+		}
+	}
+
+	private static func notificationIdentifier(for transferID:String) -> String{"transfer-\(transferID)"}
+
+	private func postIncomingTransferNotification(id:String, deviceName:String, description:String){
+		let text=IncomingTransferNotification.make(deviceName: deviceName, description: description, transferID: id)
+		let content=UNMutableNotificationContent()
+		content.title=text.title
+		content.body=text.body
+		content.sound = .default
+		content.userInfo=["transferID": text.transferID]
+		notifications.add(UNNotificationRequest(identifier: Self.notificationIdentifier(for: id), content: content, trigger: nil))
+	}
+
+	private func removeTransferNotification(_ id:String){
+		let identifiers=[Self.notificationIdentifier(for: id)]
+		notifications.removeDeliveredNotifications(withIdentifiers: identifiers)
+		notifications.removePendingNotificationRequests(withIdentifiers: identifiers)
+	}
+
+	func userNotificationCenter(_ center:UNUserNotificationCenter, willPresent notification:UNNotification, withCompletionHandler completionHandler:@escaping (UNNotificationPresentationOptions)->Void){
+		// Requests are only announced with a banner while the app is in the
+		// background; if one arrives while the app is frontmost, the window is
+		// already on screen showing the approval card.
+		completionHandler([])
+	}
+
+	func userNotificationCenter(_ center:UNUserNotificationCenter, didReceive response:UNNotificationResponse, withCompletionHandler completionHandler:@escaping ()->Void){
+		if response.notification.request.content.userInfo["transferID"] != nil{
+			DispatchQueue.main.async{ [weak self] in self?.showMainWindow(nil) }
+		}
+		completionHandler()
 	}
 
 	@objc private func sendFiles(_ sender:Any?){
@@ -215,6 +285,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 				let wasReceiving=NearbyConnectionManager.shared.isReceiving
 				try NearbyConnectionManager.shared.startReceiving()
 				if !wasReceiving || !availability.active{availability.started()}
+				refreshNotificationAuthorization()
 			}catch{
 				showError(error)
 			}
@@ -317,9 +388,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			}else if info.totalBytes>0{
 				let fraction=min(1, Double(info.receivedBytes)/Double(info.totalBytes))
 				progress=fraction
-				status=info.receivedBytes>=info.totalBytes
-					? NSLocalizedString("FinishingTransfer", value: "Finishing transfer…", comment: "")
-					: String(format: NSLocalizedString("ReceivingPercent", value: "Receiving · %d%%", comment: ""), Int(fraction*100))
+				if info.receivedBytes>=info.totalBytes{
+					status=NSLocalizedString("FinishingTransfer", value: "Finishing transfer…", comment: "")
+				}else{
+					var line=String(format: NSLocalizedString("ReceivingPercent", value: "Receiving · %d%%", comment: ""), Int(fraction*100))
+					if let rate=info.rateEstimator.rate, rate>0, let remaining=info.rateEstimator.estimatedRemaining(totalBytes: Double(info.totalBytes)){
+						line += " · \(TransferRateFormat.speed(rate)) · \(TransferRateFormat.remaining(remaining))"
+					}
+					status=line
+				}
 			}else{
 				progress=nil
 				status=NSLocalizedString("Receiving", value: "Receiving…", comment: "")
@@ -362,6 +439,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private func respondToIncomingTransfer(id:String, decision:TransferDecision){
 		guard let transfer=activeIncomingTransfers[id], !transfer.accepted else {return}
 		let accepted=decision != .decline
+		removeTransferNotification(id)
 		NearbyConnectionManager.shared.submitUserConsent(transferID: id, accept: accepted)
 		if accepted{
 			activeIncomingTransfers[id]?.accepted=true
@@ -404,7 +482,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		}
 		self.activeIncomingTransfers[transfer.id]=TransferInfo(device: device, transfer: transfer, description: fileStr, totalBytes: totalBytes)
 		windowController.showReceive()
-		showMainWindow(nil)
+		switch IncomingRequestPresentation.preferred(appIsActive: NSApplication.shared.isActive, canDeliverNotifications: notificationsAuthorized){
+		case .showWindow:
+			showMainWindow(nil)
+		case .notify:
+			// Announce without stealing focus; the transfer waits until the
+			// user opens the window and verifies the PIN.
+			postIncomingTransferNotification(id: transfer.id, deviceName: device.name, description: fileStr)
+			_=NSApplication.shared.requestUserAttention(.informationalRequest)
+		}
 	}
 
 	func incomingTransfer(id:String, didReceiveBytes count:Int64){
@@ -412,6 +498,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		let previousPercent=info.totalBytes>0 ? Int(Double(info.receivedBytes)/Double(info.totalBytes)*100) : 0
 		let (sum, overflow)=info.receivedBytes.addingReportingOverflow(count)
 		info.receivedBytes=min(info.totalBytes, overflow ? Int64.max : sum)
+		info.rateEstimator.update(bytes: Double(info.receivedBytes))
 		activeIncomingTransfers[id]=info
 		let currentPercent=info.totalBytes>0 ? Int(Double(info.receivedBytes)/Double(info.totalBytes)*100) : 0
 		if mainWindow?.isVisible == true && currentPercent != previousPercent{refreshWindow()}
@@ -420,6 +507,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	func incomingTransfer(id: String, didFinishWith error: Error?) {
 		guard let transfer=self.activeIncomingTransfers[id] else {return}
 		self.activeIncomingTransfers.removeValue(forKey: id)
+		removeTransferNotification(id)
 		let completed=transfer.accepted && error==nil && (transfer.totalBytes==0 || transfer.receivedBytes>=transfer.totalBytes)
 		let status:String
 		if completed{
@@ -444,4 +532,5 @@ struct TransferInfo{
 	var receivedBytes:Int64=0
 	var accepted:Bool=false
 	let createdAt=Date()
+	let rateEstimator=TransferRateEstimator()
 }
