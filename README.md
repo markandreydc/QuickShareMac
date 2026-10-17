@@ -23,6 +23,12 @@ Developed by Mark Andrey · github.com/markandreydc
 - Configure launch at login, receiving on startup, and remembered device names in Settings.
 - Check GitHub for updates manually, or opt into daily checks—no automatic downloads or installation.
 
+## Screenshots
+
+| Receive | Send | Settings |
+| --- | --- | --- |
+| [<img src="images/receive.png" width="280" alt="QuickShareMac Receive window">](images/receive.png) | [<img src="images/send.png" width="280" alt="QuickShareMac Send window">](images/send.png) | [<img src="images/settings.png" width="280" alt="QuickShareMac Settings window">](images/settings.png) |
+
 ## Getting started
 
 Both devices must be on the **same Wi-Fi/local network**. Keep your Android device unlocked while connecting.
