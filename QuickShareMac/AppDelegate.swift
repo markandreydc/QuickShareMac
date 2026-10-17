@@ -97,15 +97,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		window.contentMinSize=MainWindowViewController.minimumSize
 		window.setFrameAutosaveName("QuickShareMacMainWindow")
 		if !window.setFrameUsingName("QuickShareMacMainWindow"){window.center()}
-		if !UserDefaults.standard.bool(forKey: "CompactMainWindowSizeAppliedV2"){
-			let restored=window.contentRect(forFrameRect: window.frame).size
-			if abs(restored.height-680)<1 || abs(restored.height-580)<1{
-				let top=window.frame.maxY
-				window.setContentSize(NSSize(width: restored.width, height: MainWindowViewController.defaultSize.height))
-				window.setFrameOrigin(NSPoint(x: window.frame.minX, y: top-window.frame.height))
-			}
-			UserDefaults.standard.set(true, forKey: "CompactMainWindowSizeAppliedV2")
-		}
 		windowController.setAlwaysOnTop(UserDefaults.standard.bool(forKey: "AlwaysOnTop"))
 		windowController.onAlwaysOnTopChange={enabled in UserDefaults.standard.set(enabled, forKey: "AlwaysOnTop")}
 		mainWindow=window

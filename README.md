@@ -69,7 +69,7 @@ Select **Remember this device name** before accepting if you want a visual remin
 
 Closing the window does not quit the app. Click the Dock icon to reopen it, or click the menu bar icon and choose **Show QuickShareMac**. Both left-click and right-click open the standard macOS menu, with receiving controls, file sending, Settings, and Quit. The menu and monochrome icon follow the system appearance.
 
-The main window uses a compact layout; transfer requests and history scroll instead of forcing it taller, and a new incoming request scrolls back to the top so its PIN is visible. Click the **pin icon** at the upper right to keep the main window above normal windows. A filled pin means **Always on top** is enabled; click again to turn it off. The setting is remembered across launches and does not change other windows.
+Transfer requests and history scroll instead of expanding the window, and a new incoming request scrolls back to the top so its PIN is visible. Click the **pin icon** at the upper right to keep the main window above normal windows. A filled pin means **Always on top** is enabled; click again to turn it off. The setting is remembered across launches and does not change other windows.
 
 A small **Developed by Mark Andrey · github.com/markandreydc** credit appears at the bottom of the main window on both the Receive and Send tabs.
 

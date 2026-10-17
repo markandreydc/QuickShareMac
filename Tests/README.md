@@ -15,7 +15,7 @@ It covers Send/Receive navigation, file/folder selection and drag-and-drop, Shar
 extension link and folder handling, approval,
 progress, cancellation, retry isolation, background completion, history, and native
 menu bar behavior (menu attachment, appearance defaults, actions, and live state).
-Compact-window checks verify that approval controls remain reachable by scrolling
+Scroll checks verify that approval controls remain reachable by scrolling
 without expanding the window, and that a new approval request scrolls back to the
 top. The upper-right pin is tested for normal/floating window levels, on/off state,
 tooltips, tab-switch persistence, restored state, and leaving other windows unaffected.

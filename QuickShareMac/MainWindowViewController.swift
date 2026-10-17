@@ -230,8 +230,8 @@ private final class TransferRowView:CardView{
 }
 
 final class MainWindowViewController:NSViewController{
-	static let defaultSize=NSSize(width: 560, height: 480)
-	static let minimumSize=NSSize(width: 520, height: 480)
+	static let defaultSize=NSSize(width: 560, height: 680)
+	static let minimumSize=NSSize(width: 520, height: 680)
 	let sendController=SendViewController()
 	private let tabs=NSSegmentedControl(labels: [NSLocalizedString("ReceiveTab", value: "Receive", comment: ""), NSLocalizedString("SendTab", value: "Send", comment: "")], trackingMode: .selectOne, target: nil, action: nil)
 	private let receiveContent=WindowUI.stack(spacing: 16)
