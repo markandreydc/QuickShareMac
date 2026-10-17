@@ -25,7 +25,7 @@ Developed by Mark Andrey · github.com/markandreydc
 - Set a custom device name without renaming your Mac.
 - Choose receiving availability for **10 minutes**, **30 minutes**, **1 hour**, or **Indefinitely** (the default).
 - Configure launch at login, receiving on startup, and remembered device names in Settings.
-- Check GitHub for updates manually, or opt into daily checks—no automatic downloads or installation.
+- Check GitHub for updates manually, or schedule daily, weekly, or monthly checks—no automatic downloads or installation.
 
 ## Screenshots
 
@@ -80,7 +80,7 @@ Recent transfer results last for the current app session, until you dismiss or c
 
 Choose **Check for Updates…** in the menu bar menu, the QuickShareMac application menu, or Settings. Results appear in a standalone dialog without opening Settings or changing its selected section. QuickShareMac compares its installed version with the latest stable [GitHub release](https://github.com/markandreydc/QuickShareMac/releases). It handles version tags such as `v1.0.0`, `v1.1`, and `v1` numerically, ignores build metadata, and does not offer prereleases or downgrades.
 
-**Automatically check for updates daily** is **off by default**. When enabled, the app checks at most once every 24 hours while running (including after launch or wake). Background checks show an available update in Settings and the menu without interrupting transfers with a dialog. Manual checks can run between daily checks; duplicate in-flight requests and GitHub rate-limit retries are suppressed. Known available updates are cached between launches.
+In **Settings → Updates**, use **Check for updates** to select **Daily**, **Weekly**, **Monthly**, or **Never** (the default). Checks run when due while the app is running, including after launch or wake; Monthly uses a calendar month rather than a fixed 30 days. Existing enabled daily checks remain Daily, and disabled checks become Never. Background checks show an available update in Settings and the menu without interrupting transfers with a dialog. **Check for Updates…** remains available with every schedule, including Never. Manual checks reset the schedule's last-check time; duplicate in-flight requests and GitHub rate-limit retries are suppressed. Known available updates are cached between launches.
 
 **View Release** opens the release page in your browser. Download the ZIP yourself, let transfers finish, quit QuickShareMac, and replace the app. There is **no Sparkle dependency, automatic download, or automatic installation**. GitHub/network failures are not mistaken for “up to date.”
 

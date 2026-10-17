@@ -468,9 +468,9 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	var onForgetRememberedDevices:(()->Void)?
 	var onDeviceNameChange:((String?) throws -> Void)?
 	var onCheckForUpdates:(()->Void)?
-	var onAutomaticUpdateChecksChange:((Bool)->Void)?
+	var onUpdateCheckFrequencyChange:((UpdateCheckFrequency)->Void)?
 	var onViewRelease:(()->Void)?
-	private let automaticUpdatesButton=NSButton(checkboxWithTitle: NSLocalizedString("AutomaticUpdateChecks", value: "Automatically check for updates daily", comment: ""), target: nil, action: nil)
+	private let updateFrequency=NSPopUpButton(frame: .zero, pullsDown: false)
 	private let checkUpdatesButton=NSButton(title: NSLocalizedString("CheckForUpdates", value: "Check for Updates…", comment: ""), target: nil, action: nil)
 	private let viewReleaseButton=NSButton(title: NSLocalizedString("ViewRelease", value: "View Release", comment: ""), target: nil, action: nil)
 	private let updateVersionLabel=WindowUI.label("", size: 12, secondary: true)
@@ -572,9 +572,19 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		let updatePage=page(.updates)
 		let updates=card(NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""), in: updatePage)
 		WindowUI.fill(updateVersionLabel, in: updates)
-		automaticUpdatesButton.target=self
-		automaticUpdatesButton.action=#selector(automaticUpdatesChanged(_:))
-		updates.addArrangedSubview(automaticUpdatesButton)
+		let frequencyRow=WindowUI.stack(.horizontal)
+		frequencyRow.addArrangedSubview(WindowUI.label(NSLocalizedString("UpdateCheckFrequencyLabel", value: "Check for updates:", comment: ""), size: 12))
+		updateFrequency.identifier=NSUserInterfaceItemIdentifier("UpdateCheckFrequency")
+		updateFrequency.setAccessibilityLabel(NSLocalizedString("UpdateCheckFrequencyLabel", value: "Check for updates:", comment: ""))
+		for frequency in UpdateCheckFrequency.allCases{
+			updateFrequency.addItem(withTitle: frequency.title)
+			updateFrequency.lastItem?.representedObject=frequency.rawValue
+		}
+		updateFrequency.selectItem(withTitle: UpdateCheckFrequency.never.title)
+		updateFrequency.target=self
+		updateFrequency.action=#selector(updateFrequencyChanged(_:))
+		frequencyRow.addArrangedSubview(updateFrequency)
+		updates.addArrangedSubview(frequencyRow)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("UpdateChecksExplanation", value: "Checks GitHub for stable releases. Updates are downloaded and installed manually; nothing is installed automatically.", comment: ""), size: 11, secondary: true), in: updates)
 		let updateActions=WindowUI.stack(.horizontal)
 		checkUpdatesButton.target=self
@@ -684,9 +694,9 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	}
 
 	@objc private func startReceivingChanged(_ sender:NSButton){onStartReceivingOnLaunchChange?(sender.state == .on)}
-	func updateUpdates(automatic:Bool, checking:Bool, currentVersion:String, availableRelease:UpdateRelease?, status:String){
+	func updateUpdates(frequency:UpdateCheckFrequency, checking:Bool, currentVersion:String, availableRelease:UpdateRelease?, status:String){
 		_ = view
-		automaticUpdatesButton.state=automatic ? .on : .off
+		updateFrequency.selectItem(withTitle: frequency.title)
 		checkUpdatesButton.isEnabled = !checking
 		checkUpdatesButton.title=checking ? NSLocalizedString("CheckingForUpdates", value: "Checking for updates…", comment: "") : NSLocalizedString("CheckForUpdates", value: "Check for Updates…", comment: "")
 		updateVersionLabel.stringValue=String(format: NSLocalizedString("InstalledVersion", value: "Version %@", comment: ""), currentVersion)
@@ -695,7 +705,9 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		updateStatusLabel.stringValue=status
 		updateStatusLabel.isHidden=status.isEmpty
 	}
-	@objc private func automaticUpdatesChanged(_ sender:NSButton){onAutomaticUpdateChecksChange?(sender.state == .on)}
+	@objc private func updateFrequencyChanged(_ sender:NSPopUpButton){
+		if let value=sender.selectedItem?.representedObject as? String, let frequency=UpdateCheckFrequency(rawValue: value){onUpdateCheckFrequencyChange?(frequency)}
+	}
 	@objc private func checkForUpdates(_ sender:NSButton){onCheckForUpdates?()}
 	@objc private func viewRelease(_ sender:NSButton){onViewRelease?()}
 	@objc private func launchAtLoginChanged(_ sender:NSButton){onLaunchAtLoginChange?(sender.state == .on)}

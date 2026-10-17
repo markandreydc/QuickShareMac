@@ -1,5 +1,25 @@
 import Foundation
 
+enum UpdateCheckFrequency:String, CaseIterable{
+	case daily, weekly, monthly, never
+	var title:String{
+		switch self{
+		case .daily: return NSLocalizedString("UpdateCheckDaily", value: "Daily", comment: "")
+		case .weekly: return NSLocalizedString("UpdateCheckWeekly", value: "Weekly", comment: "")
+		case .monthly: return NSLocalizedString("UpdateCheckMonthly", value: "Monthly", comment: "")
+		case .never: return NSLocalizedString("UpdateCheckNever", value: "Never", comment: "")
+		}
+	}
+	func nextCheck(after date:Date, calendar:Calendar)->Date?{
+		switch self{
+		case .daily: return calendar.date(byAdding: .day, value: 1, to: date)
+		case .weekly: return calendar.date(byAdding: .day, value: 7, to: date)
+		case .monthly: return calendar.date(byAdding: .month, value: 1, to: date)
+		case .never: return nil
+		}
+	}
+}
+
 // Numeric versions, with SemVer prerelease precedence. Short stable tags such
 // as v1 and v1.1 are also accepted; build metadata does not affect precedence.
 struct ReleaseVersion:Comparable{
@@ -84,6 +104,7 @@ final class UpdateChecker{
 	private let preferences:UserDefaults
 	private let session:URLSession
 	private let now:()->Date
+	private let calendar:Calendar
 	let currentVersion:String
 	private(set) var isChecking=false
 	private(set) var availableRelease:UpdateRelease?
@@ -94,16 +115,22 @@ final class UpdateChecker{
 	private var timer:Timer?
 	private var requestID:UUID?
 	private var manualRequest=false
-	private let automaticKey="AutomaticallyCheckForUpdates"
+	private let frequencyKey="UpdateCheckFrequency"
 	private let lastAttemptKey="LastUpdateCheckAttempt"
 	private let cacheKey="CachedUpdateRelease"
 	private let retryKey="UpdateCheckRetryAfter"
-	var automaticChecks:Bool{preferences.bool(forKey: automaticKey)}
+	var frequency:UpdateCheckFrequency{UpdateCheckFrequency(rawValue: preferences.string(forKey: frequencyKey) ?? "") ?? .never}
+	var automaticChecks:Bool{frequency != .never}
 
-	init(preferences:UserDefaults = .standard, currentVersion:String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "", session:URLSession?=nil, now:@escaping ()->Date = Date.init){
+	init(preferences:UserDefaults = .standard, currentVersion:String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "", session:URLSession?=nil, now:@escaping ()->Date = Date.init, calendar:Calendar = .current){
 		self.preferences=preferences
 		self.currentVersion=currentVersion
 		self.now=now
+		self.calendar=calendar
+		if preferences.object(forKey: frequencyKey)==nil{
+			let migrated:UpdateCheckFrequency=preferences.bool(forKey: "AutomaticallyCheckForUpdates") ? .daily : .never
+			preferences.set(migrated.rawValue, forKey: frequencyKey)
+		}
 		if let session=session{self.session=session}
 		else{
 			let configuration=URLSessionConfiguration.ephemeral
@@ -126,14 +153,15 @@ final class UpdateChecker{
 		RunLoop.main.add(timer, forMode: .common)
 		checkAutomaticallyIfDue()
 	}
-	func setAutomaticChecks(_ enabled:Bool){
-		preferences.set(enabled, forKey: automaticKey)
+	func setFrequency(_ frequency:UpdateCheckFrequency){
+		preferences.set(frequency.rawValue, forKey: frequencyKey)
 		onChange?()
-		if enabled{checkAutomaticallyIfDue()}
+		if frequency != .never{checkAutomaticallyIfDue()}
 	}
 	func checkAutomaticallyIfDue(){
 		guard automaticChecks, !isChecking else {return}
-		if let last=preferences.object(forKey: lastAttemptKey) as? Date, now().timeIntervalSince(last)<86400{return}
+		if let last=preferences.object(forKey: lastAttemptKey) as? Date,
+			let next=frequency.nextCheck(after: last, calendar: calendar), now()<next{return}
 		check(manual: false)
 	}
 	func check(manual:Bool = true){

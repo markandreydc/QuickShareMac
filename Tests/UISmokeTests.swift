@@ -127,7 +127,7 @@ struct UISmokeTests{
 		let settingsWindow=NSWindow(contentRect: NSRect(origin: .zero, size: SettingsViewController.defaultSize), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
 		settingsWindow.contentViewController=settings
 		settings.update(startReceivingOnLaunch: true, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 0)
-		settings.updateUpdates(automatic: false, checking: false, currentVersion: "1.0.0", availableRelease: nil, status: "")
+		settings.updateUpdates(frequency: .never, checking: false, currentVersion: "1.0.0", availableRelease: nil, status: "")
 		layout(settingsWindow)
 		expect(settings.selectedSection == .general, "Settings must open on General by default")
 		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Check for Updates…"}), "Update controls must not clutter General settings")
@@ -175,25 +175,32 @@ struct UISmokeTests{
 		settings.onCheckForUpdates={updateChecks+=1}
 		button("Check for Updates…", in: settings.view).performClick(nil)
 		expect(updateChecks==1, "Settings must wire manual update checks")
-		let automatic=button("Automatically check for updates daily", in: settings.view)
-		expect(automatic.state == .off, "Automatic update checks must be opt-in")
-		var automaticEnabled=false
-		settings.onAutomaticUpdateChecksChange={automaticEnabled=$0}
-		automatic.performClick(nil)
-		expect(automaticEnabled, "Settings must forward the automatic-check preference")
-		settings.updateUpdates(automatic: true, checking: true, currentVersion: "1.0.0", availableRelease: nil, status: "Checking for updates…")
+		let frequency=visible(settings.view).compactMap {$0 as? NSPopUpButton}.first(where: {$0.identifier?.rawValue=="UpdateCheckFrequency"})!
+		expect(frequency.itemTitles==["Daily","Weekly","Monthly","Never"], "The update dropdown must offer all four frequencies in order")
+		expect(frequency.selectedItem?.title=="Never", "Automatic update checks must default to Never")
+		var selectedFrequency:UpdateCheckFrequency?
+		settings.onUpdateCheckFrequencyChange={selectedFrequency=$0}
+		for (index,value) in UpdateCheckFrequency.allCases.enumerated(){
+			frequency.selectItem(at: index)
+			NSApp.sendAction(frequency.action!, to: frequency.target, from: frequency)
+			expect(selectedFrequency==value, "Settings must forward the selected update frequency: \(value)")
+		}
+		settings.updateUpdates(frequency: .weekly, checking: true, currentVersion: "1.0.0", availableRelease: nil, status: "Checking for updates…")
+		expect(frequency.selectedItem?.title=="Weekly" && frequency.isEnabled, "A pending check must preserve the frequency and allow disabling future checks")
 		expect(!button("Checking for updates…", in: settings.view).isEnabled, "A pending check must disable duplicate manual checks")
 		let release=UpdateRelease(tagName: "v1.1.0", pageURL: URL(string: "https://github.com/markandreydc/QuickShareMac/releases/tag/v1.1.0")!)
-		settings.updateUpdates(automatic: true, checking: false, currentVersion: "1.0.0", availableRelease: release, status: "Update available: v1.1.0")
+		settings.updateUpdates(frequency: .monthly, checking: false, currentVersion: "1.0.0", availableRelease: release, status: "Update available: v1.1.0")
+		expect(frequency.selectedItem?.title=="Monthly", "Refreshing Settings must display the saved update frequency")
 		var viewed=false
 		settings.onViewRelease={viewed=true}
 		button("View Release", in: settings.view).performClick(nil)
 		expect(viewed, "Settings must expose a release-page action for an available update")
 		layout(settingsWindow)
-		for title in ["Check for Updates…", "View Release", "Automatically check for updates daily"]{
+		for title in ["Check for Updates…", "View Release"]{
 			let control=button(title, in: settings.view)
 			expect(settings.view.bounds.contains(control.convert(control.bounds, to: settings.view)), "Update controls must fit in Settings")
 		}
+		expect(settings.view.bounds.contains(frequency.convert(frequency.bounds, to: settings.view)), "The frequency dropdown must fit inside Settings")
 		snapshot(settingsWindow, "settings")
 		snapshot(settingsWindow, "settings-updates")
 		settings.update(startReceivingOnLaunch: false, launchAtLogin: false, requiresLoginApproval: true, rememberedDeviceCount: 3)

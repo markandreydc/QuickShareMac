@@ -113,7 +113,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		settingsController.onOpenLoginItems={ [weak self] in self?.openLoginItems(nil) }
 		settingsController.onCheckForUpdates={ [weak self] in self?.checkForUpdates(nil) }
 		settingsController.onViewRelease={ [weak self] in self?.viewUpdateRelease() }
-		settingsController.onAutomaticUpdateChecksChange={ [weak self] enabled in self?.updates.setAutomaticChecks(enabled) }
+		settingsController.onUpdateCheckFrequencyChange={ [weak self] frequency in self?.updates.setFrequency(frequency) }
 		updates.onChange={ [weak self] in self?.refreshWindow() }
 		updates.onResult={ [weak self] result, manual in
 			guard let self=self, manual else {return}
@@ -294,7 +294,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]}, deviceName: LocalDeviceIdentity.shared.deviceName, duration: availability.duration, expiresAt: availability.expiresAt)
 		if settingsWindow != nil{
 			settingsController.update(startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey), launchAtLogin: launchAtLogin, requiresLoginApproval: requiresLoginApproval, rememberedDeviceCount: rememberedDevices.count, customDeviceName: LocalDeviceIdentity.shared.customName)
-			settingsController.updateUpdates(automatic: updates.automaticChecks, checking: updates.isChecking, currentVersion: updates.currentVersion, availableRelease: updates.availableRelease, status: updates.statusText)
+			settingsController.updateUpdates(frequency: updates.frequency, checking: updates.isChecking, currentVersion: updates.currentVersion, availableRelease: updates.availableRelease, status: updates.statusText)
 		}
 	}
 	

@@ -46,14 +46,18 @@ struct UpdateCheckerTests{
 			domains.forEach {UserDefaults.standard.removePersistentDomain(forName: $0)}
 		}
 		var now=Date(timeIntervalSince1970: 100000)
-		func create(_ version:String = "1.0.0")->(UpdateChecker,UserDefaults,URLSession){
+		var calendar=Calendar(identifier: .gregorian)
+		calendar.timeZone=TimeZone(secondsFromGMT: 0)!
+		func create(_ version:String = "1.0.0", legacyAutomatic:Bool?=nil, savedFrequency:String?=nil)->(UpdateChecker,UserDefaults,URLSession){
 			let domain="QuickShareMac.UpdateTests."+UUID().uuidString
 			domains.append(domain)
 			let preferences=UserDefaults(suiteName: domain)!
+			if let legacyAutomatic=legacyAutomatic{preferences.set(legacyAutomatic, forKey: "AutomaticallyCheckForUpdates")}
+			if let savedFrequency=savedFrequency{preferences.set(savedFrequency, forKey: "UpdateCheckFrequency")}
 			let configuration=URLSessionConfiguration.ephemeral
 			configuration.protocolClasses=[MockGitHubProtocol.self]
 			let session=URLSession(configuration: configuration)
-			let checker=UpdateChecker(preferences: preferences, currentVersion: version, session: session, now: {now})
+			let checker=UpdateChecker(preferences: preferences, currentVersion: version, session: session, now: {now}, calendar: calendar)
 			instances.append(checker)
 			return (checker,preferences,session)
 		}
@@ -91,7 +95,7 @@ struct UpdateCheckerTests{
 		let unsafeCache=UpdateRelease(tagName: "v99.0.0", pageURL: URL(string: "https://evil.example/update")!)
 		preferences.set(try! JSONEncoder().encode(unsafeCache), forKey: "CachedUpdateRelease")
 		expect(UpdateChecker(preferences: preferences, currentVersion: "1.0.0", session: session).availableRelease==nil, "Cached release links must pass the same origin validation as fresh responses")
-		checker.setAutomaticChecks(true)
+		checker.setFrequency(.daily)
 		expect(!checker.isChecking && requests==1, "Enabling daily checks after a manual check must respect the daily limit")
 		expect(restored.automaticChecks, "The automatic-check preference must persist")
 		now=now.addingTimeInterval(86400)
@@ -145,7 +149,7 @@ struct UpdateCheckerTests{
 		var joinedResults=0
 		var wasManual=false
 		joined.onResult={_,manual in joinedResults+=1; wasManual=manual}
-		joined.setAutomaticChecks(true)
+		joined.setFrequency(.daily)
 		wait{pending != nil}
 		joined.check()
 		joined.check()
@@ -156,7 +160,7 @@ struct UpdateCheckerTests{
 		pending=nil
 		joined.checkAutomaticallyIfDue()
 		wait{pending != nil}
-		joined.setAutomaticChecks(false)
+		joined.setFrequency(.never)
 		pending!.reply(200,data: json())
 		wait{!joined.isChecking}
 		expect(joinedResults==1, "Disabling background checks must suppress a pending background callback")
@@ -171,6 +175,57 @@ struct UpdateCheckerTests{
 		invalidVersion.onResult={result,_ in if case .failure(.invalidVersion)=result{rejected=true}}
 		invalidVersion.check()
 		expect(rejected && !invalidVersion.isChecking, "Unreadable installed versions must fail without networking")
+
+		expect(checker.frequency == .daily, "The previous opt-in must now be represented by Daily")
+		expect(create(legacyAutomatic: true).0.frequency == .daily, "An existing enabled checkbox must migrate to Daily")
+		expect(create(legacyAutomatic: false).0.frequency == .never, "An existing disabled checkbox must migrate to Never")
+		expect(create().0.frequency == .never, "Fresh installations must default to Never")
+		expect(create(legacyAutomatic: true, savedFrequency: "monthly").0.frequency == .monthly, "An explicit frequency must not be overwritten by the old checkbox preference")
+		expect(create(savedFrequency: "invalid").0.frequency == .never, "An invalid frequency must safely disable automatic checks")
+
+		var scheduleRequests=0
+		MockGitHubProtocol.handler={_,stub in scheduleRequests+=1; stub.reply(200,data: json("v1.0.0"))}
+		let januaryEnd=calendar.date(from: DateComponents(year: 2026, month: 1, day: 31, hour: 12))!
+		now=januaryEnd
+		let (weekly,weeklyPreferences,weeklySession)=create()
+		weekly.setFrequency(.weekly)
+		wait{!weekly.isChecking && scheduleRequests==1}
+		expect(UpdateChecker(preferences: weeklyPreferences, currentVersion: "1.0.0", session: weeklySession).frequency == .weekly, "Frequency choices must persist across launches")
+		now=januaryEnd.addingTimeInterval(7*86400-1)
+		weekly.checkAutomaticallyIfDue()
+		expect(scheduleRequests==1 && !weekly.isChecking, "Weekly checks must wait seven days")
+		now=now.addingTimeInterval(1)
+		weekly.checkAutomaticallyIfDue()
+		wait{!weekly.isChecking && scheduleRequests==2}
+		weekly.checkAutomaticallyIfDue()
+		expect(!weekly.isChecking && scheduleRequests==2, "Repeated wake/timer events must not duplicate a weekly check")
+		weekly.setFrequency(.monthly)
+		expect(!weekly.isChecking && scheduleRequests==2, "Switching to a longer schedule must respect the last check")
+		now=now.addingTimeInterval(86400)
+		weekly.setFrequency(.daily)
+		wait{!weekly.isChecking && scheduleRequests==3}
+		expect(weekly.frequency == .daily, "Switching to a shorter overdue schedule must run a check")
+		weekly.setFrequency(.never)
+		now=now.addingTimeInterval(400*86400)
+		weekly.checkAutomaticallyIfDue()
+		expect(!weekly.isChecking && scheduleRequests==3, "Never must disable all scheduled checks")
+		weekly.check()
+		wait{!weekly.isChecking && scheduleRequests==4}
+		expect(weekly.frequency == .never, "Manual checks must work without changing the Never preference")
+
+		now=januaryEnd
+		let (monthly,_,_)=create()
+		monthly.setFrequency(.monthly)
+		wait{!monthly.isChecking && scheduleRequests==5}
+		let februaryEnd=calendar.date(from: DateComponents(year: 2026, month: 2, day: 28, hour: 12))!
+		now=februaryEnd.addingTimeInterval(-1)
+		monthly.checkAutomaticallyIfDue()
+		expect(!monthly.isChecking && scheduleRequests==5, "Monthly checks must wait until the next calendar month")
+		now=februaryEnd
+		monthly.checkAutomaticallyIfDue()
+		wait{!monthly.isChecking && scheduleRequests==6}
+		expect(UpdateCheckFrequency.monthly.nextCheck(after: januaryEnd, calendar: calendar)==februaryEnd, "Monthly must handle short months rather than assume 30 days")
+		expect(UpdateCheckFrequency.never.nextCheck(after: januaryEnd, calendar: calendar)==nil, "Never must not have a next automatic-check date")
 		print("Passed \(checks) update checker checks")
 	}
 }

@@ -19,7 +19,7 @@ It also checks explicit system/custom device-name choices, prefilled custom inpu
 Save/Cancel draft handling, refresh isolation, friendly inline validation,
 save confirmation/failure handling, and name persistence; read-only visibility details,
 availability dropdowns, timer replacement/expiry, and deadlines passed during sleep.
-Settings and status-menu update actions, busy states, and update availability are
+Settings update-frequency selection and status-menu update actions, busy states, and update availability are
 also covered, without making update requests or opening a browser.
 Settings checks also cover General/Updates/About navigation, grouped controls,
 preserving the selected page on refresh, About credits/version, resizing,
@@ -42,7 +42,8 @@ It does not modify the app's real device-name preference or network permissions.
 The update-checker suite needs only the Swift compiler, not a prior app build.
 It uses an isolated preferences domain and URLProtocol fixtures, never contacting
 GitHub. It checks semantic version comparison, stable-release filtering, trusted
-release links, caching, opt-in daily scheduling, overlapping requests, no-release
+release links, caching, daily/weekly/calendar-month scheduling, Never/manual checks,
+checkbox-preference migration, overlapping requests, no-release
 responses, offline/server errors, rate-limit backoff, and shutdown cancellation.
 
 Set `UI_SNAPSHOT_DIR` to an existing directory to save optional UI snapshots.
