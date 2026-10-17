@@ -590,7 +590,9 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		updateStatusLabel.isHidden=true
 		WindowUI.fill(updateStatusLabel, in: updates)
 
-		let about=page(.about)
+		let developerCredit=WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true)
+		developerCredit.identifier=NSUserInterfaceItemIdentifier("DeveloperCreditFooter")
+		let about=page(.about, footer: developerCredit)
 		let identity=WindowUI.stack(spacing: 8)
 		identity.alignment = .centerX
 		let icon=NSImageView(image: NSImage(named: "QuickShareMacBrandIcon") ?? NSApp.applicationIconImage)
@@ -604,12 +606,11 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		WindowUI.fill(description, in: identity)
 		WindowUI.fill(identity, in: about)
 		let credits=card(NSLocalizedString("CreditsSettings", value: "Credits", comment: ""), in: about)
-		WindowUI.fill(WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true), in: credits)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("UpstreamCredit", value: "Based on NearDrop by grishka · github.com/grishka/NearDrop", comment: ""), size: 11, secondary: true), in: credits)
 		pages.selectTabViewItem(at: selectedSection.rawValue)
 	}
 
-	private func page(_ section:Section)->NSStackView{
+	private func page(_ section:Section, footer:NSTextField?=nil)->NSStackView{
 		let scroll=NSScrollView()
 		scroll.drawsBackground=false
 		scroll.hasVerticalScroller=true
@@ -621,7 +622,26 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		let content=WindowUI.stack(spacing: 14)
 		WindowUI.pin(content, to: document, inset: 20)
 		let item=NSTabViewItem(identifier: section.rawValue)
-		item.view=scroll
+		if let footer=footer{
+			let container=NSView()
+			scroll.translatesAutoresizingMaskIntoConstraints=false
+			footer.translatesAutoresizingMaskIntoConstraints=false
+			footer.alignment = .center
+			footer.setContentHuggingPriority(.required, for: .vertical)
+			footer.setContentCompressionResistancePriority(.required, for: .vertical)
+			container.addSubview(scroll)
+			container.addSubview(footer)
+			NSLayoutConstraint.activate([
+				scroll.topAnchor.constraint(equalTo: container.topAnchor),
+				scroll.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+				scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+				scroll.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -16),
+				footer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
+				footer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
+				footer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -16)
+			])
+			item.view=container
+		}else{item.view=scroll}
 		pages.addTabViewItem(item)
 		return content
 	}

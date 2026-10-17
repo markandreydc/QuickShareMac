@@ -144,10 +144,26 @@ struct UISmokeTests{
 			expect(label != nil, "Settings must display the developer and upstream credits")
 			if let label=label{expect(settings.view.bounds.contains(label.convert(label.bounds, to: settings.view)), "Settings credits must fit inside the window")}
 		}
+		let developerFooter=visible(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="DeveloperCreditFooter"})!
+		for size in [SettingsViewController.defaultSize,NSSize(width: 520, height: 500),NSSize(width: 700, height: 650)]{
+			settingsWindow.setContentSize(size)
+			layout(settingsWindow)
+			let frame=developerFooter.convert(developerFooter.bounds, to: settings.view)
+			expect(developerFooter.alignment == .center && abs(frame.midX-settings.view.bounds.midX)<1, "The developer footer must remain horizontally centered when Settings resizes")
+			expect(abs(frame.minY-settings.view.bounds.minY-16)<1, "The developer credit must stay at the bottom of the Settings window")
+		}
+		var footerAncestor=developerFooter.superview
+		while let ancestor=footerAncestor{
+			expect(!(ancestor is CardView) && !(ancestor is NSScrollView), "The developer footer must sit outside credits cards and scrolling content")
+			footerAncestor=ancestor.superview
+		}
+		settingsWindow.setContentSize(SettingsViewController.defaultSize)
+		layout(settingsWindow)
 		expect(visible(settings.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Version 1.0.0"}), "About must show the installed app version")
 		snapshot(settingsWindow, "settings-about")
 		settings.show(.general)
 		layout(settingsWindow)
+		expect(!visible(settings.view).contains(where: {$0 === developerFooter}), "The About footer must not appear on other Settings pages")
 		expect(!button("Forget all", in: settings.view).isEnabled, "Forget must be disabled when no names are stored")
 		settings.update(startReceivingOnLaunch: false, launchAtLogin: false, requiresLoginApproval: true, rememberedDeviceCount: 3)
 		expect(button("Forget all", in: settings.view).isEnabled, "Stored names should be forgettable")
