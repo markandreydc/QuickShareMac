@@ -1,5 +1,9 @@
 import Cocoa
 
+enum TransferDecision:Equatable{
+	case accept, acceptAndRemember, decline
+}
+
 struct IncomingTransferDisplay{
 	let deviceName:String
 	let description:String
@@ -7,6 +11,7 @@ struct IncomingTransferDisplay{
 	let progress:Double?
 	let pendingID:String?
 	let pinCode:String?
+	let remembered:Bool
 }
 
 private final class CardView:NSView{
@@ -35,12 +40,15 @@ final class MainWindowViewController:NSViewController{
 	var onLaunchAtLoginChange:((Bool)->Void)?
 	var onOpenLoginItems:(()->Void)?
 	var onQuit:(()->Void)?
-	var onTransferDecision:((String,Bool)->Void)?
+	var onTransferDecision:((String,TransferDecision)->Void)?
+	var onForgetRememberedDevices:(()->Void)?
 
 	private let receivingSwitch=NSSwitch()
 	private let startReceivingButton=NSButton(checkboxWithTitle: NSLocalizedString("StartReceivingOnLaunch", value: "Start receiving when app opens", comment: ""), target: nil, action: nil)
 	private let loginButton=NSButton(checkboxWithTitle: NSLocalizedString("LaunchAtLogin", value: "Launch at login", comment: ""), target: nil, action: nil)
 	private let loginHelpButton=NSButton(title: NSLocalizedString("SetUpLoginItem", value: "Set up login item in System Settings…", comment: ""), target: nil, action: nil)
+	private let rememberedCountLabel=NSTextField(labelWithString: "")
+	private let forgetDevicesButton=NSButton(title: NSLocalizedString("ForgetDevices", value: "Forget all", comment: ""), target: nil, action: nil)
 	private let transferScrollView=NSScrollView()
 	private let statusDot=NSView()
 	private let statusLabel=NSTextField(labelWithString: "")
@@ -141,6 +149,21 @@ final class MainWindowViewController:NSViewController{
 		loginHelpButton.bezelStyle = .inline
 		settingsContent.addArrangedSubview(loginHelpButton)
 		settingsContent.detachesHiddenViews=true
+		let rememberedRow=NSStackView()
+		rememberedRow.orientation = .horizontal
+		rememberedRow.alignment = .centerY
+		rememberedCountLabel.font=NSFont.systemFont(ofSize: 12)
+		rememberedCountLabel.textColor = .secondaryLabelColor
+		rememberedRow.addArrangedSubview(rememberedCountLabel)
+		let rememberedSpacer=NSView()
+		rememberedSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+		rememberedRow.addArrangedSubview(rememberedSpacer)
+		forgetDevicesButton.bezelStyle = .inline
+		forgetDevicesButton.target=self
+		forgetDevicesButton.action=#selector(forgetRememberedDevices(_:))
+		rememberedRow.addArrangedSubview(forgetDevicesButton)
+		settingsContent.addArrangedSubview(rememberedRow)
+		rememberedRow.widthAnchor.constraint(equalTo: settingsContent.widthAnchor).isActive=true
 		if #available(macOS 13.0, *){
 			loginHelpButton.isHidden=true
 		}else{
@@ -203,16 +226,18 @@ final class MainWindowViewController:NSViewController{
 		return label
 	}
 
-	func update(receiving:Bool, startReceivingOnLaunch:Bool, launchAtLogin:Bool, transfers:[IncomingTransferDisplay]){
+	func update(receiving:Bool, startReceivingOnLaunch:Bool, launchAtLogin:Bool, rememberedDeviceCount:Int, transfers:[IncomingTransferDisplay]){
 		_ = view // Accessing the view loads it on macOS versions before 14.
 		receivingSwitch.state=receiving ? .on : .off
 		startReceivingButton.state=startReceivingOnLaunch ? .on : .off
 		loginButton.state=launchAtLogin ? .on : .off
+		rememberedCountLabel.stringValue=String.localizedStringWithFormat(NSLocalizedString("RememberedDevicesCount", value: "%d remembered device names", comment: ""), rememberedDeviceCount)
+		rememberedCountLabel.superview?.isHidden=rememberedDeviceCount==0
 		statusLabel.stringValue=receiving ? NSLocalizedString("ReadyToReceive", value: "Ready to receive", comment: "") : NSLocalizedString("ReceivingOff", value: "Receiving off", comment: "")
 		statusLabel.textColor = .secondaryLabelColor
 		statusDot.layer?.backgroundColor=(receiving ? NSColor.systemGreen : NSColor.tertiaryLabelColor).cgColor
 
-		let listHeight=transfers.reduce(CGFloat(0)) { $0 + ($1.pendingID == nil ? 82 : 150) }
+		let listHeight=transfers.reduce(CGFloat(0)) { $0 + ($1.pendingID == nil ? 82 : ($1.remembered ? 170 : 150)) }
 		let document=FlippedDocumentView(frame: NSRect(x: 0, y: 0, width: 476, height: max(180, listHeight)))
 		if transfers.isEmpty{
 			let empty=NSStackView()
@@ -275,6 +300,12 @@ final class MainWindowViewController:NSViewController{
 				status.lineBreakMode = .byTruncatingTail
 				row.addArrangedSubview(status)
 				if let id=transfer.pendingID{
+					if transfer.remembered{
+						let recognized=NSTextField(labelWithString: NSLocalizedString("PreviouslySeenName", value: "Name seen before · always verify the PIN", comment: ""))
+						recognized.font=NSFont.systemFont(ofSize: 11)
+						recognized.textColor = .secondaryLabelColor
+						row.addArrangedSubview(recognized)
+					}
 					if let pin=transfer.pinCode{
 						let pinLabel=NSTextField(labelWithString: String(format: NSLocalizedString("PinCode", value: "PIN: %@", comment: ""), pin))
 						pinLabel.font=NSFont.systemFont(ofSize: 13, weight: .semibold)
@@ -289,6 +320,11 @@ final class MainWindowViewController:NSViewController{
 					actions.spacing=8
 					let accept=NSButton(title: NSLocalizedString("Accept", value: "Accept", comment: ""), target: self, action: #selector(acceptTransfer(_:)))
 					accept.identifier=NSUserInterfaceItemIdentifier(id)
+					if !transfer.remembered{
+						let remember=NSButton(title: NSLocalizedString("AcceptAndRemember", value: "Accept & remember", comment: ""), target: self, action: #selector(acceptAndRememberTransfer(_:)))
+						remember.identifier=NSUserInterfaceItemIdentifier(id)
+						actions.addArrangedSubview(remember)
+					}
 					let decline=NSButton(title: NSLocalizedString("Decline", value: "Decline", comment: ""), target: self, action: #selector(declineTransfer(_:)))
 					decline.identifier=NSUserInterfaceItemIdentifier(id)
 					actions.addArrangedSubview(accept)
@@ -312,12 +348,17 @@ final class MainWindowViewController:NSViewController{
 	@objc private func launchAtLoginChanged(_ sender:NSButton){onLaunchAtLoginChange?(sender.state == .on)}
 	@objc private func openLoginItems(_ sender:NSButton){onOpenLoginItems?()}
 	@objc private func quit(_ sender:NSButton){onQuit?()}
+	@objc private func forgetRememberedDevices(_ sender:NSButton){onForgetRememberedDevices?()}
 	@objc private func acceptTransfer(_ sender:NSButton){
 		guard let id=sender.identifier?.rawValue else {return}
-		onTransferDecision?(id, true)
+		onTransferDecision?(id, .accept)
+	}
+	@objc private func acceptAndRememberTransfer(_ sender:NSButton){
+		guard let id=sender.identifier?.rawValue else {return}
+		onTransferDecision?(id, .acceptAndRemember)
 	}
 	@objc private func declineTransfer(_ sender:NSButton){
 		guard let id=sender.identifier?.rawValue else {return}
-		onTransferDecision?(id, false)
+		onTransferDecision?(id, .decline)
 	}
 }

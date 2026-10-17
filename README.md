@@ -4,7 +4,9 @@
 
 The app opens a window, remains available in the menu bar, and saves files to your downloads folder.
 
-The window shows incoming transfers and their progress and lets you turn receiving on and off. Click the menu bar icon or the Dock icon to reopen the window after closing it; receiving continues in the background. Turning receiving off stops new connections, but transfers already in progress can finish. When a transfer arrives, the window opens with its PIN and Accept/Decline controls. No notification permission is needed.
+The window shows incoming transfers and their progress and lets you turn receiving on and off. Click the menu bar icon or the Dock icon to reopen the window after closing it; receiving continues in the background. Right-click the menu bar icon to show the app, control launch at login, or quit. Turning receiving off stops new connections, but transfers already in progress can finish. When a transfer arrives, the window opens with its PIN and Accept/Decline controls. No notification permission is needed.
+
+Choose **Accept & remember** to mark a device name as previously seen. Remembered names are only a visual reminder: every transfer still needs your approval and PIN check, because Quick Share does not provide this app with a persistent, verified sender identity. You can forget all remembered names in the Startup section of the window.
 
 The window also lets you choose whether receiving starts when the app opens (on by default). On macOS 13 or later, you can enable **Launch at login** there too. On older versions of macOS, add the app as a login item in System Settings instead.
 
