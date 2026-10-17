@@ -448,13 +448,15 @@ struct UISmokeTests{
 		var expiresAt:Date?
 		var checkingForUpdates=false
 		var updateVersion:String?
-		controller.stateProvider={StatusBarMenu.State(receiving: receiving, canSendFiles: canSendFiles, deviceName: "Studio Mac", duration: duration, expiresAt: expiresAt, checkingForUpdates: checkingForUpdates, availableUpdateVersion: updateVersion)}
+		var transfers:[StatusBarMenu.TransferSummary]=[]
+		controller.stateProvider={StatusBarMenu.State(receiving: receiving, canSendFiles: canSendFiles, deviceName: "Studio Mac", duration: duration, expiresAt: expiresAt, checkingForUpdates: checkingForUpdates, availableUpdateVersion: updateVersion, transfers: transfers)}
 		let item=NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 		defer{NSStatusBar.system.removeStatusItem(item)}
 		controller.attach(to: item)
 		expect(item.menu === controller.menu, "A native status-item menu must handle normal clicks")
 		expect(item.button?.action==nil && item.button?.target==nil, "Status clicks must not use a custom window-opening action")
 		expect(item.button?.image?.isTemplate==true, "The menu bar icon must let macOS choose its tint")
+		expect(item.button?.title=="", "An idle status item must not show transfer text")
 		expect(controller.menu.appearance==nil, "The status menu must not force a light or dark appearance")
 		expect(controller.menu.items.allSatisfy({$0.view==nil && $0.attributedTitle==nil}), "Menu items must use native views and text colors")
 		controller.menuNeedsUpdate(controller.menu)
@@ -467,6 +469,10 @@ struct UISmokeTests{
 		controller.onShow={showed=true}
 		controller.menu.performActionForItem(at: controller.menu.indexOfItem(withTitle: "Show QuickShareMac"))
 		expect(showed, "Showing the window must remain available as a menu action")
+		var openedReceived=false
+		controller.onOpenReceivedFiles={openedReceived=true}
+		controller.menu.performActionForItem(at: controller.menu.indexOfItem(withTitle: "Open Received Files"))
+		expect(openedReceived, "Opening the received files folder must remain available from the menu")
 		var sends=0
 		controller.onSendFiles={sends+=1}
 		let sendIndex=controller.menu.indexOfItem(withTitle: "Send files…")
@@ -490,6 +496,36 @@ struct UISmokeTests{
 		durations.performActionForItem(at: durations.indexOfItem(withTitle: "Indefinitely"))
 		expect(duration == .indefinitely && controller.menu.items.filter({$0.title.hasPrefix("Available until ")}).allSatisfy(\.isHidden), "Indefinite receiving must hide the obsolete deadline")
 		expect(controller.toolTip.contains("Click for menu") && !controller.toolTip.contains("right-click"), "The tooltip must describe the new click behavior")
+		transfers=[StatusBarMenu.TransferSummary(id: "outgoing", direction: .outgoing, deviceName: "Pixel 8", phase: .transferring, progress: 0.42)]
+		controller.refresh()
+		expect(item.button?.title=="42%", "The status item must show transfer progress at a glance")
+		expect(controller.menu.items.contains(where: {$0.title=="Sending to Pixel 8 · 42%" && $0.isEnabled}), "Active outgoing transfers must appear in the menu")
+		expect(controller.toolTip.contains("Sending to Pixel 8 (42%)"), "The tooltip must include transfer progress")
+		transfers=[StatusBarMenu.TransferSummary(id: "outgoing", direction: .outgoing, deviceName: "Pixel 8", phase: .transferring, progress: 0.57)]
+		controller.refresh()
+		expect(item.button?.title=="57%" && controller.menu.items.contains(where: {$0.title=="Sending to Pixel 8 · 57%"}), "Live progress must update the existing transfer row")
+		var cancelled=false
+		controller.onCancelTransfer={cancelled=true}
+		controller.menu.performActionForItem(at: controller.menu.indexOfItem(withTitle: "Cancel Transfer"))
+		expect(cancelled, "Cancel Transfer must cancel the active outgoing transfer")
+		transfers=[StatusBarMenu.TransferSummary(id: "incoming", direction: .incoming, deviceName: "Tab S9", phase: .awaitingReview, progress: nil)]
+		controller.refresh()
+		expect(item.button?.title=="", "A pending request must not display a transfer percentage")
+		let review=controller.menu.items.first(where: {$0.title=="Incoming from Tab S9 — Review request…"})!
+		expect(review.isEnabled && review.action != nil, "Pending requests must have a review action")
+		var reviewed:String?
+		controller.onReviewIncoming={reviewed=$0}
+		controller.menu.performActionForItem(at: controller.menu.index(of: review))
+		expect(reviewed=="incoming", "Reviewing a pending request must identify the transfer")
+		transfers=[StatusBarMenu.TransferSummary(id: "receiving", direction: .incoming, deviceName: "Tab S9", phase: .transferring, progress: 0.5)]
+		controller.refresh()
+		expect(controller.menu.items.contains(where: {$0.title=="Receiving from Tab S9 · 50%"}), "Active incoming transfers must appear in the menu")
+		expect(controller.menu.indexOfItem(withTitle: "Cancel Transfer") == -1, "Incoming transfers must not offer outgoing cancellation")
+		transfers=[]
+		controller.refresh()
+		expect(item.button?.title=="", "Idle status items must clear transfer progress")
+		expect(!controller.menu.items.contains(where: {$0.title.hasPrefix("Sending to") || $0.title.hasPrefix("Receiving from") || $0.title=="Cancel Transfer"}), "Transfer rows must disappear when idle")
+		expect(StatusBarMenu.makeIcon(dimmed: true, badge: false).isTemplate && StatusBarMenu.makeIcon(dimmed: false, badge: true).isTemplate, "Icon variants must remain template images")
 		var settings=false
 		controller.onSettings={settings=true}
 		controller.menu.performActionForItem(at: controller.menu.indexOfItem(withTitle: "Settings…"))

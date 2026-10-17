@@ -2528,6 +2528,28 @@
         }
       }
     },
+    "CancelTransfer" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel Transfer" } } } },
+    "MenuConnectingTo" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting to %@…" } } } },
+    "MenuConnectingTooltip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting to %@" } } } },
+    "MenuIncomingFromTooltip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Incoming transfer from %@" } } } },
+    "MenuIncomingReview" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Incoming from %@ — Review request…" } } } },
+    "MenuReceivingFrom" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Receiving from %@…" } } } },
+    "MenuReceivingFromPercent" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Receiving from %@ · %d%%" } } } },
+    "MenuReceivingPercentTooltip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Receiving from %@ (%d%%)" } } } },
+    "MenuReceivingTooltip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Receiving from %@" } } } },
+    "MenuSendingPercentTooltip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sending to %@ (%d%%)" } } } },
+    "MenuSendingTo" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sending to %@…" } } } },
+    "MenuSendingToPercent" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sending to %@ · %d%%" } } } },
+    "MenuSendingTooltip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sending to %@" } } } },
+    "MenuTransferTooltip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "QuickShareMac · %@. Click for menu." } } } },
+    "MenuTransfersTooltip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "QuickShareMac · %d active transfers. Click for menu." } } } },
+    "MenuUpdateTooltip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "QuickShareMac · Update %@ available. Click for menu." } } } },
+    "MenuWaitingForApproval" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Waiting for %@ to accept…" } } } },
+    "MenuWaitingForApprovalTooltip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Waiting for %@ to accept" } } } },
+    "NearbyDevice" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Nearby device" } } } },
+    "QuitActiveTransferMessage" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Active transfers will be canceled. Files that have already been saved are kept." } } } },
+    "QuitActiveTransferTitle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A transfer is in progress" } } } },
+    "QuitAnyway" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quit Anyway" } } } },
     "WaitingForApproval" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {

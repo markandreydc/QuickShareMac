@@ -32,6 +32,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private let notifications=UNUserNotificationCenter.current()
 	private var notificationsAuthorized=false
 	private var notificationPermissionRequested=false
+	private var menuRefreshTimer:Timer?
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
 		UserDefaults.standard.register(defaults: [startReceivingKey:true])
@@ -76,10 +77,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		statusItem=NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 		statusMenu.stateProvider={ [weak self] in
 			guard let self=self else {return StatusBarMenu.State(receiving: false, canSendFiles: false)}
-			return StatusBarMenu.State(receiving: NearbyConnectionManager.shared.isReceiving, canSendFiles: !self.windowController.sendController.sender.isTransferring, deviceName: LocalDeviceIdentity.shared.deviceName, duration: self.availability.duration, expiresAt: self.availability.expiresAt, checkingForUpdates: self.updates.isChecking, availableUpdateVersion: self.updates.availableRelease?.tagName)
+			return StatusBarMenu.State(receiving: NearbyConnectionManager.shared.isReceiving, canSendFiles: !self.windowController.sendController.sender.isTransferring, deviceName: LocalDeviceIdentity.shared.deviceName, duration: self.availability.duration, expiresAt: self.availability.expiresAt, checkingForUpdates: self.updates.isChecking, availableUpdateVersion: self.updates.availableRelease?.tagName, transfers: self.menuTransferSummaries())
 		}
 		statusMenu.onShow={ [weak self] in self?.showMainWindow(nil) }
+		statusMenu.onOpenReceivedFiles={ [weak self] in self?.openReceivedFilesFolder() }
 		statusMenu.onSendFiles={ [weak self] in self?.sendFiles(nil) }
+		statusMenu.onReviewIncoming={ [weak self] id in self?.reviewIncomingRequest(id: id) }
+		statusMenu.onCancelTransfer={ [weak self] in self?.windowController.sendController.sender.cancel(nil) }
 		statusMenu.onToggleReceiving={ [weak self] in self?.setReceiving(!NearbyConnectionManager.shared.isReceiving) }
 		statusMenu.onDurationChange={ [weak self] duration in self?.availability.select(duration) }
 		statusMenu.onWillOpen={ [weak self] in self?.availability.checkExpiration() }
@@ -100,6 +104,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		windowController.setAlwaysOnTop(UserDefaults.standard.bool(forKey: "AlwaysOnTop"))
 		windowController.onAlwaysOnTopChange={enabled in UserDefaults.standard.set(enabled, forKey: "AlwaysOnTop")}
 		mainWindow=window
+		windowController.sendController.sender.onStateUpdate={ [weak self] in self?.scheduleMenuRefresh() }
+		windowController.sendController.sender.onProgress={ [weak self] _ in self?.scheduleMenuRefresh() }
 		windowController.onReceivingChange={ [weak self] enabled in self?.setReceiving(enabled) }
 		windowController.onDurationChange={ [weak self] duration in self?.availability.select(duration) }
 		availability.onExpiration={ [weak self] in self?.setReceiving(false) }
@@ -167,6 +173,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		refreshWindow()
 		mainWindow?.makeKeyAndOrderFront(sender)
 		NSApplication.shared.activate(ignoringOtherApps: true)
+	}
+
+	private func reviewIncomingRequest(id:String){
+		guard activeIncomingTransfers[id] != nil else{return}
+		windowController.showReceive()
+		showMainWindow(nil)
 	}
 
 	/// The notification permission is requested the first time receiving turns
@@ -239,6 +251,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		windowController.sendController.chooseFiles(sender)
 	}
 	func applicationWillTerminate(_ notification:Notification){
+		menuRefreshTimer?.invalidate()
+		menuRefreshTimer=nil
 		updates.shutdown()
 		availability.stopped()
 		if let observer=wakeObserver{NSWorkspace.shared.notificationCenter.removeObserver(observer)}
@@ -353,7 +367,44 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		}
 	}
 
+	private func scheduleMenuRefresh(){
+		guard menuRefreshTimer==nil else{return}
+		let timer=Timer(timeInterval: 0.4, repeats: false){ [weak self] _ in
+			self?.menuRefreshTimer=nil
+			self?.refreshWindow()
+		}
+		menuRefreshTimer=timer
+		// Keep progress moving while a native menu is being tracked.
+		RunLoop.main.add(timer, forMode: .common)
+	}
+
+	private func menuTransferSummaries() -> [StatusBarMenu.TransferSummary]{
+		var summaries:[StatusBarMenu.TransferSummary]=[]
+		let sender=windowController.sendController.sender
+		if sender.isTransferring{
+			let phase:StatusBarMenu.TransferSummary.Phase
+			switch sender.state{
+			case .connecting: phase = .connecting
+			case .awaitingApproval: phase = .awaitingApproval
+			case .sending: phase = .transferring
+			default: phase = .transferring
+			}
+			summaries.append(StatusBarMenu.TransferSummary(id: "outgoing", direction: .outgoing, deviceName: sender.recipientName ?? NSLocalizedString("NearbyDevice", value: "Nearby device", comment: ""), phase: phase, progress: sender.progressFraction))
+		}
+		let incoming=activeIncomingTransfers.sorted { left, right in
+			if left.value.accepted != right.value.accepted{return !left.value.accepted}
+			return left.value.createdAt < right.value.createdAt
+		}
+		for (id, info) in incoming{
+			let progress:Double? = info.accepted && info.totalBytes>0 ? min(1, Double(info.receivedBytes)/Double(info.totalBytes)) : nil
+			summaries.append(StatusBarMenu.TransferSummary(id: id, direction: .incoming, deviceName: info.device.name, phase: info.accepted ? .transferring : .awaitingReview, progress: progress))
+		}
+		return summaries
+	}
+
 	private func refreshWindow(){
+		menuRefreshTimer?.invalidate()
+		menuRefreshTimer=nil
 		NearbyConnectionManager.shared.incomingDownloadDirectory=ReceivedFilesFolder.currentURL
 		availability.checkExpiration()
 		let isReceiving=NearbyConnectionManager.shared.isReceiving
@@ -419,6 +470,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		return false
 	}
 
+	func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply{
+		let outgoing=windowController.sendController.sender.isTransferring
+		guard outgoing || !activeIncomingTransfers.isEmpty else{return .terminateNow}
+		let alert=NSAlert()
+		alert.alertStyle = .warning
+		alert.messageText=NSLocalizedString("QuitActiveTransferTitle", value: "A transfer is in progress", comment: "")
+		alert.informativeText=NSLocalizedString("QuitActiveTransferMessage", value: "Active transfers will be canceled. Files that have already been saved are kept.", comment: "")
+		alert.addButton(withTitle: NSLocalizedString("Cancel", value: "Cancel", comment: ""))
+		alert.addButton(withTitle: NSLocalizedString("QuitAnyway", value: "Quit Anyway", comment: ""))
+		return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+	}
+
 	func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
 		return true
 	}
@@ -472,6 +535,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			totalBytes=overflow ? Int64.max : sum
 		}
 		self.activeIncomingTransfers[transfer.id]=TransferInfo(device: device, transfer: transfer, description: fileStr, totalBytes: totalBytes)
+		refreshWindow()
 		windowController.showReceive()
 		switch IncomingRequestPresentation.preferred(appIsActive: NSApplication.shared.isActive, canDeliverNotifications: notificationsAuthorized){
 		case .showWindow:
@@ -486,13 +550,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 
 	func incomingTransfer(id:String, didReceiveBytes count:Int64){
 		guard var info=activeIncomingTransfers[id] else {return}
-		let previousPercent=info.totalBytes>0 ? Int(Double(info.receivedBytes)/Double(info.totalBytes)*100) : 0
 		let (sum, overflow)=info.receivedBytes.addingReportingOverflow(count)
 		info.receivedBytes=min(info.totalBytes, overflow ? Int64.max : sum)
 		info.rateEstimator.update(bytes: Double(info.receivedBytes))
 		activeIncomingTransfers[id]=info
-		let currentPercent=info.totalBytes>0 ? Int(Double(info.receivedBytes)/Double(info.totalBytes)*100) : 0
-		if mainWindow?.isVisible == true && currentPercent != previousPercent{refreshWindow()}
+		scheduleMenuRefresh()
 	}
 	
 	func incomingTransfer(id: String, didFinishWith error: Error?) {

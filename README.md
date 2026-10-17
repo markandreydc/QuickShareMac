@@ -22,7 +22,7 @@ Developed by Mark Andrey · github.com/markandreydc
 - Keep recent incoming and outgoing transfer results for the current app session.
 - Reveal completed downloads in Finder.
 - Continue transfers in the background when switching tabs or closing the window.
-- Control receiving from the main window or menu bar.
+- Control receiving from the main window or menu bar, and see live transfer progress there.
 - Set a custom device name without renaming your Mac.
 - Choose receiving availability for **10 minutes**, **30 minutes**, **1 hour**, or **Indefinitely** (the default).
 - Configure launch at login, receiving on startup, and remembered device names in Settings.
@@ -67,7 +67,7 @@ Select **Remember this device name** before accepting if you want a visual remin
 
 ### Background behavior and settings
 
-Closing the window does not quit the app. Click the Dock icon to reopen it, or click the menu bar icon and choose **Show QuickShareMac**. Both left-click and right-click open the standard macOS menu, with receiving controls, file sending, Settings, and Quit. The menu and monochrome icon follow the system appearance.
+Closing the window does not quit the app. Click the Dock icon to reopen it, or click the menu bar icon and choose **Show QuickShareMac**. Both left-click and right-click open the standard macOS menu, with receiving controls, file sending, **Open Received Files**, Settings, and Quit. Active incoming and outgoing transfers appear in the menu with their device and percentage; an incoming request waiting for approval can be reopened from the menu, and **Cancel Transfer** cancels an outgoing transfer. While a transfer is running, the menu bar icon shows its percentage, and quitting asks for confirmation first. The icon dims while receiving is off and shows a small dot for a pending request or available update. The menu and monochrome icon follow the system appearance.
 
 Transfer requests and history scroll instead of expanding the window, and a new incoming request scrolls back to the top so its PIN is visible. Click the **pin icon** at the upper right to keep the main window above normal windows. A filled pin means **Always on top** is enabled; click again to turn it off. The setting is remembered across launches and does not change other windows.
 

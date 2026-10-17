@@ -14,7 +14,8 @@ The UI suite uses a fake sending service: it does not discover or contact device
 It covers Send/Receive navigation, file/folder selection and drag-and-drop, Share
 extension link and folder handling, approval,
 progress, cancellation, retry isolation, background completion, history, and native
-menu bar behavior (menu attachment, appearance defaults, actions, and live state).
+menu bar behavior (menu attachment, appearance defaults, actions, live transfer rows,
+pending-request review, icon progress, cancellation, and live state).
 Scroll checks verify that approval controls remain reachable by scrolling
 without expanding the window, and that a new approval request scrolls back to the
 top. The upper-right pin is tested for normal/floating window levels, on/off state,

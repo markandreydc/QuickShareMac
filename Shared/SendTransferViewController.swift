@@ -95,10 +95,14 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 	private var discoveryVisible=true
 	var onResult:((OutgoingTransferResult)->Void)?
 	var onStateChange:((OutgoingState)->Void)?
+	var onStateUpdate:(()->Void)?
+	var onProgress:((Double)->Void)?
 	var onDone:((Error?)->Void)?
 	var onPreparationError:((Error)->Void)?
 	var onOpenNetworkSettings:(()->Void)?
 	private(set) var state:OutgoingState = .idle
+	private(set) var progressFraction:Double?
+	var recipientName:String?{chosenDevice?.name}
 	/// The items actually being sent; folders are replaced by their ZIP files
 	/// once compression finishes.
 	var preparedItems:[URL]{urls}
@@ -411,7 +415,12 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		for url in scopedURLs{url.stopAccessingSecurityScopedResource()}
 		scopedURLs.removeAll()
 	}
-	private func setState(_ state:OutgoingState){self.state=state; onStateChange?(state)}
+	private func setState(_ state:OutgoingState){
+		self.state=state
+		if state != .sending{progressFraction=nil}
+		onStateChange?(state)
+		onStateUpdate?()
+	}
 	private func resetForDiscovery(){
 		timeout?.cancel()
 		attemptID=UUID()
@@ -605,6 +614,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 	}
 	func transferAccepted(){
 		guard !requestEnded, !terminal else {return}
+		progressFraction=0
 		setState(.sending)
 		armTimeout(seconds: 60)
 		pinLabel.isHidden=true
@@ -620,6 +630,8 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		guard progress.isFinite else {return}
 		armTimeout(seconds: 60)
 		let fraction=max(0, min(1, progress))
+		progressFraction=fraction
+		onProgress?(fraction)
 		progressBar.doubleValue=fraction*100
 		let percent=String.localizedStringWithFormat(NSLocalizedString("SendingPercent", value: "Sending · %d%%", comment: ""), Int(fraction*100))
 		if totalBytes>0{
