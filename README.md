@@ -1,98 +1,137 @@
-**QuickShareMac** is a partial implementation of [Google's Nearby Share](https://blog.google/products/android/nearby-share/)/Quick Share for macOS.
+# QuickShareMac
 
-[Protocol documentation](/PROTOCOL.md) is available separately.
+<img src="quicksharemac.png" width="96" alt="QuickShareMac icon">
 
-The app opens a window, remains available in the menu bar, and saves files to your downloads folder.
+Send files between your Mac and Android devices using **Quick Share** over your local network.
 
-The window shows incoming transfers and their progress and lets you turn receiving on and off. Click the menu bar icon or the Dock icon to reopen the window after closing it; receiving continues in the background. Right-click the menu bar icon to show the app, control launch at login, or quit. Turning receiving off stops new connections, but transfers already in progress can finish. When a transfer arrives, the window opens with its PIN and Accept/Decline controls. No notification permission is needed.
+**QuickShareMac is a fork of [NearDrop](https://github.com/grishka/NearDrop), created by [grishka](https://github.com/grishka).** NearDrop provides the original Quick Share/Nearby Share implementation and protocol research that this app builds on. This fork adds a dedicated Send/Receive interface, transfer history, settings, and connection diagnostics.
 
-Choose **Accept & remember** to mark a device name as previously seen. Remembered names are only a visual reminder: every transfer still needs your approval and PIN check, because Quick Share does not provide this app with a persistent, verified sender identity. You can forget all remembered names in the Startup section of the window.
+## Features
 
-The window also lets you choose whether receiving starts when the app opens (on by default). On macOS 13 or later, you can enable **Launch at login** there too. On older versions of macOS, add the app as a login item in System Settings instead.
+- **Send files** from the main window, by drag-and-drop, or through Finder’s Share menu.
+- **Receive files** with explicit approval and a PIN check for each transfer.
+- **Connect with a QR code** to help your Android device become discoverable.
+- View transfer progress, cancel outgoing transfers, and retry by choosing a recipient again.
+- Keep recent incoming and outgoing transfer results for the current app session.
+- Reveal completed downloads in Finder.
+- Continue transfers in the background when switching tabs or closing the window.
+- Control receiving from the main window or menu bar.
+- Configure launch at login, receiving on startup, and remembered device names in Settings.
 
-## Limitations
+## Getting started
 
-* **Wi-Fi LAN only**. Your Android device and your Mac need to be on the same network for this app to work. Google's implementation supports multiple mediums, including Wi-Fi Direct, Wi-Fi hotspot, Bluetooth, some kind of 5G peer-to-peer connection, and even a WebRTC-based protocol that goes over the internet through Google servers. Wi-Fi direct isn't supported on macOS (Apple has their own, incompatible, AWDL thing, used in AirDrop). Bluetooth needs further reverse engineering.
-* **Visible to everyone on your network while receiving is enabled**. Limited visibility (contacts etc) requires talking to Google servers, and becoming temporarily visible requires listening for whatever triggers the "device nearby is sharing" notification.
+Both devices must be on the **same Wi-Fi/local network**. Keep your Android device unlocked while connecting.
+
+### Send files to Android
+
+1. Open QuickShareMac and select **Send**.
+2. Click **Send files…** or drag files into the window. You can also use **File → Send files…** (`⌘O`).
+3. Open Quick Share on your Android device and choose its receiving mode, if available.
+4. Select the device in QuickShareMac, or choose **Connect with QR code…** and scan the code with your phone’s camera.
+5. Check that the PIN matches on both devices, then accept on Android.
+
+The Send tab is **files only**. To send a folder, compress it in Finder and send the ZIP file instead.
+
+Alternatively, select files in Finder and choose **Share → QuickShareMac**. Links can still be shared through the macOS Share extension, such as Safari’s Share menu; there is no link-sharing control in the main Send tab.
+
+### Receive files on your Mac
+
+1. Enable receiving in the **Receive** tab.
+2. On Android, select files, open Quick Share, and choose your Mac’s displayed device name.
+3. QuickShareMac opens the incoming request. Verify the PIN, then choose **Accept** or **Decline**.
+4. Received files are saved to **Downloads**. Use **Show in Finder** on a completed transfer to locate them.
+
+Select **Remember this device name** before accepting if you want a visual reminder for future requests. Remembered names **do not verify identity or bypass approval**—always check the PIN. You can forget remembered names in **Settings…** (`⌘,`).
+
+### Background behavior and settings
+
+Closing the window does not quit the app. Click the menu bar or Dock icon to reopen it. Right-click the menu bar icon for quick receiving controls, file sending, Settings, and Quit.
+
+Turning receiving off stops new incoming connections; transfers already in progress can finish. Outgoing transfers do not require receiving to be enabled.
+
+In **Settings…**, choose whether receiving starts when the app opens. On macOS 13 or later, you can also enable **Launch at login**. On older systems, add the app to Login Items in System Settings.
+
+Recent transfer results last for the current app session, until you dismiss or clear them. They are not a permanent transfer log.
 
 ## Installation
 
-If a QuickShareMac build is available in the releases section, download it, unzip it, and move it to your applications folder. Otherwise, build the `QuickShareMac` scheme in Xcode.
+If a prebuilt QuickShareMac release is available, download it, unzip it, and move **QuickShareMac.app** to **Applications**. Otherwise, build from source below.
 
-Before running for the first time, right-click the app and select "Open", then confirm running an app from unidentified developer.
+When macOS requests access, allow **Local Network** communication. You can review this under **System Settings → Privacy & Security → Local Network**.
 
-Alternatively, you can use [Sentinel](https://github.com/alienator88/Sentinel) to bypass Gatekeeper.
+For a build from an unidentified developer, follow [Apple’s instructions for opening an app from an unknown developer](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac). Local development builds are not notarized.
 
-If you want the app to start on boot, [follow these steps to add QuickShareMac as a login item.](https://support.apple.com/guide/mac-help/open-items-automatically-when-you-log-in-mh15189/mac)
+If upgrading from NearDrop or an earlier build with a different app identity, review local-network permissions and Login Items again. The upstream NearDrop Homebrew package installs NearDrop, not this fork.
 
-If you are upgrading from an earlier app build, macOS treats QuickShareMac as a separate app because its bundle ID has changed. Re-enable its permissions and update your login item if needed.
+## Build from source
 
-The original upstream Homebrew formula does not install QuickShareMac. Use a QuickShareMac build until a dedicated formula is available.
+Install Xcode with its command-line tools, then run from the repository root:
 
-## Contributing
+```sh
+Scripts/build-development.sh
+```
 
-Pull requests that change the readme will not be accepted.
+The script builds the **QuickShareMac** Debug scheme with signing enabled and verifies the app bundle, its extension, and embedded libraries.
 
-Any AI-assisted contributions will not be accepted.
+The app is created at:
 
-## FAQ
+```text
+DerivedData/Build/Products/Debug/QuickShareMac.app
+```
 
-#### The app would not open because "Apple cannot check it for malicious software", you gotta fix your shit
+To open it:
 
-Right-click the app in Finder and select "Open". Or, open System Settings -> Privacy and security, scroll down and allow the app to run.
+```sh
+open DerivedData/Build/Products/Debug/QuickShareMac.app
+```
 
-#### My Android device doesn't see my Mac
+The default development build uses **ad-hoc signing** for local use. This is not notarization or a stable certificate-based identity. For consistent macOS permission identity across rebuilds, configure an Apple Development certificate and your team in Xcode. Do not disable code signing when building an app for device testing.
 
-Make sure both devices are on the same Wi-Fi network. Local network communication may not work on some public networks — for example, in coffee shops or hotels. If you're on your own network, check your router settings to make sure it's not blocking local devices from talking to each other.
+For test instructions, see [Tests/README.md](Tests/README.md). The tests cover the UI and encrypted file transfers over localhost; Android discovery and QR handshakes still need real-device testing.
 
-#### How do I send files?
+## Troubleshooting
 
-Right-click a file in Finder, select Share, then select QuickShareMac.
+### My phone does not appear
 
-#### How do I send links?
+- Keep both devices on the same network and unlock the phone.
+- Open Quick Share’s receiving screen, if available, or use **Connect with QR code…**. The QR flow is particularly useful for Samsung devices.
+- This app cannot use the Android-specific Bluetooth discovery broadcasts to wake a phone into receiving mode automatically.
 
-From the menu bar: File -> Share -> QuickShareMac. Safari also has a share button on the toolbar.
+### Sending stays on Connecting, or the phone shows no request
 
-#### My Mac doesn't see my Android device
+A phone approval request cannot appear until the network connection and Quick Share handshake progress far enough.
 
-Unfortunately, Android listens for specific BLE (Bluetooth Low Energy) broadcasts to automatically become visible, and macOS doesn't allow apps to send them.
+- Check **Local Network** permission for QuickShareMac on your Mac.
+- If it is already enabled but the app reports a policy block, fully quit (`⌘Q`) and reopen the verified, signed build before retrying.
+- If the receiving device refuses the connection, reopen Quick Share on the unlocked phone and try the QR flow.
+- Guest/public Wi-Fi networks can block communication between devices even when both have internet access. Check VPN, firewall, and router restrictions as well.
 
-On all Android devices, you scan the QR code generated by QuickShareMac to make everything happen automatically. You can also create an intent shortcut for the URL `https://quickshare.google/qrcode#key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA` to launch the same activity, but **make sure that the visibility of your device is set to public**, otherwise it will not work. Complete intent:
-- Data: `https://quickshare.google/qrcode#key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`
-- Action: `android.intent.action.VIEW`
+The app distinguishes macOS policy blocks from connection refusals and provides an **Open Network Settings…** action for local-network permission errors.
 
-##### Samsung devices
+### My phone does not see my Mac
 
-QR code (or the corresponding intent) is your only option.
+Make sure QuickShareMac is running with receiving enabled, and that both devices are on the same network. Check local-network permission and any restrictions on communication between devices.
 
-##### Non-Samsung devices
+### I closed the window, but the app is still running
 
-Tap the "Quick Share" button in the "Google Files" app.
+This is intentional: receiving and active transfers continue in the background. Use **QuickShareMac → Quit QuickShareMac** (`⌘Q`) to quit completely.
 
-To make it more easily accessible and/or if you don't want to install Google Files, you can use an app like [one of these](https://forum.xda-developers.com/t/how-to-manually-create-a-homescreen-shortcut-to-a-known-unique-android-activity.4336833/) to create a shortcut to launch one of these activity intents:
+## Limitations and privacy
 
-- Option 1:
-  - Action: `com.google.android.gms.RECEIVE_NEARBY`
-  - Mime type: `*/*`
-- Option 2:
-  - Component name: `com.google.android.gms/.nearby.sharing.receive.ReceiveActivityQrCodeAlias`
+- **Local network only.** Wi-Fi Direct, Bluetooth transfers, and internet relay are not implemented.
+- **Visible on your network while receiving is enabled.** Contact-only visibility is not supported.
+- **Approval is always required.** Remembered device names are not persistent, verified sender identities.
+- **Folders must be compressed first.** Send a ZIP file rather than a directory.
+- **Not AirDrop.** This app implements part of the Quick Share/Nearby Share protocol, not Apple’s AirDrop protocol.
 
-#### Can the menu bar icon be removed?
+[Protocol documentation](PROTOCOL.md) is available separately.
 
-Yes. Drag the icon off the menu bar while holding cmd. To bring it back, launch the app a second time, while it's already running.
+## Acknowledgements
 
-#### I'm sending something to my Mac, the Android device displays a PIN code, but nothing happens on the Mac
+Thank you to **[grishka](https://github.com/grishka)** and the **[NearDrop](https://github.com/grishka/NearDrop)** contributors for the original project, protocol reverse engineering, and implementation. QuickShareMac would not exist without that work.
 
-Make sure QuickShareMac is running with receiving enabled. Incoming requests open the app window, where you can verify the PIN and choose Accept or Decline.
+QuickShareMac is an independently maintained fork, not an official Google, Samsung, or Apple product. Refer to NearDrop’s repository for the original upstream project.
 
-#### Why is the app not notarized?
+## License
 
-Because I don't want to pay Apple $99 a year for the privilege of developing macOS apps and I oppose their idea of security. The slightly less scary security warning isn't worth $99/year IMO.
-
-#### Why is this not on the app store?
-
-Because I don't want to pay Apple $99 a year for the privilege of developing macOS apps. I also don't want to have to go through the review process.
-
-#### Why not the other way around, i.e. AirDrop on Android?
-
-While I am an Android developer, and I have looked into this, this is nigh-impossible. AirDrop uses [AWDL](https://stackoverflow.com/questions/19587701/what-is-awdl-apple-wireless-direct-link-and-how-does-it-work), Apple's own proprietary take on peer-to-peer Wi-Fi. This works on top of 802.11 itself, the low-level Wi-Fi protocol, and thus can not be implemented without messing around with the Wi-Fi adapter drivers and raw packets and all that. It might be possible on Android, but it would at the very least require root and possibly a custom kernel. There is [an open-source implementation of AWDL and AirDrop for Linux](https://owlink.org/code/).
+Released under the [Unlicense](UNLICENSE). See the license file for its full terms and warranty disclaimer.

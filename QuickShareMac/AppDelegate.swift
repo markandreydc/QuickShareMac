@@ -42,8 +42,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		let fileMenu=NSMenu(title: NSLocalizedString("FileMenu", value: "File", comment: ""))
 		let sendFiles=fileMenu.addItem(withTitle: NSLocalizedString("SendFiles", value: "Send files…", comment: ""), action: #selector(sendFiles(_:)), keyEquivalent: "o")
 		sendFiles.target=self
-		let sendLink=fileMenu.addItem(withTitle: NSLocalizedString("ShareLink", value: "Share link…", comment: ""), action: #selector(sendLink(_:)), keyEquivalent: "l")
-		sendLink.target=self
 		let fileMenuItem=NSMenuItem(title: fileMenu.title, action: nil, keyEquivalent: "")
 		fileMenuItem.submenu=fileMenu
 		mainMenu.addItem(fileMenuItem)
@@ -132,14 +130,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		windowController.showSend()
 		windowController.sendController.chooseFiles(sender)
 	}
-	@objc private func sendLink(_ sender:Any?){
-		showMainWindow(sender)
-		windowController.showSend()
-		windowController.sendController.showLinkEntry(sender)
-	}
 	func applicationWillTerminate(_ notification:Notification){windowController.sendController.sender.shutdown()}
 	func validateMenuItem(_ item:NSMenuItem) -> Bool{
-		if item.action == #selector(sendFiles(_:)) || item.action == #selector(sendLink(_:)){return !windowController.sendController.sender.isTransferring}
+		if item.action == #selector(sendFiles(_:)){return !windowController.sendController.sender.isTransferring}
 		return true
 	}
 

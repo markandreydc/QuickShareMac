@@ -22,9 +22,6 @@
     "ChooseFiles" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose files" } } }
     },
-    "ChooseLink" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose link" } } }
-    },
     "ChooseNearbyDevice" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a nearby device" } } }
     },
@@ -66,9 +63,6 @@
     },
     "KeepDevicesConnected" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Keep both devices connected until the transfer finishes." } } }
-    },
-    "LinkAddress" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Link address" } } }
     },
     "LookingForDevices" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Looking for devices…" } } }
@@ -139,8 +133,11 @@
     "SendSecureConnectionFailed" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not establish a secure Quick Share connection." } } }
     },
-    "SendSelectionHint" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose files or one web link, then select a device. Nothing is sent until you choose a recipient." } } }
+    "SendFilesSelectionHint" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose files, then select a device. Nothing is sent until you choose a recipient." } } }
+    },
+    "SendFilesOnly" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The Send tab accepts files only. To share a link, use the macOS Share menu." } } }
     },
     "SendTab" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Send" } } }
@@ -150,9 +147,6 @@
     },
     "SentToDevice" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "To %@" } } }
-    },
-    "ShareLink" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Share link…" } } }
     },
     "TransferCanceled" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Canceled" } } }
@@ -174,9 +168,6 @@
     },
     "UnsupportedType" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Attachment type not supported" } } }
-    },
-    "ValidWebLinkRequired" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter a complete HTTP or HTTPS link, such as https://example.com." } } }
     },
     "VerifySendingPIN" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Check that this PIN matches on the receiving device, then accept there." } } }

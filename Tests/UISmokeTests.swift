@@ -185,16 +185,16 @@ struct UISmokeTests{
 		main.showSend()
 		layout(window)
 		_ = button("Send files…", in: main.view)
+		expect(!visible(main.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Share link…" || $0.title=="Choose link"}), "The Send tab must not expose link-sharing controls")
+		expect(!visible(main.view).compactMap({$0 as? NSTextField}).contains(where: {$0.placeholderString=="https://example.com"}), "The Send tab must not expose link input")
 		expect(service.discoveryStarts==0, "Opening Send without items must not start discovery")
 		let url=URL(string: "https://example.com/share")!
-		button("Share link…", in: main.view).performClick(nil)
-		let linkField=visible(main.view).compactMap {$0 as? NSTextField}.first(where: {$0.placeholderString=="https://example.com"})!
-		linkField.stringValue="not a link"
-		button("Choose link", in: main.view).performClick(nil)
-		expect(service.discoveryStarts==0, "Invalid link input must not start discovery")
-		linkField.stringValue=url.absoluteString
-		button("Choose link", in: main.view).performClick(nil)
-		expect(main.sendController.sender.hasItems, "The link-entry button must select the entered link")
+		expect(!main.sendController.selectItems([url]), "The main Send flow must reject web links")
+		expect(service.discoveryStarts==0, "Rejected web links must not start discovery")
+		let file=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-send-test-\(UUID().uuidString).txt")
+		try! Data().write(to: file)
+		defer{try? FileManager.default.removeItem(at: file)}
+		expect(main.sendController.selectItems([file]), "Selecting a file must prepare the Send flow")
 		expect(service.discoveryStarts==1 && service.attempts.isEmpty, "Choosing items must discover, not automatically send (discovery: \(service.discoveryStarts), transfers: \(service.attempts.count))")
 		expect(!main.sendController.selectItems([URL(fileURLWithPath: "/")]), "Folders must be rejected before connecting")
 		expect(!main.sendController.selectItems([URL(string: "mailto:someone@example.com")!]), "Unsupported link schemes must be rejected")
@@ -207,7 +207,7 @@ struct UISmokeTests{
 		main.sendController.sender.selectDevice(device)
 		expect(main.sendController.sender.state == .connecting && service.attempts.count==1, "Choosing a device must start a transfer")
 		expect(!(main.view as! SendDropView).acceptsItems, "The window must not advertise replacement drops during an active transfer")
-		expect(!main.sendController.selectItems([url]), "Choosing replacement items during a transfer must be blocked")
+		expect(!main.sendController.selectItems([file]), "Choosing replacement items during a transfer must be blocked")
 		let oldAttempt=service.attempts[0]
 		oldAttempt.connectionWasEstablished(pinCode: "2468")
 		expect(main.sendController.sender.state == .awaitingApproval, "Established connections must wait for approval")
@@ -248,7 +248,10 @@ struct UISmokeTests{
 		expect(main.sendController.recentTransfers.first?.state == .failed, "Failed sends must be retained in history")
 		let pasteboard=NSPasteboard.withUniqueName()
 		pasteboard.setString("https://example.com", forType: .string)
-		expect(SendDropView.urls(from: pasteboard).first?.host=="example.com", "Dropped web-link text must be recognized")
+		expect(SendDropView.urls(from: pasteboard).isEmpty, "Dropped web-link text must not enter the file-only Send flow")
+		pasteboard.clearContents()
+		pasteboard.writeObjects([url as NSURL])
+		expect(SendDropView.urls(from: pasteboard).isEmpty, "Dragged web-link objects must also be rejected")
 		pasteboard.clearContents()
 		pasteboard.setString("not a link", forType: .string)
 		expect(SendDropView.urls(from: pasteboard).isEmpty, "Arbitrary text must not be treated as a URL")
@@ -256,9 +259,6 @@ struct UISmokeTests{
 		pasteboard.writeObjects([NSURL(fileURLWithPath: "/Users/Shared/first.txt"), NSURL(fileURLWithPath: "/Users/Shared/second.txt")])
 		expect(SendDropView.urls(from: pasteboard).count==2, "Finder-style multi-file drags must preserve all file URLs")
 		pasteboard.releaseGlobally()
-		let file=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-send-test-\(UUID().uuidString).txt")
-		try! Data().write(to: file)
-		defer{try? FileManager.default.removeItem(at: file)}
 		expect(main.sendController.selectItems([file]), "An empty regular file must be selectable")
 		expect(!main.sendController.selectItems([file,url]), "Mixed files and web links must not be silently truncated")
 		main.sendController.sender.shutdown()

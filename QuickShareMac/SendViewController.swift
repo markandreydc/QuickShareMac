@@ -5,14 +5,12 @@ final class SendDropView:WindowBackgroundView{
 	var onURLs:(([URL])->Bool)?
 	override init(frame:NSRect){
 		super.init(frame: frame)
-		registerForDraggedTypes([.fileURL,.URL,.string])
+		registerForDraggedTypes([.fileURL])
 	}
 	required init?(coder:NSCoder){fatalError("init(coder:) has not been implemented")}
 	static func urls(from pasteboard:NSPasteboard) -> [URL]{
 		let urls=pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] ?? []
-		if !urls.isEmpty{return urls}
-		if let text=pasteboard.string(forType: .string), let url=URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)), SendTransferViewController.isSupportedLink(url){return [url]}
-		return []
+		return urls.allSatisfy(\.isFileURL) ? urls : []
 	}
 	override func draggingEntered(_ sender:NSDraggingInfo) -> NSDragOperation{
 		let accepts=acceptsItems && !Self.urls(from: sender.draggingPasteboard).isEmpty
@@ -38,9 +36,6 @@ final class SendViewController:NSViewController{
 	private let senderCard=CardView()
 	private let errorLabel=WindowUI.label("", size: 12, secondary: true)
 	private let chooseButton=NSButton(title: NSLocalizedString("SendFiles", value: "Send files…", comment: ""), target: nil, action: nil)
-	private let linkButton=NSButton(title: NSLocalizedString("ShareLink", value: "Share link…", comment: ""), target: nil, action: nil)
-	private let linkRow=WindowUI.stack(.horizontal)
-	private let linkField=NSTextField(string: "")
 	private let history=WindowUI.stack(spacing: 10)
 	private let historyHeading=WindowUI.stack(.horizontal)
 	private var historyButtons:[NSButton]=[]
@@ -66,27 +61,11 @@ final class SendViewController:NSViewController{
 		let selectionContent=WindowUI.stack(spacing: 10)
 		WindowUI.pin(selectionContent, to: selection, inset: 16)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("DropFilesToSend", value: "Drop files here to send", comment: ""), size: 16, weight: .semibold), in: selectionContent)
-		WindowUI.fill(WindowUI.label(NSLocalizedString("SendSelectionHint", value: "Choose files or one web link, then select a device. Nothing is sent until you choose a recipient.", comment: ""), size: 12, secondary: true), in: selectionContent)
-		let buttons=WindowUI.stack(.horizontal)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("SendFilesSelectionHint", value: "Choose files, then select a device. Nothing is sent until you choose a recipient.", comment: ""), size: 12, secondary: true), in: selectionContent)
 		chooseButton.bezelStyle = .rounded
 		chooseButton.target=self
 		chooseButton.action=#selector(chooseFiles(_:))
-		linkButton.bezelStyle = .rounded
-		linkButton.target=self
-		linkButton.action=#selector(showLinkEntry(_:))
-		buttons.addArrangedSubview(chooseButton)
-		buttons.addArrangedSubview(linkButton)
-		selectionContent.addArrangedSubview(buttons)
-		linkField.placeholderString="https://example.com"
-		linkField.setAccessibilityLabel(NSLocalizedString("LinkAddress", value: "Link address", comment: ""))
-		linkField.target=self
-		linkField.action=#selector(shareLink(_:))
-		linkRow.addArrangedSubview(linkField)
-		let useLink=NSButton(title: NSLocalizedString("ChooseLink", value: "Choose link", comment: ""), target: self, action: #selector(shareLink(_:)))
-		useLink.bezelStyle = .rounded
-		linkRow.addArrangedSubview(useLink)
-		WindowUI.fill(linkRow, in: selectionContent)
-		linkRow.isHidden=true
+		selectionContent.addArrangedSubview(chooseButton)
 		errorLabel.textColor = .systemRed
 		WindowUI.fill(errorLabel, in: selectionContent)
 		errorLabel.isHidden=true
@@ -124,9 +103,11 @@ final class SendViewController:NSViewController{
 	@discardableResult func selectItems(_ urls:[URL]) -> Bool{
 		_ = view
 		do{
+			guard urls.allSatisfy(\.isFileURL) else {
+				throw NSError(domain: "QuickShareMac.Send", code: 1, userInfo: [NSLocalizedDescriptionKey:NSLocalizedString("SendFilesOnly", value: "The Send tab accepts files only. To share a link, use the macOS Share menu.", comment: "")])
+			}
 			try sender.configureItems(urls)
 			errorLabel.isHidden=true
-			linkRow.isHidden=true
 			senderCard.isHidden=false
 			updateControls()
 			return true
@@ -149,19 +130,6 @@ final class SendViewController:NSViewController{
 			if response == .OK{self?.selectItems(panel.urls)}
 		}
 	}
-	@objc func showLinkEntry(_ sender:Any?){
-		guard !self.sender.isTransferring else {return}
-		linkRow.isHidden=false
-		view.window?.makeFirstResponder(linkField)
-	}
-	@objc private func shareLink(_ sender:Any?){
-		guard let url=URL(string: linkField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)), SendTransferViewController.isSupportedLink(url) else {
-			errorLabel.stringValue=NSLocalizedString("ValidWebLinkRequired", value: "Enter a complete HTTP or HTTPS link, such as https://example.com.", comment: "")
-			errorLabel.isHidden=false
-			return
-		}
-		selectItems([url])
-	}
 	private func clearSelection(){
 		sender.shutdown()
 		senderCard.isHidden=true
@@ -170,8 +138,6 @@ final class SendViewController:NSViewController{
 	private func updateControls(){
 		let enabled = !sender.isTransferring
 		chooseButton.isEnabled=enabled
-		linkButton.isEnabled=enabled
-		linkField.isEnabled=enabled
 		(view as? SendDropView)?.acceptsItems=enabled
 		for button in historyButtons{button.isEnabled=enabled}
 		onTransferActivityChange?(!enabled)
