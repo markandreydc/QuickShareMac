@@ -22,6 +22,7 @@ class InboundNearbyConnection: NearbyConnection{
 	private var cipherCommitment:Data?
 	
 	private var textPayloadID:Int64=0
+	private var completionTimeout:DispatchWorkItem?
 	
 	enum State{
 		case initial, receivedConnectionRequest, sentUkeyServerInit, receivedUkeyClientFinish, sentConnectionResponse, sentPairedKeyResult, receivedPairedKeyResult, waitingForUserConsent, receivingFiles, disconnected
@@ -33,6 +34,19 @@ class InboundNearbyConnection: NearbyConnection{
 	
 	override func handleConnectionClosure() {
 		super.handleConnectionClosure()
+		completionTimeout?.cancel()
+		completionTimeout=nil
+		if !transferredFiles.isEmpty && lastError==nil{
+			if currentState == .receivingFiles && allFilesReceived(){
+				do{
+					try finalizeCompletedFiles()
+				}catch{
+					lastError=error
+				}
+			}else{
+				lastError=NearbyError.protocolError("Connection closed before all files were received")
+			}
+		}
 		currentState = .disconnected
 		do{
 			try deletePartiallyReceivedFiles()
@@ -76,6 +90,7 @@ class InboundNearbyConnection: NearbyConnection{
 	override internal func processTransferSetupFrame(_ frame:Sharing_Nearby_Frame) throws{
 		if frame.hasV1 && frame.v1.hasType, case .cancel = frame.v1.type {
 			print("Transfer canceled")
+			lastError=NearbyError.canceled(reason: .userCanceled)
 			try sendDisconnectionAndDisconnect()
 			return
 		}
@@ -111,15 +126,49 @@ class InboundNearbyConnection: NearbyConnection{
 			DispatchQueue.main.async {
 				self.delegate?.incomingConnection(connection: self, didReceiveBytes: bytesReceived)
 			}
-		}else if (frame.payloadChunk.flags & 1)==1{
+		}
+		if (frame.payloadChunk.flags & 1)==1{
+			guard transferredFiles[id]!.bytesTransferred==fileInfo.meta.size else {
+				throw NearbyError.protocolError("File payload ended before its advertised size was received")
+			}
 			try fileInfo.fileHandle?.close()
 			transferredFiles[id]!.fileHandle=nil
 			fileInfo.progress?.unpublish()
 			transferredFiles.removeValue(forKey: id)
 			if transferredFiles.isEmpty{
+				completionTimeout?.cancel()
+				completionTimeout=nil
 				try sendDisconnectionAndDisconnect()
 			}
 		}
+		if allFilesReceived() && completionTimeout==nil{
+			let timeout=DispatchWorkItem { [weak self] in
+				guard let self=self, self.currentState == .receivingFiles, self.allFilesReceived() else {return}
+				do{
+					try self.finalizeCompletedFiles()
+					try self.sendDisconnectionAndDisconnect()
+				}catch{
+					self.lastError=error
+					self.protocolError()
+				}
+			}
+			completionTimeout=timeout
+			NearbyConnection.dispatchQueue.asyncAfter(deadline: .now()+5, execute: timeout)
+		}
+	}
+
+	private func allFilesReceived() -> Bool{
+		return !transferredFiles.isEmpty && transferredFiles.values.allSatisfy({$0.created && $0.bytesTransferred==$0.meta.size})
+	}
+
+	private func finalizeCompletedFiles() throws{
+		for file in transferredFiles.values{
+			try file.fileHandle?.close()
+			file.progress?.unpublish()
+		}
+		transferredFiles.removeAll()
+		completionTimeout?.cancel()
+		completionTimeout=nil
 	}
 	
 	override func processBytesPayload(payload: Data, id: Int64) throws -> Bool {
@@ -407,6 +456,8 @@ class InboundNearbyConnection: NearbyConnection{
 	private func deletePartiallyReceivedFiles() throws{
 		for (_, file) in transferredFiles{
 			guard file.created else { continue }
+			try? file.fileHandle?.close()
+			file.progress?.unpublish()
 			try FileManager.default.removeItem(at: file.destinationURL)
 		}
 	}

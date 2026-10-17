@@ -26,6 +26,7 @@ class NearbyConnection{
 	public let id:String
 	internal var lastError:Error?
 	private var connectionClosed:Bool=false
+	private var closureNotified:Bool=false
 	
 	// UKEY2-related state
 	internal var publicKey:ECPublicKey?
@@ -57,9 +58,14 @@ class NearbyConnection{
 				self.connectionReady()
 				self.receiveFrameAsync()
 			} else if case .failed(let err) = state {
+				guard !self.connectionClosed else {return}
 				self.lastError=err
 				print("Error opening socket: \(err)")
-				self.handleConnectionClosure()
+				self.connectionClosed=true
+				self.notifyConnectionClosed()
+			} else if case .cancelled = state {
+				self.connectionClosed=true
+				self.notifyConnectionClosed()
 			}
 		}
 		//connection.start(queue: .global(qos: .utility))
@@ -70,6 +76,12 @@ class NearbyConnection{
 	
 	internal func handleConnectionClosure(){
 		print("Connection closed")
+	}
+
+	private func notifyConnectionClosed(){
+		guard !closureNotified else {return}
+		closureNotified=true
+		handleConnectionClosure()
 	}
 	
 	internal func protocolError(){
@@ -101,21 +113,28 @@ class NearbyConnection{
 			if self.connectionClosed{
 				return
 			}
-			if isComplete{
-				self.handleConnectionClosure()
-				return
-			}
-			if !(error==nil){
+			if let error=error{
 				self.lastError=error
 				self.protocolError()
 				return
 			}
-			guard let content=content else {
-				assertionFailure()
+			guard let content=content, !content.isEmpty else {
+				if isComplete{
+					self.connectionClosed=true
+					self.notifyConnectionClosed()
+				}else{
+					self.lastError=NearbyError.protocolError("Missing frame length")
+					self.protocolError()
+				}
+				return
+			}
+			guard content.count==4 else {
+				self.lastError=NearbyError.protocolError("Incomplete frame")
+				self.protocolError()
 				return
 			}
 			let frameLength:UInt32=UInt32(content[0]) << 24 | UInt32(content[1]) << 16 | UInt32(content[2]) << 8 | UInt32(content[3])
-			guard frameLength<NearbyConnection.SANE_FRAME_LENGTH else {
+			guard frameLength>0 && frameLength<NearbyConnection.SANE_FRAME_LENGTH else {
 				self.lastError=NearbyError.protocolError("Unexpected packet length")
 				self.protocolError()
 				return
@@ -129,16 +148,23 @@ class NearbyConnection{
 			if self.connectionClosed{
 				return
 			}
-			if isComplete{
-				self.handleConnectionClosure()
+			if let error=error{
+				self.lastError=error
+				self.protocolError()
 				return
 			}
-			guard let content=content else {
+			guard let content=content, content.count==Int(length) else {
+				self.lastError=NearbyError.protocolError("Incomplete frame body")
 				self.protocolError()
 				return
 			}
 			self.processReceivedFrame(frameData: content)
-			self.receiveFrameAsync()
+			if isComplete{
+				self.connectionClosed=true
+				self.notifyConnectionClosed()
+			}else if !self.connectionClosed{
+				self.receiveFrameAsync()
+			}
 		}
 	}
 	
@@ -403,10 +429,12 @@ class NearbyConnection{
 	}
 	
 	internal func disconnect(){
-		connection.send(content: nil, isComplete: true, completion: .contentProcessed({ error in
-			self.handleConnectionClosure()
-		}))
-		connectionClosed=true
+		NearbyConnection.dispatchQueue.async {
+			guard !self.connectionClosed else {return}
+			self.connectionClosed=true
+			self.connection.send(content: nil, isComplete: true, completion: .contentProcessed({ _ in }))
+			self.notifyConnectionClosed()
+		}
 	}
 	
 	internal func sendDisconnectionAndDisconnect() throws{

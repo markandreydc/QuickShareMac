@@ -125,7 +125,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 			}else if info.totalBytes>0{
 				let fraction=min(1, Double(info.receivedBytes)/Double(info.totalBytes))
 				progress=fraction
-				status=String(format: NSLocalizedString("ReceivingPercent", value: "Receiving · %d%%", comment: ""), Int(fraction*100))
+				status=info.receivedBytes>=info.totalBytes
+					? NSLocalizedString("FinishingTransfer", value: "Finishing transfer…", comment: "")
+					: String(format: NSLocalizedString("ReceivingPercent", value: "Receiving · %d%%", comment: ""), Int(fraction*100))
 			}else{
 				progress=nil
 				status=NSLocalizedString("Receiving", value: "Receiving…", comment: "")
