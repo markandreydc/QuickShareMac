@@ -107,6 +107,20 @@
         }
       }
     },
+    "AcceptAndRemember" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Accept & remember"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+
+    },
     "Decline" : {
       "localizations" : {
         "ar" : {
@@ -327,7 +341,7 @@
       }
     },
     "DeviceSendingFiles" : {
-      "extractionState" : "extracted_with_value",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -440,7 +454,7 @@
       }
     },
     "Error.Crypto" : {
-      "extractionState" : "extracted_with_value",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -553,7 +567,7 @@
       }
     },
     "Error.Protocol" : {
-      "extractionState" : "extracted_with_value",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -661,6 +675,83 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "通訊錯誤"
+          }
+        }
+      }
+    },
+    "FinishingTransfer" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Finishing transfer…"
+          }
+        }
+      }
+    },
+    "ForgetDevices" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Forget all"
+          }
+        }
+      }
+    },
+    "ForgetDevicesMessage" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Future transfers will still ask for approval. You can remember a name again when accepting a transfer."
+          }
+        }
+      }
+    },
+    "ForgetDevicesTitle" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Forget remembered device names?"
+          }
+        }
+      }
+    },
+    "IncomingTransfers" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Incoming transfers"
+          }
+        }
+      }
+    },
+    "IncomingTransfersHint" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Accepted files will appear here."
+          }
+        }
+      }
+    },
+    "LaunchAtLogin" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Launch at login"
           }
         }
       }
@@ -1017,8 +1108,19 @@
         }
       }
     },
-    "NotificationsDenied.Message" : {
+    "NoIncomingTransfers" : {
       "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No incoming transfers"
+          }
+        }
+      }
+    },
+    "NotificationsDenied.Message" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -1131,7 +1233,7 @@
       }
     },
     "NotificationsDenied.OpenSettings" : {
-      "extractionState" : "extracted_with_value",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -1244,7 +1346,7 @@
       }
     },
     "NotificationsDenied.Title" : {
-      "extractionState" : "extracted_with_value",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -1469,6 +1571,17 @@
         }
       }
     },
+    "PreviouslySeenName" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Name seen before · always verify the PIN"
+          }
+        }
+      }
+    },
     "Quit" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -1582,8 +1695,140 @@
         }
       }
     },
-    "TransferError" : {
+    "ReadyToReceive" : {
       "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Ready to receive"
+          }
+        }
+      }
+    },
+    "Receiving" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Receiving…"
+          }
+        }
+      }
+    },
+    "ReceivingEnabled" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Receiving enabled"
+          }
+        }
+      }
+    },
+    "ReceivingOff" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Receiving off"
+          }
+        }
+      }
+    },
+    "ReceivingPercent" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Receiving · %d%%"
+          }
+        }
+      }
+    },
+    "ReceivingVisibility" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Visible to everyone on your network while receiving."
+          }
+        }
+      }
+    },
+    "RememberedDevicesCount" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%d remembered device names"
+          }
+        }
+      }
+    },
+    "SavedToDownloads" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Received files are saved to Downloads"
+          }
+        }
+      }
+    },
+    "SetUpLoginItem" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Set up login item in System Settings…"
+          }
+        }
+      }
+    },
+    "ShowApp" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show QuickShareMac"
+          }
+        }
+      }
+    },
+    "StartReceivingOnLaunch" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Start receiving when app opens"
+          }
+        }
+      }
+    },
+    "StartupSettings" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Startup"
+          }
+        }
+      }
+    },
+    "TransferError" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -1695,8 +1940,52 @@
         }
       }
     },
-    "VisibleToEveryone" : {
+    "TransferFailedReason" : {
       "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Transfer failed: %@"
+          }
+        }
+      }
+    },
+    "TransferFinished" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Transfer finished"
+          }
+        }
+      }
+    },
+    "TransferInterrupted" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Transfer interrupted"
+          }
+        }
+      }
+    },
+    "VerifyPin" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Check that the PIN matches on the sending device."
+          }
+        }
+      }
+    },
+    "VisibleToEveryone" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -1804,6 +2093,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所有人都可與你分享內容"
+          }
+        }
+      }
+    },
+    "WaitingForApproval" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Waiting for approval"
           }
         }
       }
