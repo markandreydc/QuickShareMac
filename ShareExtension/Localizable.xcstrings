@@ -1,6 +1,167 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Cancel" }
+        }
+      }
+    },
+    "ChooseNearbyDevice" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Choose a nearby device" }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Close" }
+        }
+      }
+    },
+    "ConnectionQRCode" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Connection QR code. Scan with an Android camera." }
+        }
+      }
+    },
+    "ConnectWithQRCode" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Connect with QR code…" }
+        }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Done" }
+        }
+      }
+    },
+    "FilesSent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Your items were sent successfully." }
+        }
+      }
+    },
+    "FolderNotSupported" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Folders cannot be sent. Compress the folder in Finder, then share the ZIP file." }
+        }
+      }
+    },
+    "KeepDevicesConnected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Keep both devices connected until the transfer finishes." }
+        }
+      }
+    },
+    "LookingForDevices" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Looking for devices…" }
+        }
+      }
+    },
+    "NearbyDevices" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Nearby devices" }
+        }
+      }
+    },
+    "NoAttachments" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "No supported files or links were provided." }
+        }
+      }
+    },
+    "PreparingFiles" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Preparing files…" }
+        }
+      }
+    },
+    "QRCodeInstructions" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Scan this code with your Android camera to connect. Verify the PIN before accepting the transfer." }
+        }
+      }
+    },
+    "QRCodeNetworkHelp" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Both devices must be on the same Wi-Fi network. Some public networks block connections between devices." }
+        }
+      }
+    },
+    "QuickShareDiscoveryHint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Open Quick Share on your Android device and choose Receive, or connect with a QR code. Keep both devices on the same Wi-Fi network." }
+        }
+      }
+    },
+    "SendFailureHelp" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Check Quick Share on the receiving device, available storage, and the Wi-Fi connection. Close this sheet and share again to retry." }
+        }
+      }
+    },
+    "SendingPercent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Sending · %d%%" }
+        }
+      }
+    },
+    "SendWithQuickShareMac" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Send with QuickShareMac" }
+        }
+      }
+    },
+    "VerificationPIN" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Verification PIN" }
+        }
+      }
+    },
+    "VerifySendingPIN" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Check that this PIN matches on the receiving device, then accept there." }
+        }
+      }
+    },
+    "WaitingForApproval" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Waiting for approval" }
+        }
+      }
+    },
+    "WaitingForDevice" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Waiting for the receiving device to respond." }
+        }
+      }
+    },
     "Connecting" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {

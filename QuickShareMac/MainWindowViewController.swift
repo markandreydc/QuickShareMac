@@ -4,26 +4,86 @@ enum TransferDecision:Equatable{
 	case accept, acceptAndRemember, decline
 }
 
+enum IncomingTransferState{
+	case awaitingApproval, receiving, completed, failed
+}
+
 struct IncomingTransferDisplay{
+	let id:String
 	let deviceName:String
 	let description:String
 	let status:String
+	let state:IncomingTransferState
 	let progress:Double?
-	let pendingID:String?
 	let pinCode:String?
 	let remembered:Bool
+	let receivedBytes:Int64
+	let totalBytes:Int64
+	let savedFileURLs:[URL]
 }
 
-private final class CardView:NSView{
-	override var wantsUpdateLayer:Bool { true }
+private enum WindowUI{
+	static func stack(_ orientation:NSUserInterfaceLayoutOrientation = .vertical, spacing:CGFloat = 8) -> NSStackView{
+		let stack=NSStackView()
+		stack.orientation=orientation
+		stack.alignment=orientation == .vertical ? .leading : .centerY
+		stack.spacing=spacing
+		stack.detachesHiddenViews=true
+		return stack
+	}
 
+	static func label(_ text:String, size:CGFloat = 13, weight:NSFont.Weight = .regular, secondary:Bool = false) -> NSTextField{
+		let label=NSTextField(wrappingLabelWithString: text)
+		label.font=NSFont.systemFont(ofSize: size, weight: weight)
+		label.textColor=secondary ? .secondaryLabelColor : .labelColor
+		label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+		return label
+	}
+
+	static func fill(_ child:NSView, in stack:NSStackView){
+		stack.addArrangedSubview(child)
+		child.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -stack.edgeInsets.left-stack.edgeInsets.right).isActive=true
+	}
+
+	static func pin(_ child:NSView, to parent:NSView, inset:CGFloat){
+		child.translatesAutoresizingMaskIntoConstraints=false
+		parent.addSubview(child)
+		NSLayoutConstraint.activate([
+			child.leadingAnchor.constraint(equalTo: parent.leadingAnchor, constant: inset),
+			child.trailingAnchor.constraint(equalTo: parent.trailingAnchor, constant: -inset),
+			child.topAnchor.constraint(equalTo: parent.topAnchor, constant: inset),
+			child.bottomAnchor.constraint(equalTo: parent.bottomAnchor, constant: -inset)
+		])
+	}
+
+	static func spacer() -> NSView{
+		let spacer=NSView()
+		spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+		return spacer
+	}
+
+	static func symbol(_ name:String, description:String) -> NSImageView{
+		let image:NSImage?
+		if #available(macOS 11.0, *){
+			image=NSImage(systemSymbolName: name, accessibilityDescription: description)
+		}else{
+			image=NSImage(named: NSImage.multipleDocumentsName)
+		}
+		let view=NSImageView(image: image ?? NSImage())
+		view.imageScaling = .scaleProportionallyUpOrDown
+		view.setAccessibilityLabel(description)
+		return view
+	}
+}
+
+private class CardView:NSView{
+	override var wantsUpdateLayer:Bool { true }
 	override func updateLayer(){
 		layer?.backgroundColor=NSColor.controlBackgroundColor.cgColor
-		layer?.cornerRadius=14
+		layer?.cornerRadius=12
 		layer?.borderColor=NSColor.separatorColor.withAlphaComponent(0.35).cgColor
 		layer?.borderWidth=1
 	}
-
 	override func viewDidChangeEffectiveAppearance(){
 		super.viewDidChangeEffectiveAppearance()
 		needsDisplay=true
@@ -34,331 +94,355 @@ private final class FlippedDocumentView:NSView{
 	override var isFlipped:Bool { true }
 }
 
-final class MainWindowViewController:NSViewController{
-	var onReceivingChange:((Bool)->Void)?
-	var onStartReceivingOnLaunchChange:((Bool)->Void)?
-	var onLaunchAtLoginChange:((Bool)->Void)?
-	var onOpenLoginItems:(()->Void)?
-	var onQuit:(()->Void)?
-	var onTransferDecision:((String,TransferDecision)->Void)?
-	var onForgetRememberedDevices:(()->Void)?
+private final class WindowBackgroundView:NSView{
+	override var wantsUpdateLayer:Bool {true}
+	override func updateLayer(){layer?.backgroundColor=NSColor.windowBackgroundColor.cgColor}
+	override func viewDidChangeEffectiveAppearance(){
+		super.viewDidChangeEffectiveAppearance()
+		needsDisplay=true
+	}
+}
 
-	private let receivingSwitch=NSSwitch()
-	private let startReceivingButton=NSButton(checkboxWithTitle: NSLocalizedString("StartReceivingOnLaunch", value: "Start receiving when app opens", comment: ""), target: nil, action: nil)
-	private let loginButton=NSButton(checkboxWithTitle: NSLocalizedString("LaunchAtLogin", value: "Launch at login", comment: ""), target: nil, action: nil)
-	private let loginHelpButton=NSButton(title: NSLocalizedString("SetUpLoginItem", value: "Set up login item in System Settings…", comment: ""), target: nil, action: nil)
-	private let rememberedCountLabel=NSTextField(labelWithString: "")
-	private let forgetDevicesButton=NSButton(title: NSLocalizedString("ForgetDevices", value: "Forget all", comment: ""), target: nil, action: nil)
-	private let transferScrollView=NSScrollView()
-	private let statusDot=NSView()
-	private let statusLabel=NSTextField(labelWithString: "")
+private final class TransferRowView:CardView{
+	private let content=WindowUI.stack(spacing: 8)
+	private let name=WindowUI.label("", size: 14, weight: .semibold)
+	private let details=WindowUI.label("")
+	private let status=WindowUI.label("", size: 12, secondary: true)
+	private let progress=NSProgressIndicator()
+	private let remember=NSButton(checkboxWithTitle: NSLocalizedString("RememberDeviceName", value: "Remember this device name", comment: ""), target: nil, action: nil)
+	private var transfer:IncomingTransferDisplay?
+	private var prominent=false
+	var onDecision:((String,TransferDecision)->Void)?
+	var onReveal:((String)->Void)?
+	var onDismiss:((String)->Void)?
 
-	override func loadView(){
-		let container=NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 660))
-		view=container
-		let content=NSStackView()
-		content.orientation = .vertical
-		content.alignment = .leading
-		content.spacing=16
-		content.translatesAutoresizingMaskIntoConstraints=false
-		container.addSubview(content)
-		NSLayoutConstraint.activate([
-			content.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 24),
-			content.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -24),
-			content.topAnchor.constraint(equalTo: container.topAnchor, constant: 24),
-			content.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -24)
-		])
+	init(){
+		super.init(frame: .zero)
+		wantsLayer=true
+		name.maximumNumberOfLines=2
+		details.maximumNumberOfLines=3
+		WindowUI.pin(content, to: self, inset: 16)
+	}
+	required init?(coder:NSCoder){fatalError("init(coder:) has not been implemented")}
 
-		let header=NSStackView()
-		header.orientation = .horizontal
-		header.alignment = .centerY
-		header.spacing=12
-		let icon=NSImageView(image: NSImage(named: "QuickShareMacBrandIcon") ?? NSImage())
-		icon.imageScaling = .scaleProportionallyUpOrDown
-		NSLayoutConstraint.activate([
-			icon.widthAnchor.constraint(equalToConstant: 44),
-			icon.heightAnchor.constraint(equalToConstant: 44)
-		])
-		header.addArrangedSubview(icon)
-		let titles=NSStackView()
-		titles.orientation = .vertical
-		titles.alignment = .leading
-		titles.spacing=2
-		let title=NSTextField(labelWithString: "QuickShareMac")
-		title.font=NSFont.systemFont(ofSize: 21, weight: .semibold)
-		titles.addArrangedSubview(title)
-		let deviceName=Host.current().localizedName ?? ProcessInfo.processInfo.hostName
-		let subtitle=NSTextField(labelWithString: String(format: NSLocalizedString("DeviceName", value: "Device name: %@", comment: ""), deviceName))
-		subtitle.font=NSFont.systemFont(ofSize: 12)
-		subtitle.textColor = .secondaryLabelColor
-		subtitle.lineBreakMode = .byTruncatingMiddle
-		subtitle.widthAnchor.constraint(lessThanOrEqualToConstant: 290).isActive=true
-		titles.addArrangedSubview(subtitle)
-		header.addArrangedSubview(titles)
-		let spacer=NSView()
-		spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-		header.addArrangedSubview(spacer)
-		let status=NSStackView()
-		status.orientation = .horizontal
-		status.alignment = .centerY
-		status.spacing=6
-		statusDot.wantsLayer=true
-		statusDot.layer?.cornerRadius=4
-		NSLayoutConstraint.activate([
-			statusDot.widthAnchor.constraint(equalToConstant: 8),
-			statusDot.heightAnchor.constraint(equalToConstant: 8)
-		])
-		status.addArrangedSubview(statusDot)
-		statusLabel.font=NSFont.systemFont(ofSize: 12, weight: .medium)
-		status.addArrangedSubview(statusLabel)
-		header.addArrangedSubview(status)
-		content.addArrangedSubview(header)
-		header.widthAnchor.constraint(equalTo: content.widthAnchor).isActive=true
-
-		let (receiveCard, receiveContent)=makeCard(spacing: 6)
-		let receiveRow=NSStackView()
-		receiveRow.orientation = .horizontal
-		receiveRow.alignment = .centerY
-		let receiveTitle=sectionTitle(NSLocalizedString("ReceivingEnabled", value: "Receiving enabled", comment: ""))
-		receiveRow.addArrangedSubview(receiveTitle)
-		let receiveSpacer=NSView()
-		receiveSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-		receiveRow.addArrangedSubview(receiveSpacer)
-		receivingSwitch.target=self
-		receivingSwitch.action=#selector(receivingChanged(_:))
-		receiveRow.addArrangedSubview(receivingSwitch)
-		receiveContent.addArrangedSubview(receiveRow)
-		receiveRow.widthAnchor.constraint(equalTo: receiveContent.widthAnchor).isActive=true
-		let visibility=NSTextField(labelWithString: NSLocalizedString("ReceivingVisibility", value: "Visible to everyone on your network while receiving.", comment: ""))
-		visibility.font=NSFont.systemFont(ofSize: 12)
-		visibility.textColor = .secondaryLabelColor
-		receiveContent.addArrangedSubview(visibility)
-		content.addArrangedSubview(receiveCard)
-		receiveCard.widthAnchor.constraint(equalTo: content.widthAnchor).isActive=true
-
-		let (settingsCard, settingsContent)=makeCard(spacing: 10)
-		settingsContent.addArrangedSubview(sectionTitle(NSLocalizedString("StartupSettings", value: "Startup", comment: "")))
-		startReceivingButton.target=self
-		startReceivingButton.action=#selector(startReceivingChanged(_:))
-		settingsContent.addArrangedSubview(startReceivingButton)
-		loginButton.target=self
-		loginButton.action=#selector(launchAtLoginChanged(_:))
-		settingsContent.addArrangedSubview(loginButton)
-		loginHelpButton.target=self
-		loginHelpButton.action=#selector(openLoginItems(_:))
-		loginHelpButton.bezelStyle = .inline
-		settingsContent.addArrangedSubview(loginHelpButton)
-		settingsContent.detachesHiddenViews=true
-		let rememberedRow=NSStackView()
-		rememberedRow.orientation = .horizontal
-		rememberedRow.alignment = .centerY
-		rememberedCountLabel.font=NSFont.systemFont(ofSize: 12)
-		rememberedCountLabel.textColor = .secondaryLabelColor
-		rememberedRow.addArrangedSubview(rememberedCountLabel)
-		let rememberedSpacer=NSView()
-		rememberedSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-		rememberedRow.addArrangedSubview(rememberedSpacer)
-		forgetDevicesButton.bezelStyle = .inline
-		forgetDevicesButton.target=self
-		forgetDevicesButton.action=#selector(forgetRememberedDevices(_:))
-		rememberedRow.addArrangedSubview(forgetDevicesButton)
-		settingsContent.addArrangedSubview(rememberedRow)
-		rememberedRow.widthAnchor.constraint(equalTo: settingsContent.widthAnchor).isActive=true
-		if #available(macOS 13.0, *){
-			loginHelpButton.isHidden=true
-		}else{
-			loginButton.isHidden=true
+	func update(_ transfer:IncomingTransferDisplay, prominent:Bool = false){
+		let rebuild=self.transfer?.id != transfer.id || self.transfer?.state != transfer.state || self.transfer?.remembered != transfer.remembered || self.transfer?.pinCode != transfer.pinCode || self.prominent != prominent
+		self.transfer=transfer
+		self.prominent=prominent
+		name.stringValue=transfer.deviceName
+		name.toolTip=transfer.deviceName
+		details.stringValue=transfer.description
+		details.toolTip=transfer.description
+		status.stringValue=transfer.status
+		if rebuild{rebuildContent()}
+		if transfer.state == .receiving{
+			progress.isIndeterminate=transfer.progress==nil
+			if let fraction=transfer.progress{
+				progress.stopAnimation(nil)
+				progress.doubleValue=max(0, min(1, fraction))*100
+			}else{
+				progress.startAnimation(nil)
+			}
+			if transfer.totalBytes>0{
+				let received=ByteCountFormatter.string(fromByteCount: transfer.receivedBytes, countStyle: .file)
+				let total=ByteCountFormatter.string(fromByteCount: transfer.totalBytes, countStyle: .file)
+				status.stringValue="\(transfer.status) · \(received) / \(total)"
+			}
 		}
-		content.addArrangedSubview(settingsCard)
-		settingsCard.widthAnchor.constraint(equalTo: content.widthAnchor).isActive=true
-
-		let (transfersCard, transfersContent)=makeCard(spacing: 12)
-		transfersContent.addArrangedSubview(sectionTitle(NSLocalizedString("IncomingTransfers", value: "Incoming transfers", comment: "")))
-		transferScrollView.hasVerticalScroller=true
-		transferScrollView.borderType = .noBorder
-		transferScrollView.drawsBackground=false
-		transfersContent.addArrangedSubview(transferScrollView)
-		NSLayoutConstraint.activate([
-			transferScrollView.widthAnchor.constraint(equalTo: transfersContent.widthAnchor),
-			transferScrollView.heightAnchor.constraint(equalToConstant: 180)
-		])
-		content.addArrangedSubview(transfersCard)
-		transfersCard.widthAnchor.constraint(equalTo: content.widthAnchor).isActive=true
-
-		let footer=NSStackView()
-		footer.orientation = .horizontal
-		footer.alignment = .centerY
-		let downloadHint=NSTextField(labelWithString: NSLocalizedString("SavedToDownloads", value: "Received files are saved to Downloads", comment: ""))
-		downloadHint.font=NSFont.systemFont(ofSize: 11)
-		downloadHint.textColor = .secondaryLabelColor
-		footer.addArrangedSubview(downloadHint)
-		let footerSpacer=NSView()
-		footerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-		footer.addArrangedSubview(footerSpacer)
-		let quitButton=NSButton(title: NSLocalizedString("Quit", value: "Quit QuickShareMac", comment: ""), target: self, action: #selector(quit(_:)))
-		quitButton.bezelStyle = .inline
-		footer.addArrangedSubview(quitButton)
-		content.addArrangedSubview(footer)
-		footer.widthAnchor.constraint(equalTo: content.widthAnchor).isActive=true
 	}
 
-	private func makeCard(spacing:CGFloat) -> (CardView, NSStackView){
-		let card=CardView()
-		card.wantsLayer=true
-		let stack=NSStackView()
-		stack.orientation = .vertical
-		stack.alignment = .leading
-		stack.spacing=spacing
-		stack.translatesAutoresizingMaskIntoConstraints=false
-		card.addSubview(stack)
-		NSLayoutConstraint.activate([
-			stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 18),
-			stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -18),
-			stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
-			stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -16)
-		])
-		return (card, stack)
-	}
-
-	private func sectionTitle(_ text:String) -> NSTextField{
-		let label=NSTextField(labelWithString: text)
-		label.font=NSFont.systemFont(ofSize: 14, weight: .semibold)
-		return label
-	}
-
-	func update(receiving:Bool, startReceivingOnLaunch:Bool, launchAtLogin:Bool, rememberedDeviceCount:Int, transfers:[IncomingTransferDisplay]){
-		_ = view // Accessing the view loads it on macOS versions before 14.
-		receivingSwitch.state=receiving ? .on : .off
-		startReceivingButton.state=startReceivingOnLaunch ? .on : .off
-		loginButton.state=launchAtLogin ? .on : .off
-		rememberedCountLabel.stringValue=String.localizedStringWithFormat(NSLocalizedString("RememberedDevicesCount", value: "%d remembered device names", comment: ""), rememberedDeviceCount)
-		rememberedCountLabel.superview?.isHidden=rememberedDeviceCount==0
-		statusLabel.stringValue=receiving ? NSLocalizedString("ReadyToReceive", value: "Ready to receive", comment: "") : NSLocalizedString("ReceivingOff", value: "Receiving off", comment: "")
-		statusLabel.textColor = .secondaryLabelColor
-		statusDot.layer?.backgroundColor=(receiving ? NSColor.systemGreen : NSColor.tertiaryLabelColor).cgColor
-
-		let listHeight=transfers.reduce(CGFloat(0)) { $0 + ($1.pendingID == nil ? 82 : ($1.remembered ? 170 : 150)) }
-		let document=FlippedDocumentView(frame: NSRect(x: 0, y: 0, width: 476, height: max(180, listHeight)))
-		if transfers.isEmpty{
-			let empty=NSStackView()
-			empty.orientation = .vertical
-			empty.alignment = .centerX
-			empty.spacing=8
-			empty.translatesAutoresizingMaskIntoConstraints=false
-			let symbol=NSTextField(labelWithString: "↓")
-			symbol.font=NSFont.systemFont(ofSize: 30, weight: .ultraLight)
-			symbol.textColor = .tertiaryLabelColor
-			empty.addArrangedSubview(symbol)
-			let emptyTitle=NSTextField(labelWithString: NSLocalizedString("NoIncomingTransfers", value: "No incoming transfers", comment: ""))
-			emptyTitle.font=NSFont.systemFont(ofSize: 13, weight: .medium)
-			empty.addArrangedSubview(emptyTitle)
-			let emptyDetail=NSTextField(labelWithString: NSLocalizedString("IncomingTransfersHint", value: "Accepted files will appear here.", comment: ""))
-			emptyDetail.font=NSFont.systemFont(ofSize: 11)
-			emptyDetail.textColor = .secondaryLabelColor
-			empty.addArrangedSubview(emptyDetail)
-			document.addSubview(empty)
-			NSLayoutConstraint.activate([
-				empty.centerXAnchor.constraint(equalTo: document.centerXAnchor),
-				empty.centerYAnchor.constraint(equalTo: document.centerYAnchor)
-			])
+	private func rebuildContent(){
+		guard let transfer=transfer else {return}
+		progress.stopAnimation(nil)
+		for child in content.arrangedSubviews{content.removeArrangedSubview(child); child.removeFromSuperview()}
+		let heading=WindowUI.stack(.horizontal)
+		let symbolName=transfer.state == .completed ? "checkmark.circle.fill" : transfer.state == .failed ? "exclamationmark.triangle.fill" : "arrow.down.doc"
+		let symbol=WindowUI.symbol(symbolName, description: transfer.status)
+		symbol.contentTintColor=transfer.state == .completed ? .systemGreen : transfer.state == .failed ? .systemOrange : .secondaryLabelColor
+		NSLayoutConstraint.activate([symbol.widthAnchor.constraint(equalToConstant: 22), symbol.heightAnchor.constraint(equalToConstant: 22)])
+		heading.addArrangedSubview(symbol)
+		heading.addArrangedSubview(name)
+		heading.addArrangedSubview(WindowUI.spacer())
+		WindowUI.fill(heading, in: content)
+		WindowUI.fill(details, in: content)
+		if transfer.state == .awaitingApproval && prominent{
+			if transfer.remembered{
+				WindowUI.fill(WindowUI.label(NSLocalizedString("PreviouslySeenName", value: "Name seen before · always verify the PIN", comment: ""), size: 12, secondary: true), in: content)
+			}
+			let pin=WindowUI.label(transfer.pinCode ?? "—", size: 28, weight: .semibold)
+			pin.font=NSFont.monospacedDigitSystemFont(ofSize: 28, weight: .semibold)
+			pin.setAccessibilityLabel(NSLocalizedString("VerificationPIN", value: "Verification PIN", comment: ""))
+			WindowUI.fill(pin, in: content)
+			WindowUI.fill(WindowUI.label(NSLocalizedString("VerifyPin", value: "Check that the PIN matches on the sending device.", comment: ""), size: 12, secondary: true), in: content)
+			if !transfer.remembered{
+				remember.state = .off
+				remember.toolTip=NSLocalizedString("RememberNameExplanation", value: "Remembering a name does not verify identity or skip approval. Always check the PIN.", comment: "")
+				WindowUI.fill(remember, in: content)
+				WindowUI.fill(WindowUI.label(NSLocalizedString("RememberNameExplanation", value: "Remembering a name does not verify identity or skip approval. Always check the PIN.", comment: ""), size: 11, secondary: true), in: content)
+			}
+			let actions=WindowUI.stack(.horizontal)
+			actions.addArrangedSubview(WindowUI.spacer())
+			let decline=NSButton(title: NSLocalizedString("Decline", value: "Decline", comment: ""), target: self, action: #selector(decline(_:)))
+			decline.bezelStyle = .rounded
+			actions.addArrangedSubview(decline)
+			let accept=NSButton(title: NSLocalizedString("Accept", value: "Accept", comment: ""), target: self, action: #selector(accept(_:)))
+			accept.bezelStyle = .rounded
+			accept.bezelColor = .controlAccentColor
+			// Deliberately no Return shortcut: an incoming request must not capture a stray keystroke.
+			actions.addArrangedSubview(accept)
+			WindowUI.fill(actions, in: content)
 		}else{
-			let rows=NSStackView()
-			rows.orientation = .vertical
-			rows.alignment = .leading
-			rows.spacing=14
-			rows.translatesAutoresizingMaskIntoConstraints=false
-			document.addSubview(rows)
-			NSLayoutConstraint.activate([
-				rows.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 4),
-				rows.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -12),
-				rows.topAnchor.constraint(equalTo: document.topAnchor, constant: 4)
-			])
-			for transfer in transfers{
-				let row=NSStackView()
-				row.orientation = .vertical
-				row.alignment = .leading
-				row.spacing=5
-				let title=NSTextField(labelWithString: "\(transfer.deviceName) · \(transfer.description)")
-				title.font=NSFont.systemFont(ofSize: 13, weight: .medium)
-				title.lineBreakMode = .byTruncatingMiddle
-				row.addArrangedSubview(title)
-				let progress=NSProgressIndicator()
+			if transfer.state == .receiving{
 				progress.style = .bar
 				progress.controlSize = .small
 				progress.minValue=0
 				progress.maxValue=100
-				progress.isIndeterminate=transfer.progress==nil
-				if let fraction=transfer.progress{
-					progress.doubleValue=max(0, min(1, fraction))*100
-				}else{
-					progress.startAnimation(nil)
+				WindowUI.fill(progress, in: content)
+			}
+			WindowUI.fill(status, in: content)
+			if transfer.state == .failed{
+				WindowUI.fill(WindowUI.label(NSLocalizedString("IncomingFailureHelp", value: "Ask the sender to try again. Keep both devices on the same Wi-Fi network and check available disk space.", comment: ""), size: 12, secondary: true), in: content)
+			}
+			if transfer.state == .completed || transfer.state == .failed{
+				let actions=WindowUI.stack(.horizontal)
+				if transfer.state == .completed && !transfer.savedFileURLs.isEmpty{
+					let reveal=NSButton(title: NSLocalizedString("ShowInFinder", value: "Show in Finder", comment: ""), target: self, action: #selector(reveal(_:)))
+					reveal.bezelStyle = .inline
+					actions.addArrangedSubview(reveal)
 				}
-				row.addArrangedSubview(progress)
-				let status=NSTextField(labelWithString: transfer.status)
-				status.font=NSFont.systemFont(ofSize: 11)
-				status.textColor = .secondaryLabelColor
-				status.lineBreakMode = .byTruncatingTail
-				row.addArrangedSubview(status)
-				if let id=transfer.pendingID{
-					if transfer.remembered{
-						let recognized=NSTextField(labelWithString: NSLocalizedString("PreviouslySeenName", value: "Name seen before · always verify the PIN", comment: ""))
-						recognized.font=NSFont.systemFont(ofSize: 11)
-						recognized.textColor = .secondaryLabelColor
-						row.addArrangedSubview(recognized)
-					}
-					if let pin=transfer.pinCode{
-						let pinLabel=NSTextField(labelWithString: String(format: NSLocalizedString("PinCode", value: "PIN: %@", comment: ""), pin))
-						pinLabel.font=NSFont.systemFont(ofSize: 13, weight: .semibold)
-						row.addArrangedSubview(pinLabel)
-						let verify=NSTextField(labelWithString: NSLocalizedString("VerifyPin", value: "Check that the PIN matches on the sending device.", comment: ""))
-						verify.font=NSFont.systemFont(ofSize: 11)
-						verify.textColor = .secondaryLabelColor
-						row.addArrangedSubview(verify)
-					}
-					let actions=NSStackView()
-					actions.orientation = .horizontal
-					actions.spacing=8
-					let accept=NSButton(title: NSLocalizedString("Accept", value: "Accept", comment: ""), target: self, action: #selector(acceptTransfer(_:)))
-					accept.identifier=NSUserInterfaceItemIdentifier(id)
-					if !transfer.remembered{
-						let remember=NSButton(title: NSLocalizedString("AcceptAndRemember", value: "Accept & remember", comment: ""), target: self, action: #selector(acceptAndRememberTransfer(_:)))
-						remember.identifier=NSUserInterfaceItemIdentifier(id)
-						actions.addArrangedSubview(remember)
-					}
-					let decline=NSButton(title: NSLocalizedString("Decline", value: "Decline", comment: ""), target: self, action: #selector(declineTransfer(_:)))
-					decline.identifier=NSUserInterfaceItemIdentifier(id)
-					actions.addArrangedSubview(accept)
-					actions.addArrangedSubview(decline)
-					row.addArrangedSubview(actions)
-				}
-				rows.addArrangedSubview(row)
-				NSLayoutConstraint.activate([
-					row.widthAnchor.constraint(equalTo: rows.widthAnchor),
-					title.widthAnchor.constraint(equalTo: row.widthAnchor),
-					progress.widthAnchor.constraint(equalTo: row.widthAnchor),
-					status.widthAnchor.constraint(equalTo: row.widthAnchor)
-				])
+				actions.addArrangedSubview(WindowUI.spacer())
+				let dismiss=NSButton(title: NSLocalizedString("Dismiss", value: "Dismiss", comment: ""), target: self, action: #selector(dismiss(_:)))
+				dismiss.bezelStyle = .inline
+				actions.addArrangedSubview(dismiss)
+				WindowUI.fill(actions, in: content)
 			}
 		}
-		transferScrollView.documentView=document
+	}
+
+	@objc private func accept(_ sender:NSButton){
+		guard let transfer=transfer else {return}
+		onDecision?(transfer.id, !transfer.remembered && remember.state == .on ? .acceptAndRemember : .accept)
+	}
+	@objc private func decline(_ sender:NSButton){if let id=transfer?.id{onDecision?(id, .decline)}}
+	@objc private func reveal(_ sender:NSButton){if let id=transfer?.id{onReveal?(id)}}
+	@objc private func dismiss(_ sender:NSButton){if let id=transfer?.id{onDismiss?(id)}}
+}
+
+final class MainWindowViewController:NSViewController{
+	var onReceivingChange:((Bool)->Void)?
+	var onOpenSettings:(()->Void)?
+	var onTransferDecision:((String,TransferDecision)->Void)?
+	var onRevealTransfer:((String)->Void)?
+	var onDismissTransfer:((String)->Void)?
+	var onClearRecentTransfers:(()->Void)?
+	private let receivingSwitch=NSSwitch()
+	private let statusLabel=WindowUI.label("", size: 15, weight: .semibold)
+	private let visibilityLabel=WindowUI.label("", size: 12, secondary: true)
+	private let approvalTitle=WindowUI.label("", size: 13, weight: .semibold)
+	private let approvalRow=TransferRowView()
+	private let approvalStack=WindowUI.stack(spacing: 8)
+	private let scrollView=NSScrollView()
+	private let rows=WindowUI.stack(spacing: 12)
+	private let empty=WindowUI.stack(spacing: 10)
+	private let emptyTitle=WindowUI.label("", size: 16, weight: .semibold)
+	private let emptyDetail=WindowUI.label("", secondary: true)
+	private let enableButton=NSButton(title: NSLocalizedString("EnableReceiving", value: "Enable receiving", comment: ""), target: nil, action: nil)
+	private var transferRows:[String:TransferRowView]=[:]
+	private var listKeys:[String]=[]
+	private let recentHeading=WindowUI.stack(.horizontal)
+	private let activeHeading=WindowUI.label(NSLocalizedString("IncomingTransfers", value: "Incoming transfers", comment: ""), size: 13, weight: .semibold)
+	private var receiving=false
+
+	override func loadView(){
+		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 560, height: 640))
+		view.wantsLayer=true
+		let content=WindowUI.stack(spacing: 16)
+		WindowUI.pin(content, to: view, inset: 20)
+		let header=WindowUI.stack(.horizontal, spacing: 12)
+		let icon=NSImageView(image: NSImage(named: "QuickShareMacBrandIcon") ?? NSImage())
+		icon.imageScaling = .scaleProportionallyUpOrDown
+		NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 36), icon.heightAnchor.constraint(equalToConstant: 36)])
+		header.addArrangedSubview(icon)
+		let titles=WindowUI.stack(spacing: 2)
+		titles.addArrangedSubview(WindowUI.label("QuickShareMac", size: 19, weight: .semibold))
+		let device=WindowUI.label(Host.current().localizedName ?? ProcessInfo.processInfo.hostName, size: 12, secondary: true)
+		device.maximumNumberOfLines=1
+		device.lineBreakMode = .byTruncatingMiddle
+		WindowUI.fill(device, in: titles)
+		header.addArrangedSubview(titles)
+		header.addArrangedSubview(WindowUI.spacer())
+		let settings=NSButton(title: NSLocalizedString("Settings", value: "Settings…", comment: ""), target: self, action: #selector(openSettings(_:)))
+		settings.bezelStyle = .inline
+		header.addArrangedSubview(settings)
+		WindowUI.fill(header, in: content)
+
+		let receiveCard=CardView()
+		receiveCard.wantsLayer=true
+		let receiveContent=WindowUI.stack(spacing: 5)
+		WindowUI.pin(receiveContent, to: receiveCard, inset: 14)
+		let receiveRow=WindowUI.stack(.horizontal)
+		receiveRow.addArrangedSubview(statusLabel)
+		receiveRow.addArrangedSubview(WindowUI.spacer())
+		receivingSwitch.target=self
+		receivingSwitch.action=#selector(receivingChanged(_:))
+		receivingSwitch.setAccessibilityLabel(NSLocalizedString("ReceivingEnabled", value: "Receiving enabled", comment: ""))
+		receiveRow.addArrangedSubview(receivingSwitch)
+		WindowUI.fill(receiveRow, in: receiveContent)
+		WindowUI.fill(visibilityLabel, in: receiveContent)
+		WindowUI.fill(receiveCard, in: content)
+		WindowUI.fill(approvalTitle, in: approvalStack)
+		WindowUI.fill(approvalRow, in: approvalStack)
+		approvalRow.onDecision={ [weak self] id, decision in self?.onTransferDecision?(id, decision) }
+		WindowUI.fill(approvalStack, in: content)
+
+		scrollView.hasVerticalScroller=true
+		scrollView.autohidesScrollers=true
+		scrollView.borderType = .noBorder
+		scrollView.drawsBackground=false
+		scrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
+		let document=FlippedDocumentView()
+		document.translatesAutoresizingMaskIntoConstraints=false
+		scrollView.documentView=document
+		WindowUI.pin(rows, to: document, inset: 0)
+		document.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor).isActive=true
+		WindowUI.fill(scrollView, in: content)
+		scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive=true
+
+		empty.alignment = .centerX
+		let symbol=WindowUI.symbol("tray.and.arrow.down", description: NSLocalizedString("IncomingTransfers", value: "Incoming transfers", comment: ""))
+		symbol.contentTintColor = .secondaryLabelColor
+		NSLayoutConstraint.activate([symbol.widthAnchor.constraint(equalToConstant: 40), symbol.heightAnchor.constraint(equalToConstant: 40)])
+		empty.addArrangedSubview(symbol)
+		emptyTitle.alignment = .center
+		emptyDetail.alignment = .center
+		WindowUI.fill(emptyTitle, in: empty)
+		WindowUI.fill(emptyDetail, in: empty)
+		enableButton.bezelStyle = .rounded
+		enableButton.target=self
+		enableButton.action=#selector(enableReceiving(_:))
+		empty.addArrangedSubview(enableButton)
+		empty.edgeInsets=NSEdgeInsets(top: 24, left: 12, bottom: 24, right: 12)
+		recentHeading.addArrangedSubview(WindowUI.label(NSLocalizedString("RecentTransfers", value: "Recent transfers · this session", comment: ""), size: 13, weight: .semibold))
+		recentHeading.addArrangedSubview(WindowUI.spacer())
+		let clear=NSButton(title: NSLocalizedString("ClearRecent", value: "Clear", comment: ""), target: self, action: #selector(clearRecent(_:)))
+		clear.bezelStyle = .inline
+		recentHeading.addArrangedSubview(clear)
+		let footer=WindowUI.stack(.horizontal)
+		footer.addArrangedSubview(WindowUI.label(NSLocalizedString("SavedToDownloads", value: "Received files are saved to Downloads", comment: ""), size: 11, secondary: true))
+		footer.addArrangedSubview(WindowUI.spacer())
+		let downloads=NSButton(title: NSLocalizedString("OpenDownloads", value: "Open Downloads", comment: ""), target: self, action: #selector(openDownloads(_:)))
+		downloads.bezelStyle = .inline
+		footer.addArrangedSubview(downloads)
+		WindowUI.fill(footer, in: content)
+	}
+
+	func update(receiving:Bool, transfers:[IncomingTransferDisplay]){
+		_ = view
+		self.receiving=receiving
+		receivingSwitch.state=receiving ? .on : .off
+		statusLabel.stringValue=receiving ? NSLocalizedString("ReadyToReceive", value: "Ready to receive", comment: "") : NSLocalizedString("ReceivingOff", value: "Receiving off", comment: "")
+		visibilityLabel.stringValue=receiving ? NSLocalizedString("ReceivingVisibility", value: "Visible to everyone on your network while receiving.", comment: "") : NSLocalizedString("ReceivingOffDetail", value: "New requests are paused. Transfers in progress can finish.", comment: "")
+		let pending=transfers.filter {$0.state == .awaitingApproval}
+		approvalStack.isHidden=pending.isEmpty
+		if let first=pending.first{
+			approvalTitle.stringValue=pending.count==1 ? NSLocalizedString("IncomingRequest", value: "Incoming request", comment: "") : String.localizedStringWithFormat(NSLocalizedString("PendingRequestCount", value: "Incoming request · %d waiting", comment: ""), pending.count)
+			approvalRow.update(first, prominent: true)
+		}
+		let active=transfers.filter {$0.state == .receiving || ($0.state == .awaitingApproval && $0.id != pending.first?.id)}
+		let recent=transfers.filter {$0.state == .completed || $0.state == .failed}
+		let visible=active+recent
+		let visibleIDs=Set(visible.map(\.id))
+		for id in Array(transferRows.keys) where !visibleIDs.contains(id){
+			transferRows.removeValue(forKey: id)?.removeFromSuperview()
+		}
+		for transfer in visible{
+			let row=transferRows[transfer.id] ?? TransferRowView()
+			row.onDecision={ [weak self] id, decision in self?.onTransferDecision?(id, decision) }
+			row.onReveal={ [weak self] id in self?.onRevealTransfer?(id) }
+			row.onDismiss={ [weak self] id in self?.onDismissTransfer?(id) }
+			row.update(transfer)
+			transferRows[transfer.id]=row
+		}
+		emptyTitle.stringValue=receiving ? NSLocalizedString("ReadyToReceive", value: "Ready to receive", comment: "") : NSLocalizedString("ReceivingOff", value: "Receiving off", comment: "")
+		emptyDetail.stringValue=receiving ? String(format: NSLocalizedString("ReceiveInstructions", value: "Open Quick Share on your Android device and choose “%@”.\nBoth devices must be on the same Wi-Fi network.", comment: ""), Host.current().localizedName ?? ProcessInfo.processInfo.hostName) : NSLocalizedString("EnableReceivingHint", value: "Enable receiving to let nearby devices send files to this Mac.", comment: "")
+		enableButton.isHidden=receiving
+		var desired:[(String,NSView)]=[]
+		if transfers.isEmpty{desired.append(("empty",empty))}
+		if !active.isEmpty{
+			desired.append(("active",activeHeading))
+			desired += active.compactMap { transfer in transferRows[transfer.id].map {("transfer:"+transfer.id,$0)} }
+		}
+		if !recent.isEmpty{
+			desired.append(("recent",recentHeading))
+			desired += recent.compactMap { transfer in transferRows[transfer.id].map {("transfer:"+transfer.id,$0)} }
+		}
+		if desired.map({$0.0}) != listKeys{
+			for child in rows.arrangedSubviews{rows.removeArrangedSubview(child); child.removeFromSuperview()}
+			for (_, child) in desired{WindowUI.fill(child, in: rows)}
+			listKeys=desired.map {$0.0}
+		}
 	}
 
 	@objc private func receivingChanged(_ sender:NSSwitch){onReceivingChange?(sender.state == .on)}
+	@objc private func enableReceiving(_ sender:NSButton){onReceivingChange?(true)}
+	@objc private func openSettings(_ sender:NSButton){onOpenSettings?()}
+	@objc private func clearRecent(_ sender:NSButton){onClearRecentTransfers?()}
+	@objc private func openDownloads(_ sender:NSButton){
+		if let url=FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first{NSWorkspace.shared.open(url)}
+	}
+}
+
+final class SettingsViewController:NSViewController{
+	var onStartReceivingOnLaunchChange:((Bool)->Void)?
+	var onLaunchAtLoginChange:((Bool)->Void)?
+	var onOpenLoginItems:(()->Void)?
+	var onForgetRememberedDevices:(()->Void)?
+	private let startReceivingButton=NSButton(checkboxWithTitle: NSLocalizedString("StartReceivingOnLaunch", value: "Start receiving when app opens", comment: ""), target: nil, action: nil)
+	private let loginButton=NSButton(checkboxWithTitle: NSLocalizedString("LaunchAtLogin", value: "Launch at login", comment: ""), target: nil, action: nil)
+	private let loginHelpButton=NSButton(title: NSLocalizedString("SetUpLoginItem", value: "Set up login item in System Settings…", comment: ""), target: nil, action: nil)
+	private let rememberedCountLabel=WindowUI.label("", secondary: true)
+	private let forgetButton=NSButton(title: NSLocalizedString("ForgetDevices", value: "Forget all", comment: ""), target: nil, action: nil)
+
+	override func loadView(){
+		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 460, height: 300))
+		view.wantsLayer=true
+		let content=WindowUI.stack(spacing: 14)
+		WindowUI.pin(content, to: view, inset: 24)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("StartupSettings", value: "Startup", comment: ""), size: 14, weight: .semibold), in: content)
+		startReceivingButton.target=self
+		startReceivingButton.action=#selector(startReceivingChanged(_:))
+		content.addArrangedSubview(startReceivingButton)
+		loginButton.target=self
+		loginButton.action=#selector(launchAtLoginChanged(_:))
+		content.addArrangedSubview(loginButton)
+		loginHelpButton.target=self
+		loginHelpButton.action=#selector(openLoginItems(_:))
+		loginHelpButton.bezelStyle = .inline
+		content.addArrangedSubview(loginHelpButton)
+		if #available(macOS 13.0, *){loginHelpButton.isHidden=true}else{loginButton.isHidden=true}
+		WindowUI.fill(WindowUI.label(NSLocalizedString("RememberedNames", value: "Remembered device names", comment: ""), size: 14, weight: .semibold), in: content)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("RememberNameExplanation", value: "Remembering a name does not verify identity or skip approval. Always check the PIN.", comment: ""), size: 12, secondary: true), in: content)
+		let rememberedRow=WindowUI.stack(.horizontal)
+		rememberedRow.addArrangedSubview(rememberedCountLabel)
+		rememberedRow.addArrangedSubview(WindowUI.spacer())
+		forgetButton.bezelStyle = .inline
+		forgetButton.target=self
+		forgetButton.action=#selector(forgetDevices(_:))
+		rememberedRow.addArrangedSubview(forgetButton)
+		WindowUI.fill(rememberedRow, in: content)
+	}
+
+	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int){
+		_ = view
+		startReceivingButton.state=startReceivingOnLaunch ? .on : .off
+		loginButton.state=launchAtLogin ? .on : .off
+		if #available(macOS 13.0, *){loginHelpButton.isHidden = !requiresLoginApproval}
+		rememberedCountLabel.stringValue=String.localizedStringWithFormat(NSLocalizedString("RememberedDevicesCount", value: "%d remembered device names", comment: ""), rememberedDeviceCount)
+		forgetButton.isEnabled=rememberedDeviceCount>0
+	}
+
 	@objc private func startReceivingChanged(_ sender:NSButton){onStartReceivingOnLaunchChange?(sender.state == .on)}
 	@objc private func launchAtLoginChanged(_ sender:NSButton){onLaunchAtLoginChange?(sender.state == .on)}
 	@objc private func openLoginItems(_ sender:NSButton){onOpenLoginItems?()}
-	@objc private func quit(_ sender:NSButton){onQuit?()}
-	@objc private func forgetRememberedDevices(_ sender:NSButton){onForgetRememberedDevices?()}
-	@objc private func acceptTransfer(_ sender:NSButton){
-		guard let id=sender.identifier?.rawValue else {return}
-		onTransferDecision?(id, .accept)
-	}
-	@objc private func acceptAndRememberTransfer(_ sender:NSButton){
-		guard let id=sender.identifier?.rawValue else {return}
-		onTransferDecision?(id, .acceptAndRemember)
-	}
-	@objc private func declineTransfer(_ sender:NSButton){
-		guard let id=sender.identifier?.rawValue else {return}
-		onTransferDecision?(id, .decline)
-	}
+	@objc private func forgetDevices(_ sender:NSButton){onForgetRememberedDevices?()}
 }

@@ -72,12 +72,15 @@ public struct TransferMetadata{
 	public let id:String
 	public let pinCode:String?
 	public let textDescription:String?
+	/// Local destination paths chosen by the receiver. Only reveal after successful completion.
+	public let savedFileURLs:[URL]
 	
-	init(files: [FileMetadata], id: String, pinCode: String?, textDescription: String?=nil){
+	init(files: [FileMetadata], id: String, pinCode: String?, textDescription: String?=nil, savedFileURLs:[URL]=[]){
 		self.files = files
 		self.id = id
 		self.pinCode = pinCode
 		self.textDescription = textDescription
+		self.savedFileURLs=savedFileURLs
 	}
 }
 

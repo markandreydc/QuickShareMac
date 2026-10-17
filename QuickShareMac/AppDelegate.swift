@@ -13,9 +13,12 @@ import ServiceManagement
 class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 	private var statusItem:NSStatusItem?
 	private var mainWindow:NSWindow?
+	private var settingsWindow:NSWindow?
 	private let windowController=MainWindowViewController()
+	private let settingsController=SettingsViewController()
 	private var activeIncomingTransfers:[String:TransferInfo]=[:]
 	private var recentlyFinishedTransfers:[String:IncomingTransferDisplay]=[:]
+	private var recentTransferOrder:[String]=[]
 	private let startReceivingKey="StartReceivingOnLaunch"
 	private let rememberedDevicesKey="RememberedDeviceNames"
 	private var rememberedDevices:Set<String>=[]
@@ -28,43 +31,74 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 			NSApplication.shared.applicationIconImage=appIcon
 		}
 		let appMenu=NSMenu(title: "QuickShareMac")
+		let settingsItem=appMenu.addItem(withTitle: NSLocalizedString("Settings", value: "Settings…", comment: ""), action: #selector(showSettings(_:)), keyEquivalent: ",")
+		settingsItem.target=self
+		appMenu.addItem(.separator())
 		appMenu.addItem(withTitle: NSLocalizedString("Quit", value: "Quit QuickShareMac", comment: ""), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 		let appMenuItem=NSMenuItem(title: "QuickShareMac", action: nil, keyEquivalent: "")
 		appMenuItem.submenu=appMenu
 		let mainMenu=NSMenu()
 		mainMenu.addItem(appMenuItem)
+		let windowMenu=NSMenu(title: NSLocalizedString("Window", value: "Window", comment: ""))
+		windowMenu.addItem(withTitle: NSLocalizedString("Minimize", value: "Minimize", comment: ""), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+		windowMenu.addItem(withTitle: NSLocalizedString("Close", value: "Close", comment: ""), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+		let windowMenuItem=NSMenuItem(title: windowMenu.title, action: nil, keyEquivalent: "")
+		windowMenuItem.submenu=windowMenu
+		mainMenu.addItem(windowMenuItem)
+		NSApplication.shared.windowsMenu=windowMenu
 		NSApplication.shared.mainMenu=mainMenu
 		statusItem=NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-		let menuBarIcon=NSImage(named: "QuickShareMacBrandIcon")
+		let menuBarIcon:NSImage?
+		if #available(macOS 11.0, *){
+			menuBarIcon=NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: "QuickShareMac")
+		}else{
+			menuBarIcon=NSImage(named: "MenuBarIcon")
+		}
 		menuBarIcon?.size=NSSize(width: 18, height: 18)
-		menuBarIcon?.isTemplate=false
+		menuBarIcon?.isTemplate=true
 		statusItem?.button?.image=menuBarIcon
 		statusItem?.button?.target=self
 		statusItem?.button?.action=#selector(statusBarClicked(_:))
 		statusItem?.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
 		statusItem?.behavior = .removalAllowed
-		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 660),
-							styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 640),
+							styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
 		window.title="QuickShareMac"
 		window.contentViewController=windowController
 		window.isReleasedWhenClosed=false
-		window.center()
+		window.contentMinSize=NSSize(width: 520, height: 640)
+		window.setFrameAutosaveName("QuickShareMacMainWindow")
+		if !window.setFrameUsingName("QuickShareMacMainWindow"){window.center()}
 		mainWindow=window
 		windowController.onReceivingChange={ [weak self] enabled in self?.setReceiving(enabled) }
-		windowController.onStartReceivingOnLaunchChange={ [weak self] enabled in
+		windowController.onOpenSettings={ [weak self] in self?.showSettings(nil) }
+		settingsController.onStartReceivingOnLaunchChange={ [weak self] enabled in
 			guard let self=self else {return}
 			UserDefaults.standard.set(enabled, forKey: self.startReceivingKey)
 			self.refreshWindow()
 		}
-		windowController.onLaunchAtLoginChange={ [weak self] enabled in self?.setLaunchAtLogin(enabled) }
-		windowController.onOpenLoginItems={
-			NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preferences.users")!)
-		}
-		windowController.onQuit={NSApplication.shared.terminate(nil)}
+		settingsController.onLaunchAtLoginChange={ [weak self] enabled in self?.setLaunchAtLogin(enabled) }
+		settingsController.onOpenLoginItems={ [weak self] in self?.openLoginItems(nil) }
 		windowController.onTransferDecision={ [weak self] id, accepted in
 			self?.respondToIncomingTransfer(id: id, decision: accepted)
 		}
-		windowController.onForgetRememberedDevices={ [weak self] in self?.forgetRememberedDevices() }
+		settingsController.onForgetRememberedDevices={ [weak self] in self?.forgetRememberedDevices() }
+		windowController.onRevealTransfer={ [weak self] id in
+			guard let transfer=self?.recentlyFinishedTransfers[id], transfer.state == .completed else {return}
+			let urls=transfer.savedFileURLs.filter {FileManager.default.fileExists(atPath: $0.path)}
+			if !urls.isEmpty{NSWorkspace.shared.activateFileViewerSelecting(urls)}
+			else if let downloads=FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first{NSWorkspace.shared.open(downloads)}
+		}
+		windowController.onDismissTransfer={ [weak self] id in
+			self?.recentlyFinishedTransfers.removeValue(forKey: id)
+			self?.recentTransferOrder.removeAll {$0==id}
+			self?.refreshWindow()
+		}
+		windowController.onClearRecentTransfers={ [weak self] in
+			self?.recentlyFinishedTransfers.removeAll()
+			self?.recentTransferOrder.removeAll()
+			self?.refreshWindow()
+		}
 		NearbyConnectionManager.shared.mainAppDelegate=self
 		if UserDefaults.standard.bool(forKey: startReceivingKey){setReceiving(true)}
 		refreshWindow()
@@ -77,6 +111,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 		NSApplication.shared.activate(ignoringOtherApps: true)
 	}
 
+	@objc private func showSettings(_ sender:Any?){
+		if settingsWindow==nil{
+			let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 300), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+			window.title=NSLocalizedString("SettingsTitle", value: "QuickShareMac Settings", comment: "")
+			window.contentViewController=settingsController
+			window.isReleasedWhenClosed=false
+			window.center()
+			settingsWindow=window
+		}
+		refreshWindow()
+		settingsWindow?.makeKeyAndOrderFront(sender)
+		NSApplication.shared.activate(ignoringOtherApps: true)
+	}
+
 	@objc private func statusBarClicked(_ sender:NSStatusBarButton){
 		guard NSApp.currentEvent?.type == .rightMouseUp, let event=NSApp.currentEvent else {
 			showMainWindow(sender)
@@ -85,23 +133,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 		let menu=NSMenu()
 		let showItem=menu.addItem(withTitle: NSLocalizedString("ShowApp", value: "Show QuickShareMac", comment: ""), action: #selector(showMainWindow(_:)), keyEquivalent: "")
 		showItem.target=self
-		let loginItem:NSMenuItem
-		if #available(macOS 13.0, *){
-			loginItem=menu.addItem(withTitle: NSLocalizedString("LaunchAtLogin", value: "Launch at login", comment: ""), action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: "")
-			loginItem.state=SMAppService.mainApp.status == .enabled ? .on : .off
-		}else{
-			loginItem=menu.addItem(withTitle: NSLocalizedString("SetUpLoginItem", value: "Set up login item in System Settings…", comment: ""), action: #selector(openLoginItems(_:)), keyEquivalent: "")
-		}
-		loginItem.target=self
+		let receiving=NearbyConnectionManager.shared.isReceiving
+		let receiveItem=menu.addItem(withTitle: receiving ? NSLocalizedString("MenuReceivingOn", value: "Receiving: On", comment: "") : NSLocalizedString("MenuReceivingOff", value: "Receiving: Off", comment: ""), action: #selector(toggleReceiving(_:)), keyEquivalent: "")
+		receiveItem.target=self
+		receiveItem.state=receiving ? .on : .off
+		let settingsItem=menu.addItem(withTitle: NSLocalizedString("Settings", value: "Settings…", comment: ""), action: #selector(showSettings(_:)), keyEquivalent: ",")
+		settingsItem.target=self
 		menu.addItem(.separator())
 		let quitItem=menu.addItem(withTitle: NSLocalizedString("Quit", value: "Quit QuickShareMac", comment: ""), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
 		quitItem.target=NSApplication.shared
 		NSMenu.popUpContextMenu(menu, with: event, for: sender)
 	}
 
-	@objc private func toggleLaunchAtLogin(_ sender:NSMenuItem){setLaunchAtLogin(sender.state != .on)}
-	@objc private func openLoginItems(_ sender:NSMenuItem){
-		NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preferences.users")!)
+	@objc private func toggleReceiving(_ sender:NSMenuItem){setReceiving(!NearbyConnectionManager.shared.isReceiving)}
+	@objc private func openLoginItems(_ sender:Any?){
+		if #available(macOS 13.0, *){SMAppService.openSystemSettingsLoginItems()}
+		else{NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preferences.users")!)}
 	}
 
 	private func setReceiving(_ enabled:Bool){
@@ -148,12 +195,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 
 	private func refreshWindow(){
 		let isReceiving=NearbyConnectionManager.shared.isReceiving
-		statusItem?.button?.alphaValue=isReceiving ? 1 : 0.5
+		statusItem?.button?.alphaValue=1
+		statusItem?.button?.toolTip=isReceiving ? NSLocalizedString("MenuReceivingOnTooltip", value: "QuickShareMac · Receiving on. Click to show transfers; right-click for controls.", comment: "") : NSLocalizedString("MenuReceivingOffTooltip", value: "QuickShareMac · Receiving off. Click to show transfers; right-click to enable receiving.", comment: "")
+		statusItem?.button?.setAccessibilityLabel(statusItem?.button?.toolTip)
 		let launchAtLogin:Bool
+		let requiresLoginApproval:Bool
 		if #available(macOS 13.0, *){
 			launchAtLogin=SMAppService.mainApp.status == .enabled
+			requiresLoginApproval=SMAppService.mainApp.status == .requiresApproval
 		}else{
 			launchAtLogin=false
+			requiresLoginApproval=false
 		}
 		let active=activeIncomingTransfers.map { id, info -> IncomingTransferDisplay in
 			let progress:Double?
@@ -171,19 +223,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 				progress=nil
 				status=NSLocalizedString("Receiving", value: "Receiving…", comment: "")
 			}
-			return IncomingTransferDisplay(deviceName: info.device.name, description: info.description, status: status, progress: progress,
-										   pendingID: info.accepted ? nil : id, pinCode: info.accepted ? nil : info.transfer.pinCode,
-										   remembered: rememberedDevices.contains(rememberedKey(for: info.device)))
+			let description=info.totalBytes>0 ? "\(info.description) · \(ByteCountFormatter.string(fromByteCount: info.totalBytes, countStyle: .file))" : info.description
+			return IncomingTransferDisplay(id: id, deviceName: info.device.name, description: description, status: status,
+									   state: info.accepted ? .receiving : .awaitingApproval, progress: progress, pinCode: info.transfer.pinCode,
+									   remembered: rememberedDevices.contains(rememberedKey(for: info.device)), receivedBytes: info.receivedBytes, totalBytes: info.totalBytes, savedFileURLs: info.transfer.savedFileURLs)
 		}
 		let orderedActive=active.sorted {
-			if ($0.pendingID != nil) != ($1.pendingID != nil){return $0.pendingID != nil}
-			return $0.deviceName < $1.deviceName
+			if ($0.state == .awaitingApproval) != ($1.state == .awaitingApproval){return $0.state == .awaitingApproval}
+			return (activeIncomingTransfers[$0.id]?.createdAt ?? .distantPast) < (activeIncomingTransfers[$1.id]?.createdAt ?? .distantPast)
 		}
 		windowController.update(receiving: isReceiving,
-								 startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey),
-								 launchAtLogin: launchAtLogin,
-								 rememberedDeviceCount: rememberedDevices.count,
-								 transfers: orderedActive+recentlyFinishedTransfers.values.sorted(by: {$0.deviceName < $1.deviceName}))
+								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]})
+		if settingsWindow != nil{
+			settingsController.update(startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey), launchAtLogin: launchAtLogin, requiresLoginApproval: requiresLoginApproval, rememberedDeviceCount: rememberedDevices.count)
+		}
 	}
 	
 	func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -264,7 +317,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 	func incomingTransfer(id: String, didFinishWith error: Error?) {
 		guard let transfer=self.activeIncomingTransfers[id] else {return}
 		self.activeIncomingTransfers.removeValue(forKey: id)
-		let completed=error==nil && (transfer.totalBytes==0 || transfer.receivedBytes>=transfer.totalBytes)
+		let completed=transfer.accepted && error==nil && (transfer.totalBytes==0 || transfer.receivedBytes>=transfer.totalBytes)
 		let status:String
 		if completed{
 			status=NSLocalizedString("TransferFinished", value: "Transfer finished", comment: "")
@@ -273,13 +326,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 		}else{
 			status=NSLocalizedString("TransferInterrupted", value: "Transfer interrupted", comment: "")
 		}
-		recentlyFinishedTransfers[id]=IncomingTransferDisplay(deviceName: transfer.device.name, description: transfer.description, status: status, progress: completed ? 1 : 0, pendingID: nil, pinCode: nil, remembered: false)
+		recentlyFinishedTransfers[id]=IncomingTransferDisplay(id: id, deviceName: transfer.device.name, description: transfer.description, status: status, state: completed ? .completed : .failed, progress: nil, pinCode: nil, remembered: false, receivedBytes: transfer.receivedBytes, totalBytes: transfer.totalBytes, savedFileURLs: completed ? transfer.transfer.savedFileURLs : [])
+		recentTransferOrder.insert(id, at: 0)
 		refreshWindow()
 		if error != nil{showMainWindow(nil)}
-		DispatchQueue.main.asyncAfter(deadline: .now()+(completed ? 5 : 15)) {
-			self.recentlyFinishedTransfers.removeValue(forKey: id)
-			self.refreshWindow()
-		}
 	}
 }
 
@@ -290,4 +340,5 @@ struct TransferInfo{
 	let totalBytes:Int64
 	var receivedBytes:Int64=0
 	var accepted:Bool=false
+	let createdAt=Date()
 }

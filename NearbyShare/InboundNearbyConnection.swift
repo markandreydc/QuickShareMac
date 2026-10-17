@@ -369,7 +369,7 @@ class InboundNearbyConnection: NearbyConnection{
 										  destinationURL: dest)
 				transferredFiles[file.payloadID]=info
 			}
-			let metadata=TransferMetadata(files: transferredFiles.map({$0.value.meta}), id: id, pinCode: pinCode)
+			let metadata=TransferMetadata(files: transferredFiles.map({$0.value.meta}), id: id, pinCode: pinCode, savedFileURLs: transferredFiles.values.map(\.destinationURL))
 			DispatchQueue.main.async {
 				self.delegate?.obtainUserConsent(for: metadata, from: self.remoteDeviceInfo!, connection: self)
 			}
@@ -391,7 +391,7 @@ class InboundNearbyConnection: NearbyConnection{
 										  destinationURL: dest)
 				transferredFiles[meta.payloadID]=info
 				DispatchQueue.main.async {
-					self.delegate?.obtainUserConsent(for: TransferMetadata(files: [info.meta], id: self.id, pinCode: self.pinCode), from: self.remoteDeviceInfo!, connection: self)
+					self.delegate?.obtainUserConsent(for: TransferMetadata(files: [info.meta], id: self.id, pinCode: self.pinCode, savedFileURLs: [info.destinationURL]), from: self.remoteDeviceInfo!, connection: self)
 				}
 			}else{
 				rejectTransfer(with: .unsupportedAttachmentType)

@@ -1,6 +1,181 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "ClearRecent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Clear" }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Close" }
+        }
+      }
+    },
+    "Dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Dismiss" }
+        }
+      }
+    },
+    "EnableReceiving" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Enable receiving" }
+        }
+      }
+    },
+    "EnableReceivingHint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Enable receiving to let nearby devices send files to this Mac." }
+        }
+      }
+    },
+    "IncomingFailureHelp" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Ask the sender to try again. Keep both devices on the same Wi-Fi network and check available disk space." }
+        }
+      }
+    },
+    "IncomingRequest" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Incoming request" }
+        }
+      }
+    },
+    "MenuReceivingOff" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Receiving: Off" }
+        }
+      }
+    },
+    "MenuReceivingOffTooltip" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "QuickShareMac · Receiving off. Click to show transfers; right-click to enable receiving." }
+        }
+      }
+    },
+    "MenuReceivingOn" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Receiving: On" }
+        }
+      }
+    },
+    "MenuReceivingOnTooltip" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "QuickShareMac · Receiving on. Click to show transfers; right-click for controls." }
+        }
+      }
+    },
+    "Minimize" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Minimize" }
+        }
+      }
+    },
+    "OpenDownloads" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Open Downloads" }
+        }
+      }
+    },
+    "PendingRequestCount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Incoming request · %d waiting" }
+        }
+      }
+    },
+    "ReceiveInstructions" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Open Quick Share on your Android device and choose “%@”.\nBoth devices must be on the same Wi-Fi network." }
+        }
+      }
+    },
+    "ReceivingOffDetail" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "New requests are paused. Transfers in progress can finish." }
+        }
+      }
+    },
+    "RecentTransfers" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Recent transfers · this session" }
+        }
+      }
+    },
+    "RememberDeviceName" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Remember this device name" }
+        }
+      }
+    },
+    "RememberedNames" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Remembered device names" }
+        }
+      }
+    },
+    "RememberNameExplanation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Remembering a name does not verify identity or skip approval. Always check the PIN." }
+        }
+      }
+    },
+    "Settings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Settings…" }
+        }
+      }
+    },
+    "SettingsTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "QuickShareMac Settings" }
+        }
+      }
+    },
+    "ShowInFinder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Show in Finder" }
+        }
+      }
+    },
+    "VerificationPIN" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Verification PIN" }
+        }
+      }
+    },
+    "Window" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Window" }
+        }
+      }
+    },
     "Accept" : {
       "localizations" : {
         "ar" : {
