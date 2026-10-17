@@ -185,28 +185,92 @@ struct UISmokeTests{
 		settings.show(.general)
 		layout(settingsWindow)
 		let nameField=descendants(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="CustomDeviceName"})!
+		let nameMessage=descendants(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="DeviceNameMessage"})!
+		let systemName=button("Use Mac’s name", in: settings.view)
+		let customName=button("Use a custom name", in: settings.view)
+		let saveName=button("Save changes", in: settings.view)
+		let cancelName=button("Cancel", in: settings.view)
 		var savedNames:[String?]=[]
-		settings.onDeviceNameChange={savedNames.append($0)}
-		nameField.stringValue="  Studio Mac  "
-		settingsWindow.makeFirstResponder(nameField)
+		var storedName:String?
+		func refreshNameSettings(){
+			settings.update(startReceivingOnLaunch: false, launchAtLogin: false, requiresLoginApproval: true, rememberedDeviceCount: 3, customDeviceName: storedName, systemDeviceName: "System Mac")
+		}
+		func editName(_ value:String){
+			settingsWindow.makeFirstResponder(nil)
+			nameField.stringValue=value
+			settings.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: nameField))
+			settingsWindow.makeFirstResponder(nameField)
+		}
+		settings.onDeviceNameChange={name in
+			savedNames.append(name)
+			storedName=name
+			refreshNameSettings() // Match the app's synchronous refresh after persistence.
+		}
+		refreshNameSettings()
+		expect(systemName.state == .on && customName.state == .off && nameField.isHidden, "The default must explicitly select the Mac's name and hide custom input")
+		expect(nameMessage.isHidden && !saveName.isEnabled && !cancelName.isEnabled, "Untouched name settings must not show an error or enable Save/Cancel")
+		expect(visible(settings.view).compactMap({$0 as? NSTextField}).contains(where: {$0.identifier?.rawValue=="SystemDeviceName" && $0.stringValue=="System Mac"}), "The system-name option must show the actual advertised fallback")
+		customName.performClick(nil)
+		expect(customName.state == .on && systemName.state == .off && !nameField.isHidden, "Choosing Custom must reveal its input and deselect the system option")
+		expect(nameField.stringValue=="System Mac" && saveName.isEnabled && savedNames.isEmpty, "Custom names must be prefilled without saving until explicitly approved")
+		editName("  Studio Mac  ")
 		expect(nameField.currentEditor() != nil, "The device name field must be focused before testing save")
-		button("Save name", in: settings.view).performClick(nil)
+		saveName.performClick(nil)
 		expect(savedNames.count==1 && savedNames[0]=="Studio Mac", "Settings must trim and save a custom device name once; got \(savedNames)")
 		expect(nameField.currentEditor()==nil, "Saving a valid name must remove focus from the field")
 		expect(nameField.stringValue=="Studio Mac", "The saved field must display the trimmed name")
-		nameField.stringValue="bad\nname"
-		settingsWindow.makeFirstResponder(nameField)
-		button("Save name", in: settings.view).performClick(nil)
-		expect(savedNames.count==1, "Invalid names must not be saved")
-		expect(nameField.currentEditor() != nil, "Invalid names must retain focus for correction")
+		expect(!saveName.isEnabled && !cancelName.isEnabled && nameMessage.stringValue=="Device name updated.", "Successful saves must confirm the change and clear dirty state")
+		refreshNameSettings()
+		expect(!nameMessage.isHidden && nameMessage.stringValue=="Device name updated.", "Background refreshes must preserve the save confirmation")
+		editName("  Studio Mac  ")
+		expect(!saveName.isEnabled && cancelName.isEnabled, "Whitespace-only differences must not enable a redundant save")
+		cancelName.performClick(nil)
+		editName("Uncommitted name")
+		refreshNameSettings()
+		expect(nameField.stringValue=="Uncommitted name", "Refreshes must preserve focused name drafts")
+		settingsWindow.makeFirstResponder(nil)
+		refreshNameSettings()
+		expect(nameField.stringValue=="Uncommitted name" && savedNames.count==1, "Losing focus and refreshing must neither discard nor save a draft")
+		settings.show(.updates)
+		settings.show(.general)
+		expect(nameField.stringValue=="Uncommitted name", "Switching Settings sections must preserve the draft without saving")
+		cancelName.performClick(nil)
+		expect(nameField.stringValue=="Studio Mac" && savedNames.count==1 && !cancelName.isEnabled, "Cancel must restore the saved name without a persistence callback")
+		for blank in ["","   "]{
+			editName(blank)
+			expect(!saveName.isEnabled && cancelName.isEnabled, "Empty and whitespace-only custom names must disable Save")
+			expect(!nameMessage.isHidden && nameMessage.stringValue=="Enter a name or select Use Mac’s name." && nameMessage.textColor == .secondaryLabelColor, "Blank custom input must show neutral guidance, not a technical validation error")
+		}
+		editName("bad\nname")
+		settings.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: nameField))
+		expect(!saveName.isEnabled && nameMessage.stringValue=="Remove line breaks or control characters.", "Invalid characters must get a specific inline message")
+		editName(String(repeating: "😀", count: 43))
+		expect(!saveName.isEnabled && nameMessage.stringValue=="Name is too long. Try a shorter name.", "Overlong Unicode names must get a friendly error while respecting the byte limit")
+		expect(savedNames.count==1, "Invalid drafts must never be persisted")
 		settingsWindow.setContentSize(NSSize(width: 520, height: 500))
 		layout(settingsWindow)
 		let settingsScroll=visible(settings.view).compactMap {$0 as? NSScrollView}.first!
 		expect(settingsScroll.documentView!.frame.width==settingsScroll.contentView.bounds.width, "Settings pages must fit horizontally at minimum size")
 		expect(settingsScroll.documentView!.frame.height>settingsScroll.contentView.bounds.height, "Expanded validation messages must scroll rather than clip at minimum size")
 		snapshot(settingsWindow, "settings-validation")
-		button("Use Mac’s name", in: settings.view).performClick(nil)
-		expect(savedNames.count==2 && savedNames[1]==nil, "Reset must restore the system name rather than save an empty name")
+		cancelName.performClick(nil)
+		systemName.performClick(nil)
+		expect(nameField.isHidden && saveName.isEnabled && savedNames.count==1, "Selecting the system name must be a draft, not an immediate reset")
+		cancelName.performClick(nil)
+		expect(customName.state == .on && nameField.stringValue=="Studio Mac" && !saveName.isEnabled, "Cancel must also restore the saved naming mode")
+		systemName.performClick(nil)
+		saveName.performClick(nil)
+		expect(savedNames.count==2 && savedNames[1]==nil && nameField.isHidden, "Saving the system option must clear the custom name, not persist a copied system name")
+		settings.onDeviceNameChange={_ in throw NSError(domain: "Test", code: 1, userInfo: [NSLocalizedDescriptionKey:"Could not save the device name."])}
+		customName.performClick(nil)
+		editName("Retry this name")
+		saveName.performClick(nil)
+		expect(saveName.isEnabled && nameField.stringValue=="Retry this name" && nameMessage.stringValue=="Could not save the device name.", "Persistence failures must preserve the draft and report failure instead of success")
+		cancelName.performClick(nil)
+		expect(systemName.state == .on && nameField.isHidden && nameMessage.isHidden, "Cancel after a failed save must restore the persisted mode and clear feedback")
+		storedName="Existing custom Mac"
+		refreshNameSettings()
+		expect(customName.state == .on && nameField.stringValue=="Existing custom Mac" && !saveName.isEnabled && !cancelName.isEnabled, "An existing saved custom name must load as a clean custom selection")
 		settingsWindow.setContentSize(NSSize(width: 700, height: 650))
 		settings.view.appearance=NSAppearance(named: .darkAqua)
 		settings.show(.updates)
@@ -409,11 +473,18 @@ struct UISmokeTests{
 		expect(identity.deviceName=="System Mac" && identity.customName==nil, "An unset device name must follow the Mac's system name")
 		try! identity.setCustomName("  Travel Mac 🖥️  ")
 		expect(identity.deviceName=="Travel Mac 🖥️", "Unicode device names must be stored without surrounding whitespace")
+		expect(identity.systemDeviceName=="System Mac", "The system-name option must show the fallback even while a custom override is active")
 		expect(LocalDeviceIdentity(preferences: UserDefaults(suiteName: domain)!).customName=="Travel Mac 🖥️", "The custom name must persist across identity instances")
 		for invalid in ["   ","bad\u{0000}name",String(repeating: "😀", count: 64),String(repeating: "a", count: LocalDeviceIdentity.maximumNameBytes+1)]{
 			do{try identity.setCustomName(invalid); expect(false, "Invalid device name was accepted")}
 			catch{expect(identity.deviceName=="Travel Mac 🖥️", "Invalid input must preserve the existing name")}
 		}
+		for (input,message) in [("   ","Enter a device name."),("bad\nname","Remove line breaks or control characters."),(String(repeating: "😀", count: 43),"Name is too long. Try a shorter name.")]{
+			do{_ = try LocalDeviceIdentity.validate(input); expect(false, "Invalid names must fail validation")}
+			catch{expect(error.localizedDescription==message, "Each invalid input must have a specific nontechnical explanation")}
+		}
+		let boundaryName=String(repeating: "😀", count: 42)+"abc"
+		expect((try? LocalDeviceIdentity.validate(boundaryName))==boundaryName, "Valid Unicode names at the discovery byte limit must remain accepted")
 		try! identity.setCustomName(nil)
 		expect(identity.deviceName=="System Mac", "Reset must remove the override")
 		let longSystem=LocalDeviceIdentity(preferences: preferences, systemName: {String(repeating: "😀", count: 100)})

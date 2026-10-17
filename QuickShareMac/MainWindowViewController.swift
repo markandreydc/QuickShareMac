@@ -455,7 +455,7 @@ final class MainWindowViewController:NSViewController{
 	}
 }
 
-final class SettingsViewController:NSViewController{
+final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	enum Section:Int{case general, updates, about}
 	static let defaultSize=NSSize(width: 560, height: 540)
 	private(set) var selectedSection:Section = .general
@@ -466,7 +466,7 @@ final class SettingsViewController:NSViewController{
 	var onLaunchAtLoginChange:((Bool)->Void)?
 	var onOpenLoginItems:(()->Void)?
 	var onForgetRememberedDevices:(()->Void)?
-	var onDeviceNameChange:((String?)->Void)?
+	var onDeviceNameChange:((String?) throws -> Void)?
 	var onCheckForUpdates:(()->Void)?
 	var onAutomaticUpdateChecksChange:((Bool)->Void)?
 	var onViewRelease:(()->Void)?
@@ -476,7 +476,18 @@ final class SettingsViewController:NSViewController{
 	private let updateVersionLabel=WindowUI.label("", size: 12, secondary: true)
 	private let updateStatusLabel=WindowUI.label("", size: 11, secondary: true)
 	private let nameField=NSTextField(string: "")
-	private let nameError=WindowUI.label("", size: 11)
+	private let systemNameButton=NSButton(radioButtonWithTitle: NSLocalizedString("UseMacName", value: "Use Mac’s name", comment: ""), target: nil, action: nil)
+	private let customNameButton=NSButton(radioButtonWithTitle: NSLocalizedString("UseCustomDeviceName", value: "Use a custom name", comment: ""), target: nil, action: nil)
+	private let systemNameLabel=WindowUI.label("", size: 12, secondary: true)
+	private let nameMessage=WindowUI.label("", size: 11, secondary: true)
+	private let saveNameButton=NSButton(title: NSLocalizedString("SaveDeviceNameChanges", value: "Save changes", comment: ""), target: nil, action: nil)
+	private let cancelNameButton=NSButton(title: NSLocalizedString("Cancel", value: "Cancel", comment: ""), target: nil, action: nil)
+	private var savedCustomName:String?
+	private var systemDeviceName=LocalDeviceIdentity.shared.systemDeviceName
+	private var usesCustomName=false
+	private var showNameValidation=false
+	private var nameSaveError:String?
+	private var nameConfirmation:DispatchWorkItem?
 	private var savingName=false
 	private let startReceivingButton=NSButton(checkboxWithTitle: NSLocalizedString("StartReceivingOnLaunch", value: "Start receiving when app opens", comment: ""), target: nil, action: nil)
 	private let loginButton=NSButton(checkboxWithTitle: NSLocalizedString("LaunchAtLogin", value: "Launch at login", comment: ""), target: nil, action: nil)
@@ -509,23 +520,32 @@ final class SettingsViewController:NSViewController{
 		let general=page(.general)
 		let device=card(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""), in: general)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("DeviceNameExplanation", value: "Shown to nearby devices. Your Mac’s system name is unchanged.", comment: ""), size: 12, secondary: true), in: device)
+		for button in [systemNameButton,customNameButton]{
+			button.target=self
+			button.action=#selector(nameModeChanged(_:))
+		}
+		device.addArrangedSubview(systemNameButton)
+		systemNameLabel.identifier=NSUserInterfaceItemIdentifier("SystemDeviceName")
+		WindowUI.fill(systemNameLabel, in: device)
+		device.addArrangedSubview(customNameButton)
 		nameField.identifier=NSUserInterfaceItemIdentifier("CustomDeviceName")
-		nameField.setAccessibilityLabel(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""))
-		nameField.placeholderString=Host.current().localizedName ?? ProcessInfo.processInfo.hostName
-		nameField.target=self
-		nameField.action=#selector(saveName(_:))
+		nameField.setAccessibilityLabel(NSLocalizedString("CustomDeviceNameLabel", value: "Custom device name", comment: ""))
+		nameField.placeholderString=NSLocalizedString("EnterDeviceName", value: "Enter a device name", comment: "")
+		nameField.delegate=self
 		WindowUI.fill(nameField, in: device)
+		nameMessage.identifier=NSUserInterfaceItemIdentifier("DeviceNameMessage")
+		WindowUI.fill(nameMessage, in: device)
 		let nameActions=WindowUI.stack(.horizontal)
-		let save=NSButton(title: NSLocalizedString("SaveDeviceName", value: "Save name", comment: ""), target: self, action: #selector(saveName(_:)))
-		save.bezelStyle = .rounded
-		nameActions.addArrangedSubview(save)
-		let reset=NSButton(title: NSLocalizedString("UseMacName", value: "Use Mac’s name", comment: ""), target: self, action: #selector(resetName(_:)))
-		reset.bezelStyle = .rounded
-		nameActions.addArrangedSubview(reset)
+		cancelNameButton.target=self
+		cancelNameButton.action=#selector(cancelNameChanges(_:))
+		saveNameButton.target=self
+		saveNameButton.action=#selector(saveName(_:))
+		for button in [cancelNameButton,saveNameButton]{
+			button.bezelStyle = .rounded
+			nameActions.addArrangedSubview(button)
+		}
 		device.addArrangedSubview(nameActions)
-		nameError.textColor = .systemRed
-		WindowUI.fill(nameError, in: device)
-		nameError.isHidden=true
+		resetNameDraft()
 		let startup=card(NSLocalizedString("StartupSettings", value: "Startup", comment: ""), in: general)
 		startReceivingButton.target=self
 		startReceivingButton.action=#selector(startReceivingChanged(_:))
@@ -624,9 +644,18 @@ final class SettingsViewController:NSViewController{
 		if let section=Section(rawValue: sender.selectedSegment){show(section)}
 	}
 
-	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int, customDeviceName:String?=nil){
+	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int, customDeviceName:String?=nil, systemDeviceName:String = LocalDeviceIdentity.shared.systemDeviceName){
 		_ = view
-		if nameField.currentEditor()==nil{nameField.stringValue=customDeviceName ?? ""}
+		let hadNameDraft=hasNameDraftChanges
+		let savedNameChanged=savedCustomName != customDeviceName
+		savedCustomName=customDeviceName
+		self.systemDeviceName=systemDeviceName
+		systemNameLabel.stringValue=systemDeviceName
+		if savedNameChanged && !hadNameDraft && !savingName{resetNameDraft()}
+		else{
+			if !usesCustomName && !hadNameDraft{nameField.stringValue=systemDeviceName}
+			updateNameControls()
+		}
 		startReceivingButton.state=startReceivingOnLaunch ? .on : .off
 		loginButton.state=launchAtLogin ? .on : .off
 		if #available(macOS 13.0, *){loginHelpButton.isHidden = !requiresLoginApproval}
@@ -652,18 +681,92 @@ final class SettingsViewController:NSViewController{
 	@objc private func launchAtLoginChanged(_ sender:NSButton){onLaunchAtLoginChange?(sender.state == .on)}
 	@objc private func openLoginItems(_ sender:NSButton){onOpenLoginItems?()}
 	@objc private func forgetDevices(_ sender:NSButton){onForgetRememberedDevices?()}
+	private var hasNameDraftChanges:Bool{
+		usesCustomName != (savedCustomName != nil) || (usesCustomName && nameField.stringValue != savedCustomName)
+	}
+	private func clearNameFeedback(){
+		nameConfirmation?.cancel()
+		nameConfirmation=nil
+		nameSaveError=nil
+	}
+	private func resetNameDraft(){
+		clearNameFeedback()
+		usesCustomName=savedCustomName != nil
+		nameField.stringValue=savedCustomName ?? systemDeviceName
+		systemNameLabel.stringValue=systemDeviceName
+		showNameValidation=false
+		updateNameControls()
+	}
+	private func updateNameControls(){
+		systemNameButton.state=usesCustomName ? .off : .on
+		customNameButton.state=usesCustomName ? .on : .off
+		nameField.isHidden = !usesCustomName
+		let validated=try? LocalDeviceIdentity.validate(nameField.stringValue)
+		let valid = !usesCustomName || validated != nil
+		let candidate=usesCustomName ? validated : nil
+		saveNameButton.isEnabled=valid && candidate != savedCustomName
+		cancelNameButton.isEnabled=hasNameDraftChanges
+		nameMessage.textColor = .secondaryLabelColor
+		nameMessage.isHidden=false
+		if let error=nameSaveError{
+			nameMessage.stringValue=error
+			nameMessage.textColor = .systemRed
+		}else if nameConfirmation != nil{
+			nameMessage.stringValue=NSLocalizedString("DeviceNameUpdated", value: "Device name updated.", comment: "")
+		}else if usesCustomName && nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty{
+			nameMessage.stringValue=NSLocalizedString("CustomDeviceNameGuidance", value: "Enter a name or select Use Mac’s name.", comment: "")
+		}else if usesCustomName && !valid && showNameValidation{
+			do{_ = try LocalDeviceIdentity.validate(nameField.stringValue)}
+			catch{nameMessage.stringValue=error.localizedDescription; nameMessage.textColor = .systemRed}
+		}else{nameMessage.isHidden=true}
+	}
+	@objc private func nameModeChanged(_ sender:NSButton){
+		let selectedCustom=sender === customNameButton
+		guard selectedCustom != usesCustomName else {return}
+		view.window?.makeFirstResponder(nil)
+		clearNameFeedback()
+		usesCustomName=selectedCustom
+		if usesCustomName && nameField.stringValue.isEmpty{nameField.stringValue=savedCustomName ?? systemDeviceName}
+		showNameValidation=false
+		updateNameControls()
+		if usesCustomName{view.window?.makeFirstResponder(nameField)}
+	}
+	func controlTextDidChange(_ notification:Notification){
+		guard notification.object as? NSTextField === nameField, !savingName else {return}
+		clearNameFeedback()
+		updateNameControls()
+	}
+	func controlTextDidEndEditing(_ notification:Notification){
+		guard notification.object as? NSTextField === nameField, !savingName else {return}
+		showNameValidation=true
+		updateNameControls()
+	}
+	@objc private func cancelNameChanges(_ sender:Any?){
+		savingName=true
+		defer{savingName=false}
+		view.window?.makeFirstResponder(nil)
+		resetNameDraft()
+	}
 	@objc private func saveName(_ sender:Any?){
-		// Ending field editing can dispatch this action again through AppKit.
 		guard !savingName else {return}
 		savingName=true
 		defer{savingName=false}
+		clearNameFeedback()
 		do{
-			let name=try LocalDeviceIdentity.validate(nameField.stringValue)
-			nameError.isHidden=true
+			let name=usesCustomName ? try LocalDeviceIdentity.validate(nameField.stringValue) : nil
+			guard name != savedCustomName else {return}
+			try onDeviceNameChange?(name)
+			savedCustomName=name
 			view.window?.makeFirstResponder(nil)
-			nameField.stringValue=name
-			onDeviceNameChange?(name)
-		}catch{nameError.stringValue=error.localizedDescription; nameError.isHidden=false}
+			resetNameDraft()
+			let confirmation=DispatchWorkItem { [weak self] in
+				self?.nameConfirmation=nil
+				self?.updateNameControls()
+			}
+			nameConfirmation=confirmation
+			DispatchQueue.main.asyncAfter(deadline: .now()+3, execute: confirmation)
+		}catch{nameSaveError=error.localizedDescription}
+		updateNameControls()
 	}
-	@objc private func resetName(_ sender:Any?){nameField.stringValue=""; nameError.isHidden=true; onDeviceNameChange?(nil)}
+	deinit{nameConfirmation?.cancel()}
 }

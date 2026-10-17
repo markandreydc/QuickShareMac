@@ -72,7 +72,7 @@ Turning receiving off stops new incoming connections; transfers already in progr
 
 In **General**, choose whether receiving starts when the app opens. On macOS 13 or later, you can also enable **Launch at login**. On older systems, add the app to Login Items in System Settings.
 
-To use a custom name, enter it under **Device name** in Settings and click **Save name**. **Use Mac’s name** restores the system name. This changes only QuickShareMac’s identity, not your computer’s name. Discovery, receiving instructions, and outgoing handshakes use the chosen name, including the Share extension. The extension has read-only access to the separate preference containing that name.
+Under **Device name** in Settings, choose **Use Mac’s name** or **Use a custom name**. The system option shows the name nearby devices will see; choosing Custom reveals an input prefilled with the current name. Click **Save changes** to apply your choice, or **Cancel** to restore the saved setting. Empty custom input shows guidance instead of a technical error, and Save stays disabled until the name is valid and changed. This changes only QuickShareMac’s identity, not your computer’s name. Discovery, receiving instructions, and outgoing handshakes use the chosen name, including the Share extension. The extension has read-only access to the separate preference containing that name.
 
 Recent transfer results last for the current app session, until you dismiss or clear them. They are not a permanent transfer log.
 

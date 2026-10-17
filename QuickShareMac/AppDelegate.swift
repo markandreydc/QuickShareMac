@@ -120,11 +120,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			self.updateResults.show(result, currentVersion: self.updates.currentVersion)
 		}
 		settingsController.onDeviceNameChange={ [weak self] name in
-			do{
-				try LocalDeviceIdentity.shared.setCustomName(name)
-				NearbyConnectionManager.shared.refreshDeviceName()
-				self?.refreshWindow()
-			}catch{self?.showError(error)}
+			try LocalDeviceIdentity.shared.setCustomName(name)
+			NearbyConnectionManager.shared.refreshDeviceName()
+			self?.refreshWindow()
 		}
 		windowController.onTransferDecision={ [weak self] id, accepted in
 			self?.respondToIncomingTransfer(id: id, decision: accepted)

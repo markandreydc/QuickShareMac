@@ -15,7 +15,9 @@ It covers Send/Receive navigation, file-only selection and drag-and-drop, Share
 extension link handling, approval,
 progress, cancellation, retry isolation, background completion, history, and native
 menu bar behavior (menu attachment, appearance defaults, actions, and live state).
-It also checks device-name validation/persistence, read-only visibility details,
+It also checks explicit system/custom device-name choices, prefilled custom input,
+Save/Cancel draft handling, refresh isolation, friendly inline validation,
+save confirmation/failure handling, and name persistence; read-only visibility details,
 availability dropdowns, timer replacement/expiry, and deadlines passed during sleep.
 Settings and status-menu update actions, busy states, and update availability are
 also covered, without making update requests or opening a browser.

@@ -21,7 +21,9 @@ public final class LocalDeviceIdentity{
 		return try? Self.validate(value)
 	}
 	public var deviceName:String{
-		if let customName=customName{return customName}
+		customName ?? systemDeviceName
+	}
+	public var systemDeviceName:String{
 		let name=systemName().components(separatedBy: .controlCharacters).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
 		var result=""
 		for character in name{
@@ -38,8 +40,13 @@ public final class LocalDeviceIdentity{
 	}
 	public static func validate(_ value:String) throws -> String{
 		let name=value.trimmingCharacters(in: .whitespacesAndNewlines)
-		guard !name.isEmpty, name.rangeOfCharacter(from: .controlCharacters)==nil, name.utf8.count<=maximumNameBytes else {
-			throw NSError(domain: "QuickShareMac.DeviceName", code: 1, userInfo: [NSLocalizedDescriptionKey:NSLocalizedString("InvalidDeviceName", value: "Enter a device name without control characters, up to 171 UTF-8 bytes.", comment: "")])
+		let message:String?
+		if name.isEmpty{message=NSLocalizedString("DeviceNameRequired", value: "Enter a device name.", comment: "")}
+		else if name.rangeOfCharacter(from: .controlCharacters) != nil{message=NSLocalizedString("DeviceNameControlCharacters", value: "Remove line breaks or control characters.", comment: "")}
+		else if name.utf8.count>maximumNameBytes{message=NSLocalizedString("DeviceNameTooLong", value: "Name is too long. Try a shorter name.", comment: "")}
+		else{message=nil}
+		if let message=message{
+			throw NSError(domain: "QuickShareMac.DeviceName", code: 1, userInfo: [NSLocalizedDescriptionKey:message])
 		}
 		return name
 	}
