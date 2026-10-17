@@ -18,6 +18,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private let windowController=MainWindowViewController()
 	private let settingsController=SettingsViewController()
 	private let availability=ReceivingAvailability()
+	private let updates=UpdateChecker()
+	private var checkUpdatesMenuItem:NSMenuItem?
+	private var updateAlert:NSAlert?
 	private var wakeObserver:NSObjectProtocol?
 	private var activeIncomingTransfers:[String:TransferInfo]=[:]
 	private var recentlyFinishedTransfers:[String:IncomingTransferDisplay]=[:]
@@ -36,6 +39,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		let appMenu=NSMenu(title: "QuickShareMac")
 		let settingsItem=appMenu.addItem(withTitle: NSLocalizedString("Settings", value: "Settings…", comment: ""), action: #selector(showSettings(_:)), keyEquivalent: ",")
 		settingsItem.target=self
+		checkUpdatesMenuItem=appMenu.addItem(withTitle: NSLocalizedString("CheckForUpdates", value: "Check for Updates…", comment: ""), action: #selector(checkForUpdates(_:)), keyEquivalent: "")
+		checkUpdatesMenuItem?.target=self
 		appMenu.addItem(.separator())
 		appMenu.addItem(withTitle: NSLocalizedString("Quit", value: "Quit QuickShareMac", comment: ""), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 		let appMenuItem=NSMenuItem(title: "QuickShareMac", action: nil, keyEquivalent: "")
@@ -67,7 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		statusItem=NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 		statusMenu.stateProvider={ [weak self] in
 			guard let self=self else {return StatusBarMenu.State(receiving: false, canSendFiles: false)}
-			return StatusBarMenu.State(receiving: NearbyConnectionManager.shared.isReceiving, canSendFiles: !self.windowController.sendController.sender.isTransferring, deviceName: LocalDeviceIdentity.shared.deviceName, duration: self.availability.duration, expiresAt: self.availability.expiresAt)
+			return StatusBarMenu.State(receiving: NearbyConnectionManager.shared.isReceiving, canSendFiles: !self.windowController.sendController.sender.isTransferring, deviceName: LocalDeviceIdentity.shared.deviceName, duration: self.availability.duration, expiresAt: self.availability.expiresAt, checkingForUpdates: self.updates.isChecking, availableUpdateVersion: self.updates.availableRelease?.tagName)
 		}
 		statusMenu.onShow={ [weak self] in self?.showMainWindow(nil) }
 		statusMenu.onSendFiles={ [weak self] in self?.sendFiles(nil) }
@@ -75,6 +80,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		statusMenu.onDurationChange={ [weak self] duration in self?.availability.select(duration) }
 		statusMenu.onWillOpen={ [weak self] in self?.availability.checkExpiration() }
 		statusMenu.onSettings={ [weak self] in self?.showSettings(nil) }
+		statusMenu.onCheckForUpdates={ [weak self] in self?.checkForUpdates(nil) }
+		statusMenu.onViewRelease={ [weak self] in self?.viewUpdateRelease() }
 		statusMenu.onQuit={NSApplication.shared.terminate(nil)}
 		if let statusItem=statusItem{statusMenu.attach(to: statusItem)}
 		statusItem?.behavior = .removalAllowed
@@ -93,6 +100,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		availability.onChange={ [weak self] in self?.refreshWindow() }
 		wakeObserver=NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main){ [weak self] _ in
 			self?.availability.checkExpiration()
+			self?.updates.checkAutomaticallyIfDue()
 			self?.refreshWindow()
 		}
 		windowController.onOpenSettings={ [weak self] in self?.showSettings(nil) }
@@ -103,6 +111,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		}
 		settingsController.onLaunchAtLoginChange={ [weak self] enabled in self?.setLaunchAtLogin(enabled) }
 		settingsController.onOpenLoginItems={ [weak self] in self?.openLoginItems(nil) }
+		settingsController.onCheckForUpdates={ [weak self] in self?.checkForUpdates(nil) }
+		settingsController.onViewRelease={ [weak self] in self?.viewUpdateRelease() }
+		settingsController.onAutomaticUpdateChecksChange={ [weak self] enabled in self?.updates.setAutomaticChecks(enabled) }
+		updates.onChange={ [weak self] in self?.refreshWindow() }
+		updates.onResult={ [weak self] result, manual in if manual{self?.showUpdateResult(result)} }
 		settingsController.onDeviceNameChange={ [weak self] name in
 			do{
 				try LocalDeviceIdentity.shared.setCustomName(name)
@@ -134,6 +147,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		if UserDefaults.standard.bool(forKey: startReceivingKey){setReceiving(true)}
 		refreshWindow()
 		showMainWindow(nil)
+		updates.start()
 	}
 
 	@objc private func showMainWindow(_ sender:Any?){
@@ -148,18 +162,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		windowController.sendController.chooseFiles(sender)
 	}
 	func applicationWillTerminate(_ notification:Notification){
+		updates.shutdown()
 		availability.stopped()
 		if let observer=wakeObserver{NSWorkspace.shared.notificationCenter.removeObserver(observer)}
 		windowController.sendController.sender.shutdown()
 	}
 	func validateMenuItem(_ item:NSMenuItem) -> Bool{
+		if item.action == #selector(checkForUpdates(_:)){return !updates.isChecking}
 		if item.action == #selector(sendFiles(_:)){return !windowController.sendController.sender.isTransferring}
 		return true
 	}
 
 	@objc private func showSettings(_ sender:Any?){
 		if settingsWindow==nil{
-			let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 500), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+			let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 670), styleMask: [.titled, .closable], backing: .buffered, defer: false)
 			window.title=NSLocalizedString("SettingsTitle", value: "QuickShareMac Settings", comment: "")
 			window.contentViewController=settingsController
 			window.isReleasedWhenClosed=false
@@ -222,10 +238,53 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		}
 	}
 
+	@objc private func checkForUpdates(_ sender:Any?){
+		if let alert=updateAlert{alert.window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return}
+		updates.check()
+	}
+	private func viewUpdateRelease(){
+		guard let release=updates.availableRelease, release.isValid else {return}
+		NSWorkspace.shared.open(release.pageURL)
+	}
+	private func showUpdateResult(_ result:Result<UpdateChecker.Outcome,UpdateCheckError>){
+		guard updateAlert==nil else {return}
+		showSettings(nil)
+		guard let window=settingsWindow, window.attachedSheet==nil else {return}
+		let alert=NSAlert()
+		var destination:URL?
+		switch result{
+		case .success(.available(let release)):
+			alert.messageText=NSLocalizedString("UpdateAvailableTitle", value: "A QuickShareMac update is available", comment: "")
+			alert.informativeText=String(format: NSLocalizedString("UpdateAvailableMessage", value: "QuickShareMac %@ is available. You have %@.\n\nOpen the release page to download the update. Quit QuickShareMac after your transfers finish before replacing the app.", comment: ""), release.tagName, updates.currentVersion)
+			destination=release.pageURL
+		case .success(.upToDate):
+			alert.messageText=NSLocalizedString("UpdateUpToDate", value: "You're up to date.", comment: "")
+			alert.informativeText=String(format: NSLocalizedString("UpdateCurrentMessage", value: "You're using QuickShareMac %@. No newer stable release is available.", comment: ""), updates.currentVersion)
+		case .success(.noRelease):
+			alert.messageText=NSLocalizedString("UpdateNoRelease", value: "No published stable release is available yet.", comment: "")
+			alert.informativeText=NSLocalizedString("UpdateNoReleaseMessage", value: "Check again after a stable GitHub release has been published. A tag alone is not a release.", comment: "")
+		case .failure(let error):
+			alert.alertStyle = .warning
+			alert.messageText=NSLocalizedString("UpdateCheckFailed", value: "Couldn't check for updates", comment: "")
+			alert.informativeText=error.localizedDescription
+			destination=UpdateChecker.releasesURL
+		}
+		if destination != nil{
+			alert.addButton(withTitle: NSLocalizedString("ViewRelease", value: "View Release", comment: ""))
+			alert.addButton(withTitle: NSLocalizedString("UpdateLater", value: "Later", comment: ""))
+		}else{alert.addButton(withTitle: NSLocalizedString("UpdateOK", value: "OK", comment: ""))}
+		updateAlert=alert
+		alert.beginSheetModal(for: window){ [weak self] response in
+			self?.updateAlert=nil
+			if response == .alertFirstButtonReturn, let destination=destination{NSWorkspace.shared.open(destination)}
+		}
+	}
+
 	private func refreshWindow(){
 		availability.checkExpiration()
 		let isReceiving=NearbyConnectionManager.shared.isReceiving
 		statusMenu.refresh()
+		checkUpdatesMenuItem?.title=updates.isChecking ? NSLocalizedString("CheckingForUpdates", value: "Checking for updates…", comment: "") : NSLocalizedString("CheckForUpdates", value: "Check for Updates…", comment: "")
 		statusItem?.button?.toolTip=statusMenu.toolTip
 		statusItem?.button?.setAccessibilityLabel(statusItem?.button?.toolTip)
 		let launchAtLogin:Bool
@@ -266,6 +325,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]}, deviceName: LocalDeviceIdentity.shared.deviceName, duration: availability.duration, expiresAt: availability.expiresAt)
 		if settingsWindow != nil{
 			settingsController.update(startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey), launchAtLogin: launchAtLogin, requiresLoginApproval: requiresLoginApproval, rememberedDeviceCount: rememberedDevices.count, customDeviceName: LocalDeviceIdentity.shared.customName)
+			settingsController.updateUpdates(automatic: updates.automaticChecks, checking: updates.isChecking, currentVersion: updates.currentVersion, availableRelease: updates.availableRelease, status: updates.statusText)
 		}
 	}
 	

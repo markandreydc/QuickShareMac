@@ -21,6 +21,7 @@ Developed by Mark Andrey · github.com/markandreydc
 - Set a custom device name without renaming your Mac.
 - Choose receiving availability for **10 minutes**, **30 minutes**, **1 hour**, or **Indefinitely** (the default).
 - Configure launch at login, receiving on startup, and remembered device names in Settings.
+- Check GitHub for updates manually, or opt into daily checks—no automatic downloads or installation.
 
 ## Getting started
 
@@ -62,6 +63,18 @@ In **Settings…**, choose whether receiving starts when the app opens. On macOS
 To use a custom name, enter it under **Device name** in Settings and click **Save name**. **Use Mac’s name** restores the system name. This changes only QuickShareMac’s identity, not your computer’s name. Discovery, receiving instructions, and outgoing handshakes use the chosen name, including the Share extension. The extension has read-only access to the separate preference containing that name.
 
 Recent transfer results last for the current app session, until you dismiss or clear them. They are not a permanent transfer log.
+
+### Check for updates
+
+Choose **Check for Updates…** in the menu bar menu, the QuickShareMac application menu, or Settings. QuickShareMac compares its installed version with the latest stable [GitHub release](https://github.com/markandreydc/QuickShareMac/releases). It handles version tags such as `v1.0.0`, `v1.1`, and `v1` numerically, ignores build metadata, and does not offer prereleases or downgrades.
+
+**Automatically check for updates daily** is **off by default**. When enabled, the app checks at most once every 24 hours while running (including after launch or wake). Background checks show an available update in Settings and the menu without interrupting transfers with a dialog. Manual checks can run between daily checks; duplicate in-flight requests and GitHub rate-limit retries are suppressed. Known available updates are cached between launches.
+
+**View Release** opens the release page in your browser. Download the ZIP yourself, let transfers finish, quit QuickShareMac, and replace the app. There is **no Sparkle dependency, automatic download, or automatic installation**. GitHub/network failures are not mistaken for “up to date.”
+
+Update checks contact `api.github.com` using HTTPS. GitHub receives your IP address and the app version in its User-Agent, but QuickShareMac does not send files, device names, transfer history, credentials, or analytics. The checker uses no GitHub token or persistent cookies. With automatic checks off, no update request is sent until you ask for one.
+
+For maintainers: publish a **stable GitHub Release** in `markandreydc/QuickShareMac` with a version tag such as `v1.1.0` and attach `QuickShareMac.app.zip` and its checksum. A Git tag alone is not enough. Drafts and prereleases are not offered; GitHub's `/releases/latest` endpoint determines the latest stable release.
 
 ## Installation
 
@@ -143,7 +156,7 @@ This is intentional: receiving and active transfers continue in the background. 
 
 ## Limitations and privacy
 
-- **Local network only.** Wi-Fi Direct, Bluetooth transfers, and internet relay are not implemented.
+- **Transfers are local network only.** Wi-Fi Direct, Bluetooth transfers, and internet relay are not implemented. Update checks optionally contact GitHub, as described above.
 - **Visible on your network while receiving is enabled.** Contact-only visibility is not supported.
 - **Approval is always required.** Remembered device names are not persistent, verified sender identities.
 - **Folders must be compressed first.** Send a ZIP file rather than a directory.

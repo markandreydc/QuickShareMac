@@ -124,9 +124,10 @@ struct UISmokeTests{
 		expect(visible(controller.view).compactMap({$0 as? NSScrollView}).first!.frame.width>600, "Transfer list must expand with the window")
 
 		let settings=SettingsViewController()
-		let settingsWindow=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 500), styleMask: [.titled], backing: .buffered, defer: false)
+		let settingsWindow=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 670), styleMask: [.titled], backing: .buffered, defer: false)
 		settingsWindow.contentViewController=settings
 		settings.update(startReceivingOnLaunch: true, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 0)
+		settings.updateUpdates(automatic: false, checking: false, currentVersion: "1.0.0", availableRelease: nil, status: "")
 		layout(settingsWindow)
 		for credit in ["Developed by Mark Andrey · github.com/markandreydc", "Based on NearDrop by grishka · github.com/grishka/NearDrop"]{
 			let label=visible(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.stringValue==credit})
@@ -137,6 +138,29 @@ struct UISmokeTests{
 		settings.update(startReceivingOnLaunch: false, launchAtLogin: false, requiresLoginApproval: true, rememberedDeviceCount: 3)
 		expect(button("Forget all", in: settings.view).isEnabled, "Stored names should be forgettable")
 		_ = button("Set up login item in System Settings…", in: settings.view)
+		var updateChecks=0
+		settings.onCheckForUpdates={updateChecks+=1}
+		button("Check for Updates…", in: settings.view).performClick(nil)
+		expect(updateChecks==1, "Settings must wire manual update checks")
+		let automatic=button("Automatically check for updates daily", in: settings.view)
+		expect(automatic.state == .off, "Automatic update checks must be opt-in")
+		var automaticEnabled=false
+		settings.onAutomaticUpdateChecksChange={automaticEnabled=$0}
+		automatic.performClick(nil)
+		expect(automaticEnabled, "Settings must forward the automatic-check preference")
+		settings.updateUpdates(automatic: true, checking: true, currentVersion: "1.0.0", availableRelease: nil, status: "Checking for updates…")
+		expect(!button("Checking for updates…", in: settings.view).isEnabled, "A pending check must disable duplicate manual checks")
+		let release=UpdateRelease(tagName: "v1.1.0", pageURL: URL(string: "https://github.com/markandreydc/QuickShareMac/releases/tag/v1.1.0")!)
+		settings.updateUpdates(automatic: true, checking: false, currentVersion: "1.0.0", availableRelease: release, status: "Update available: v1.1.0")
+		var viewed=false
+		settings.onViewRelease={viewed=true}
+		button("View Release", in: settings.view).performClick(nil)
+		expect(viewed, "Settings must expose a release-page action for an available update")
+		layout(settingsWindow)
+		for title in ["Check for Updates…", "View Release", "Automatically check for updates daily"]{
+			let control=button(title, in: settings.view)
+			expect(settings.view.bounds.contains(control.convert(control.bounds, to: settings.view)), "Update controls must fit in Settings")
+		}
 		snapshot(settingsWindow, "settings")
 		let nameField=descendants(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="CustomDeviceName"})!
 		var savedNames:[String?]=[]
@@ -215,7 +239,9 @@ struct UISmokeTests{
 		var canSendFiles=true
 		var duration:ReceivingDuration = .indefinitely
 		var expiresAt:Date?
-		controller.stateProvider={StatusBarMenu.State(receiving: receiving, canSendFiles: canSendFiles, deviceName: "Studio Mac", duration: duration, expiresAt: expiresAt)}
+		var checkingForUpdates=false
+		var updateVersion:String?
+		controller.stateProvider={StatusBarMenu.State(receiving: receiving, canSendFiles: canSendFiles, deviceName: "Studio Mac", duration: duration, expiresAt: expiresAt, checkingForUpdates: checkingForUpdates, availableUpdateVersion: updateVersion)}
 		let item=NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 		defer{NSStatusBar.system.removeStatusItem(item)}
 		controller.attach(to: item)
@@ -261,6 +287,28 @@ struct UISmokeTests{
 		controller.onSettings={settings=true}
 		controller.menu.performActionForItem(at: controller.menu.indexOfItem(withTitle: "Settings…"))
 		expect(settings, "Settings must remain available in the native menu")
+		var updateChecks=0
+		controller.onCheckForUpdates={updateChecks+=1}
+		let checkIndex=controller.menu.indexOfItem(withTitle: "Check for Updates…")
+		controller.menu.performActionForItem(at: checkIndex)
+		expect(updateChecks==1, "The status menu must wire manual update checks")
+		checkingForUpdates=true
+		controller.refresh()
+		expect(!controller.menu.item(at: checkIndex)!.isEnabled, "The status menu must disable checks while one is pending")
+		controller.menu.performActionForItem(at: checkIndex)
+		expect(updateChecks==1, "Repeated actions must not start overlapping checks")
+		checkingForUpdates=false
+		updateVersion="v1.1.0"
+		controller.refresh()
+		let available=controller.menu.items.first(where: {$0.title=="Update available: v1.1.0"})!
+		expect(!available.isHidden, "A background update must be visible without an interrupting dialog")
+		var opened=false
+		controller.onViewRelease={opened=true}
+		controller.menu.performActionForItem(at: controller.menu.index(of: available))
+		expect(opened, "The available-update item must open the release page")
+		updateVersion=nil
+		controller.refresh()
+		expect(available.isHidden, "The menu must hide update availability when none is known")
 		var quit=false
 		controller.onQuit={quit=true}
 		controller.menu.performActionForItem(at: controller.menu.indexOfItem(withTitle: "Quit QuickShareMac"))

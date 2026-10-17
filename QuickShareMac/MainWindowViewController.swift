@@ -461,6 +461,14 @@ final class SettingsViewController:NSViewController{
 	var onOpenLoginItems:(()->Void)?
 	var onForgetRememberedDevices:(()->Void)?
 	var onDeviceNameChange:((String?)->Void)?
+	var onCheckForUpdates:(()->Void)?
+	var onAutomaticUpdateChecksChange:((Bool)->Void)?
+	var onViewRelease:(()->Void)?
+	private let automaticUpdatesButton=NSButton(checkboxWithTitle: NSLocalizedString("AutomaticUpdateChecks", value: "Automatically check for updates daily", comment: ""), target: nil, action: nil)
+	private let checkUpdatesButton=NSButton(title: NSLocalizedString("CheckForUpdates", value: "Check for Updates…", comment: ""), target: nil, action: nil)
+	private let viewReleaseButton=NSButton(title: NSLocalizedString("ViewRelease", value: "View Release", comment: ""), target: nil, action: nil)
+	private let updateVersionLabel=WindowUI.label("", size: 12, secondary: true)
+	private let updateStatusLabel=WindowUI.label("", size: 11, secondary: true)
 	private let nameField=NSTextField(string: "")
 	private let nameError=WindowUI.label("", size: 11)
 	private var savingName=false
@@ -471,7 +479,7 @@ final class SettingsViewController:NSViewController{
 	private let forgetButton=NSButton(title: NSLocalizedString("ForgetDevices", value: "Forget all", comment: ""), target: nil, action: nil)
 
 	override func loadView(){
-		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 460, height: 500))
+		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 460, height: 670))
 		view.wantsLayer=true
 		let content=WindowUI.stack(spacing: 14)
 		WindowUI.pin(content, to: view, inset: 24)
@@ -515,6 +523,30 @@ final class SettingsViewController:NSViewController{
 		forgetButton.action=#selector(forgetDevices(_:))
 		rememberedRow.addArrangedSubview(forgetButton)
 		WindowUI.fill(rememberedRow, in: content)
+		let updates=WindowUI.stack(spacing: 8)
+		let updateHeading=WindowUI.stack(.horizontal)
+		updateHeading.addArrangedSubview(WindowUI.label(NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""), size: 14, weight: .semibold))
+		updateHeading.addArrangedSubview(WindowUI.spacer())
+		updateHeading.addArrangedSubview(updateVersionLabel)
+		WindowUI.fill(updateHeading, in: updates)
+		automaticUpdatesButton.target=self
+		automaticUpdatesButton.action=#selector(automaticUpdatesChanged(_:))
+		updates.addArrangedSubview(automaticUpdatesButton)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("UpdateChecksExplanation", value: "Checks GitHub for stable releases. Updates are downloaded and installed manually; nothing is installed automatically.", comment: ""), size: 11, secondary: true), in: updates)
+		let updateActions=WindowUI.stack(.horizontal)
+		checkUpdatesButton.target=self
+		checkUpdatesButton.action=#selector(checkForUpdates(_:))
+		checkUpdatesButton.bezelStyle = .rounded
+		updateActions.addArrangedSubview(checkUpdatesButton)
+		viewReleaseButton.target=self
+		viewReleaseButton.action=#selector(viewRelease(_:))
+		viewReleaseButton.bezelStyle = .rounded
+		viewReleaseButton.isHidden=true
+		updateActions.addArrangedSubview(viewReleaseButton)
+		updates.addArrangedSubview(updateActions)
+		updateStatusLabel.isHidden=true
+		WindowUI.fill(updateStatusLabel, in: updates)
+		WindowUI.fill(updates, in: content)
 		let credits=WindowUI.stack(spacing: 4)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true), in: credits)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("UpstreamCredit", value: "Based on NearDrop by grishka · github.com/grishka/NearDrop", comment: ""), size: 11, secondary: true), in: credits)
@@ -532,6 +564,19 @@ final class SettingsViewController:NSViewController{
 	}
 
 	@objc private func startReceivingChanged(_ sender:NSButton){onStartReceivingOnLaunchChange?(sender.state == .on)}
+	func updateUpdates(automatic:Bool, checking:Bool, currentVersion:String, availableRelease:UpdateRelease?, status:String){
+		_ = view
+		automaticUpdatesButton.state=automatic ? .on : .off
+		checkUpdatesButton.isEnabled = !checking
+		checkUpdatesButton.title=checking ? NSLocalizedString("CheckingForUpdates", value: "Checking for updates…", comment: "") : NSLocalizedString("CheckForUpdates", value: "Check for Updates…", comment: "")
+		updateVersionLabel.stringValue=String(format: NSLocalizedString("InstalledVersion", value: "Version %@", comment: ""), currentVersion)
+		viewReleaseButton.isHidden=availableRelease==nil
+		updateStatusLabel.stringValue=status
+		updateStatusLabel.isHidden=status.isEmpty
+	}
+	@objc private func automaticUpdatesChanged(_ sender:NSButton){onAutomaticUpdateChecksChange?(sender.state == .on)}
+	@objc private func checkForUpdates(_ sender:NSButton){onCheckForUpdates?()}
+	@objc private func viewRelease(_ sender:NSButton){onViewRelease?()}
 	@objc private func launchAtLoginChanged(_ sender:NSButton){onLaunchAtLoginChange?(sender.state == .on)}
 	@objc private func openLoginItems(_ sender:NSButton){onOpenLoginItems?()}
 	@objc private func forgetDevices(_ sender:NSButton){onForgetRememberedDevices?()}

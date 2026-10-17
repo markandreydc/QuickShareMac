@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		69E1A7002D01000100ABCDF1 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A7002D01000100ABCDF0 /* UpdateChecker.swift */; };
 		69E1A5002D01000100ABCDF1 /* LocalDeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A5002D01000100ABCDF0 /* LocalDeviceIdentity.swift */; };
 		69E1A6002D01000100ABCDF1 /* ReceivingAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A6002D01000100ABCDF0 /* ReceivingAvailability.swift */; };
 		691F53BC2ABB70840089FD92 /* DeviceListCell.xib in Resources */ = {isa = PBXBuildFile; fileRef = 691F53BA2ABB70840089FD92 /* DeviceListCell.xib */; };
@@ -120,6 +121,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		69E1A7002D01000100ABCDF0 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		69E1A5002D01000100ABCDF0 /* LocalDeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDeviceIdentity.swift; sourceTree = "<group>"; };
 		69E1A6002D01000100ABCDF0 /* ReceivingAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivingAvailability.swift; sourceTree = "<group>"; };
 		691F53BA2ABB70840089FD92 /* DeviceListCell.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = DeviceListCell.xib; sourceTree = "<group>"; };
@@ -250,6 +252,7 @@
 				69B5994C30598C1300449F58 /* Info.plist */,
 				69DA9A1129E0BF5100A442DA /* AppDelegate.swift */,
 				69E1A6002D01000100ABCDF0 /* ReceivingAvailability.swift */,
+				69E1A7002D01000100ABCDF0 /* UpdateChecker.swift */,
 				69E1A0002D01000100ABCDF0 /* MainWindowViewController.swift */,
 				69E1A1002D01000100ABCDF0 /* SendViewController.swift */,
 				69E1A4002D01000100ABCDF0 /* StatusBarMenu.swift */,
@@ -474,6 +477,7 @@
 			files = (
 				69DA9A1229E0BF5100A442DA /* AppDelegate.swift in Sources */,
 				69E1A6002D01000100ABCDF1 /* ReceivingAvailability.swift in Sources */,
+				69E1A7002D01000100ABCDF1 /* UpdateChecker.swift in Sources */,
 				69E1A0002D01000100ABCDF1 /* MainWindowViewController.swift in Sources */,
 				69E1A1002D01000100ABCDF1 /* SendViewController.swift in Sources */,
 				69E1A4002D01000100ABCDF1 /* StatusBarMenu.swift in Sources */,

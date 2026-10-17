@@ -15,6 +15,7 @@ xcrun swiftc -swift-version 5 -I "$BUILD" -L "$BUILD" \
   "$ROOT/QuickShareMac/SendViewController.swift" \
   "$ROOT/QuickShareMac/StatusBarMenu.swift" \
   "$ROOT/QuickShareMac/ReceivingAvailability.swift" \
+  "$ROOT/QuickShareMac/UpdateChecker.swift" \
   "$ROOT/Shared/SendTransferViewController.swift" \
   "$ROOT/ShareExtension/ShareViewController.swift" \
   "$ROOT/Tests/UISmokeTests.swift" -o "$OUTPUT/ui-smoke-tests"

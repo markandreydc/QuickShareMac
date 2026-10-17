@@ -7,6 +7,8 @@ final class StatusBarMenu:NSObject, NSMenuDelegate{
 		var deviceName:String="QuickShareMac"
 		var duration:ReceivingDuration = .indefinitely
 		var expiresAt:Date?
+		var checkingForUpdates=false
+		var availableUpdateVersion:String?
 	}
 	let menu=NSMenu()
 	var stateProvider:()->State = {State(receiving: false, canSendFiles: true)}
@@ -15,6 +17,8 @@ final class StatusBarMenu:NSObject, NSMenuDelegate{
 	var onToggleReceiving:(()->Void)?
 	var onDurationChange:((ReceivingDuration)->Void)?
 	var onSettings:(()->Void)?
+	var onCheckForUpdates:(()->Void)?
+	var onViewRelease:(()->Void)?
 	var onQuit:(()->Void)?
 	var onWillOpen:(()->Void)?
 	private(set) var toolTip="QuickShareMac"
@@ -25,6 +29,8 @@ final class StatusBarMenu:NSObject, NSMenuDelegate{
 	private let expiryItem=NSMenuItem()
 	private let durationItem=NSMenuItem()
 	private let durationMenu=NSMenu()
+	private let checkUpdatesItem=NSMenuItem()
+	private let updateAvailableItem=NSMenuItem()
 
 	override init(){
 		super.init()
@@ -52,6 +58,12 @@ final class StatusBarMenu:NSObject, NSMenuDelegate{
 		menu.addItem(durationItem)
 		menu.addItem(.separator())
 		addItem(NSLocalizedString("Settings", value: "Settings…", comment: ""), action: #selector(settings(_:)), key: ",")
+		checkUpdatesItem.target=self
+		checkUpdatesItem.action=#selector(checkForUpdates(_:))
+		menu.addItem(checkUpdatesItem)
+		updateAvailableItem.target=self
+		updateAvailableItem.action=#selector(viewRelease(_:))
+		menu.addItem(updateAvailableItem)
 		menu.addItem(.separator())
 		addItem(NSLocalizedString("Quit", value: "Quit QuickShareMac", comment: ""), action: #selector(quit(_:)), key: "q")
 		refresh()
@@ -108,6 +120,10 @@ final class StatusBarMenu:NSObject, NSMenuDelegate{
 		durationItem.title=String(format: NSLocalizedString("StatusAvailableFor", value: "Available for: %@", comment: ""), state.duration.title)
 		for item in durationMenu.items{item.state=item.tag==state.duration.rawValue ? .on : .off}
 		sendItem.isEnabled=state.canSendFiles
+		checkUpdatesItem.title=state.checkingForUpdates ? NSLocalizedString("CheckingForUpdates", value: "Checking for updates…", comment: "") : NSLocalizedString("CheckForUpdates", value: "Check for Updates…", comment: "")
+		checkUpdatesItem.isEnabled = !state.checkingForUpdates
+		updateAvailableItem.isHidden=state.availableUpdateVersion==nil
+		if let version=state.availableUpdateVersion{updateAvailableItem.title=String(format: NSLocalizedString("UpdateAvailableStatus", value: "Update available: %@", comment: ""), version)}
 		receivingItem.title=state.receiving ? NSLocalizedString("MenuReceivingOn", value: "Receiving: On", comment: "") : NSLocalizedString("MenuReceivingOff", value: "Receiving: Off", comment: "")
 		receivingItem.state=state.receiving ? .on : .off
 		toolTip=state.receiving ? NSLocalizedString("MenuReceivingOnTooltip", value: "QuickShareMac · Receiving on. Click for menu.", comment: "") : NSLocalizedString("MenuReceivingOffTooltip", value: "QuickShareMac · Receiving off. Click for menu.", comment: "")
@@ -124,5 +140,7 @@ final class StatusBarMenu:NSObject, NSMenuDelegate{
 		if let duration=ReceivingDuration(rawValue: sender.tag){onDurationChange?(duration); refresh()}
 	}
 	@objc private func settings(_ sender:NSMenuItem){onSettings?()}
+	@objc private func checkForUpdates(_ sender:NSMenuItem){if !stateProvider().checkingForUpdates{onCheckForUpdates?()}}
+	@objc private func viewRelease(_ sender:NSMenuItem){if stateProvider().availableUpdateVersion != nil{onViewRelease?()}}
 	@objc private func quit(_ sender:NSMenuItem){onQuit?()}
 }
