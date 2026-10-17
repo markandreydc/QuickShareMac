@@ -4,17 +4,27 @@ final class StatusBarMenu:NSObject, NSMenuDelegate{
 	struct State{
 		let receiving:Bool
 		let canSendFiles:Bool
+		var deviceName:String="QuickShareMac"
+		var duration:ReceivingDuration = .indefinitely
+		var expiresAt:Date?
 	}
 	let menu=NSMenu()
 	var stateProvider:()->State = {State(receiving: false, canSendFiles: true)}
 	var onShow:(()->Void)?
 	var onSendFiles:(()->Void)?
 	var onToggleReceiving:(()->Void)?
+	var onDurationChange:((ReceivingDuration)->Void)?
 	var onSettings:(()->Void)?
 	var onQuit:(()->Void)?
+	var onWillOpen:(()->Void)?
 	private(set) var toolTip="QuickShareMac"
 	private let receivingItem=NSMenuItem()
 	private let sendItem=NSMenuItem()
+	private let deviceItem=NSMenuItem()
+	private let visibilityItem=NSMenuItem()
+	private let expiryItem=NSMenuItem()
+	private let durationItem=NSMenuItem()
+	private let durationMenu=NSMenu()
 
 	override init(){
 		super.init()
@@ -22,6 +32,8 @@ final class StatusBarMenu:NSObject, NSMenuDelegate{
 		menu.autoenablesItems=false
 		// Leave appearance, font, colors and item views to AppKit. In particular,
 		// do not inherit the status button's wallpaper-dependent appearance.
+		for item in [deviceItem,visibilityItem,expiryItem]{item.isEnabled=false; menu.addItem(item)}
+		menu.addItem(.separator())
 		addItem(NSLocalizedString("ShowApp", value: "Show QuickShareMac", comment: ""), action: #selector(showApp(_:)))
 		sendItem.title=NSLocalizedString("SendFiles", value: "Send files…", comment: "")
 		sendItem.target=self
@@ -30,6 +42,14 @@ final class StatusBarMenu:NSObject, NSMenuDelegate{
 		receivingItem.target=self
 		receivingItem.action=#selector(toggleReceiving(_:))
 		menu.addItem(receivingItem)
+		durationMenu.autoenablesItems=false
+		for duration in ReceivingDuration.allCases{
+			let item=durationMenu.addItem(withTitle: duration.title, action: #selector(selectDuration(_:)), keyEquivalent: "")
+			item.tag=duration.rawValue
+			item.target=self
+		}
+		durationItem.submenu=durationMenu
+		menu.addItem(durationItem)
 		menu.addItem(.separator())
 		addItem(NSLocalizedString("Settings", value: "Settings…", comment: ""), action: #selector(settings(_:)), key: ",")
 		menu.addItem(.separator())
@@ -77,9 +97,16 @@ final class StatusBarMenu:NSObject, NSMenuDelegate{
 		return image
 	}
 
-	func menuNeedsUpdate(_ menu:NSMenu){refresh()}
+	func menuNeedsUpdate(_ menu:NSMenu){onWillOpen?(); refresh()}
 	func refresh(){
 		let state=stateProvider()
+		deviceItem.title=String(format: NSLocalizedString("StatusDeviceName", value: "Device: %@", comment: ""), state.deviceName)
+		deviceItem.toolTip=state.deviceName
+		visibilityItem.title=state.receiving ? NSLocalizedString("VisibleToEveryoneOnNetwork", value: "Visible to everyone on your network", comment: "") : NSLocalizedString("NotVisibleReceivingOff", value: "Not visible · Receiving off", comment: "")
+		expiryItem.isHidden = !state.receiving || state.expiresAt==nil
+		if let deadline=state.expiresAt{expiryItem.title=String(format: NSLocalizedString("AvailableUntil", value: "Available until %@", comment: ""), DateFormatter.localizedString(from: deadline, dateStyle: .none, timeStyle: .short))}
+		durationItem.title=String(format: NSLocalizedString("StatusAvailableFor", value: "Available for: %@", comment: ""), state.duration.title)
+		for item in durationMenu.items{item.state=item.tag==state.duration.rawValue ? .on : .off}
 		sendItem.isEnabled=state.canSendFiles
 		receivingItem.title=state.receiving ? NSLocalizedString("MenuReceivingOn", value: "Receiving: On", comment: "") : NSLocalizedString("MenuReceivingOff", value: "Receiving: Off", comment: "")
 		receivingItem.state=state.receiving ? .on : .off
@@ -93,6 +120,9 @@ final class StatusBarMenu:NSObject, NSMenuDelegate{
 	@objc private func showApp(_ sender:NSMenuItem){onShow?()}
 	@objc private func sendFiles(_ sender:NSMenuItem){if stateProvider().canSendFiles{onSendFiles?()}}
 	@objc private func toggleReceiving(_ sender:NSMenuItem){onToggleReceiving?(); refresh()}
+	@objc private func selectDuration(_ sender:NSMenuItem){
+		if let duration=ReceivingDuration(rawValue: sender.tag){onDurationChange?(duration); refresh()}
+	}
 	@objc private func settings(_ sender:NSMenuItem){onSettings?()}
 	@objc private func quit(_ sender:NSMenuItem){onQuit?()}
 }

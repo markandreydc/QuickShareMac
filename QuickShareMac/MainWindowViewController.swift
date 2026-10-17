@@ -1,4 +1,5 @@
 import Cocoa
+import NearbyShare
 
 enum TransferDecision:Equatable{
 	case accept, acceptAndRemember, decline
@@ -233,12 +234,16 @@ final class MainWindowViewController:NSViewController{
 	private let tabs=NSSegmentedControl(labels: [NSLocalizedString("ReceiveTab", value: "Receive", comment: ""), NSLocalizedString("SendTab", value: "Send", comment: "")], trackingMode: .selectOne, target: nil, action: nil)
 	private let receiveContent=WindowUI.stack(spacing: 16)
 	var onReceivingChange:((Bool)->Void)?
+	var onDurationChange:((ReceivingDuration)->Void)?
 	var onOpenSettings:(()->Void)?
 	var onTransferDecision:((String,TransferDecision)->Void)?
 	var onRevealTransfer:((String)->Void)?
 	var onDismissTransfer:((String)->Void)?
 	var onClearRecentTransfers:(()->Void)?
 	private let receivingSwitch=NSSwitch()
+	private let deviceNameLabel=WindowUI.label("", size: 12, secondary: true)
+	private let durationPopup=NSPopUpButton(frame: .zero, pullsDown: false)
+	private let expiryLabel=WindowUI.label("", size: 11, secondary: true)
 	private let statusLabel=WindowUI.label("", size: 15, weight: .semibold)
 	private let visibilityLabel=WindowUI.label("", size: 12, secondary: true)
 	private let approvalTitle=WindowUI.label("", size: 13, weight: .semibold)
@@ -257,7 +262,7 @@ final class MainWindowViewController:NSViewController{
 	private var receiving=false
 
 	override func loadView(){
-		let drop=SendDropView(frame: NSRect(x: 0, y: 0, width: 560, height: 640))
+		let drop=SendDropView(frame: NSRect(x: 0, y: 0, width: 560, height: 680))
 		drop.onURLs={ [weak self] urls in
 			guard let self=self else {return false}
 			self.showSend()
@@ -274,10 +279,10 @@ final class MainWindowViewController:NSViewController{
 		header.addArrangedSubview(icon)
 		let titles=WindowUI.stack(spacing: 2)
 		titles.addArrangedSubview(WindowUI.label("QuickShareMac", size: 19, weight: .semibold))
-		let device=WindowUI.label(Host.current().localizedName ?? ProcessInfo.processInfo.hostName, size: 12, secondary: true)
-		device.maximumNumberOfLines=1
-		device.lineBreakMode = .byTruncatingMiddle
-		WindowUI.fill(device, in: titles)
+		deviceNameLabel.maximumNumberOfLines=1
+		deviceNameLabel.lineBreakMode = .byTruncatingMiddle
+		deviceNameLabel.stringValue=LocalDeviceIdentity.shared.deviceName
+		WindowUI.fill(deviceNameLabel, in: titles)
 		header.addArrangedSubview(titles)
 		header.addArrangedSubview(WindowUI.spacer())
 		let settings=NSButton(title: NSLocalizedString("Settings", value: "Settings…", comment: ""), target: self, action: #selector(openSettings(_:)))
@@ -311,6 +316,16 @@ final class MainWindowViewController:NSViewController{
 		receiveRow.addArrangedSubview(receivingSwitch)
 		WindowUI.fill(receiveRow, in: receiveCardContent)
 		WindowUI.fill(visibilityLabel, in: receiveCardContent)
+		let durationRow=WindowUI.stack(.horizontal)
+		durationRow.addArrangedSubview(WindowUI.label(NSLocalizedString("AvailableFor", value: "Available for", comment: ""), size: 12, secondary: true))
+		for duration in ReceivingDuration.allCases{durationPopup.addItem(withTitle: duration.title); durationPopup.lastItem?.tag=duration.rawValue}
+		durationPopup.target=self
+		durationPopup.action=#selector(durationChanged(_:))
+		durationPopup.setAccessibilityLabel(NSLocalizedString("AvailableFor", value: "Available for", comment: ""))
+		durationPopup.selectItem(withTag: ReceivingDuration.indefinitely.rawValue)
+		durationRow.addArrangedSubview(durationPopup)
+		durationRow.addArrangedSubview(expiryLabel)
+		WindowUI.fill(durationRow, in: receiveCardContent)
 		WindowUI.fill(receiveCard, in: receiveContent)
 		WindowUI.fill(approvalTitle, in: approvalStack)
 		WindowUI.fill(approvalRow, in: approvalStack)
@@ -378,9 +393,14 @@ final class MainWindowViewController:NSViewController{
 	}
 	@objc private func tabChanged(_ sender:NSSegmentedControl){updateTab()}
 
-	func update(receiving:Bool, transfers:[IncomingTransferDisplay]){
+	func update(receiving:Bool, transfers:[IncomingTransferDisplay], deviceName:String = LocalDeviceIdentity.shared.deviceName, duration:ReceivingDuration = .indefinitely, expiresAt:Date?=nil){
 		_ = view
 		self.receiving=receiving
+		deviceNameLabel.stringValue=deviceName
+		deviceNameLabel.toolTip=deviceName
+		durationPopup.selectItem(withTag: duration.rawValue)
+		expiryLabel.isHidden = !receiving || expiresAt==nil
+		if let deadline=expiresAt{expiryLabel.stringValue=String(format: NSLocalizedString("AvailableUntil", value: "Available until %@", comment: ""), DateFormatter.localizedString(from: deadline, dateStyle: .none, timeStyle: .short))}
 		receivingSwitch.state=receiving ? .on : .off
 		statusLabel.stringValue=receiving ? NSLocalizedString("ReadyToReceive", value: "Ready to receive", comment: "") : NSLocalizedString("ReceivingOff", value: "Receiving off", comment: "")
 		visibilityLabel.stringValue=receiving ? NSLocalizedString("ReceivingVisibility", value: "Visible to everyone on your network while receiving.", comment: "") : NSLocalizedString("ReceivingOffDetail", value: "New requests are paused. Transfers in progress can finish.", comment: "")
@@ -406,7 +426,7 @@ final class MainWindowViewController:NSViewController{
 			transferRows[transfer.id]=row
 		}
 		emptyTitle.stringValue=receiving ? NSLocalizedString("ReadyToReceive", value: "Ready to receive", comment: "") : NSLocalizedString("ReceivingOff", value: "Receiving off", comment: "")
-		emptyDetail.stringValue=receiving ? String(format: NSLocalizedString("ReceiveInstructions", value: "Open Quick Share on your Android device and choose “%@”.\nBoth devices must be on the same Wi-Fi network.", comment: ""), Host.current().localizedName ?? ProcessInfo.processInfo.hostName) : NSLocalizedString("EnableReceivingHint", value: "Enable receiving to let nearby devices send files to this Mac.", comment: "")
+		emptyDetail.stringValue=receiving ? String(format: NSLocalizedString("ReceiveInstructions", value: "Open Quick Share on your Android device and choose “%@”.\nBoth devices must be on the same Wi-Fi network.", comment: ""), deviceName) : NSLocalizedString("EnableReceivingHint", value: "Enable receiving to let nearby devices send files to this Mac.", comment: "")
 		enableButton.isHidden=receiving
 		var desired:[(String,NSView)]=[]
 		if transfers.isEmpty{desired.append(("empty",empty))}
@@ -426,6 +446,7 @@ final class MainWindowViewController:NSViewController{
 	}
 
 	@objc private func receivingChanged(_ sender:NSSwitch){onReceivingChange?(sender.state == .on)}
+	@objc private func durationChanged(_ sender:NSPopUpButton){if let tag=sender.selectedItem?.tag, let duration=ReceivingDuration(rawValue: tag){onDurationChange?(duration)}}
 	@objc private func enableReceiving(_ sender:NSButton){onReceivingChange?(true)}
 	@objc private func openSettings(_ sender:NSButton){onOpenSettings?()}
 	@objc private func clearRecent(_ sender:NSButton){onClearRecentTransfers?()}
@@ -439,6 +460,9 @@ final class SettingsViewController:NSViewController{
 	var onLaunchAtLoginChange:((Bool)->Void)?
 	var onOpenLoginItems:(()->Void)?
 	var onForgetRememberedDevices:(()->Void)?
+	var onDeviceNameChange:((String?)->Void)?
+	private let nameField=NSTextField(string: "")
+	private let nameError=WindowUI.label("", size: 11)
 	private let startReceivingButton=NSButton(checkboxWithTitle: NSLocalizedString("StartReceivingOnLaunch", value: "Start receiving when app opens", comment: ""), target: nil, action: nil)
 	private let loginButton=NSButton(checkboxWithTitle: NSLocalizedString("LaunchAtLogin", value: "Launch at login", comment: ""), target: nil, action: nil)
 	private let loginHelpButton=NSButton(title: NSLocalizedString("SetUpLoginItem", value: "Set up login item in System Settings…", comment: ""), target: nil, action: nil)
@@ -446,10 +470,28 @@ final class SettingsViewController:NSViewController{
 	private let forgetButton=NSButton(title: NSLocalizedString("ForgetDevices", value: "Forget all", comment: ""), target: nil, action: nil)
 
 	override func loadView(){
-		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 460, height: 300))
+		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 460, height: 440))
 		view.wantsLayer=true
 		let content=WindowUI.stack(spacing: 14)
 		WindowUI.pin(content, to: view, inset: 24)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""), size: 14, weight: .semibold), in: content)
+		nameField.identifier=NSUserInterfaceItemIdentifier("CustomDeviceName")
+		nameField.setAccessibilityLabel(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""))
+		nameField.placeholderString=Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+		nameField.target=self
+		nameField.action=#selector(saveName(_:))
+		WindowUI.fill(nameField, in: content)
+		let nameActions=WindowUI.stack(.horizontal)
+		let save=NSButton(title: NSLocalizedString("SaveDeviceName", value: "Save name", comment: ""), target: self, action: #selector(saveName(_:)))
+		save.bezelStyle = .rounded
+		nameActions.addArrangedSubview(save)
+		let reset=NSButton(title: NSLocalizedString("UseMacName", value: "Use Mac’s name", comment: ""), target: self, action: #selector(resetName(_:)))
+		reset.bezelStyle = .rounded
+		nameActions.addArrangedSubview(reset)
+		content.addArrangedSubview(nameActions)
+		nameError.textColor = .systemRed
+		WindowUI.fill(nameError, in: content)
+		nameError.isHidden=true
 		WindowUI.fill(WindowUI.label(NSLocalizedString("StartupSettings", value: "Startup", comment: ""), size: 14, weight: .semibold), in: content)
 		startReceivingButton.target=self
 		startReceivingButton.action=#selector(startReceivingChanged(_:))
@@ -474,8 +516,9 @@ final class SettingsViewController:NSViewController{
 		WindowUI.fill(rememberedRow, in: content)
 	}
 
-	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int){
+	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int, customDeviceName:String?=nil){
 		_ = view
+		if nameField.currentEditor()==nil{nameField.stringValue=customDeviceName ?? ""}
 		startReceivingButton.state=startReceivingOnLaunch ? .on : .off
 		loginButton.state=launchAtLogin ? .on : .off
 		if #available(macOS 13.0, *){loginHelpButton.isHidden = !requiresLoginApproval}
@@ -487,4 +530,12 @@ final class SettingsViewController:NSViewController{
 	@objc private func launchAtLoginChanged(_ sender:NSButton){onLaunchAtLoginChange?(sender.state == .on)}
 	@objc private func openLoginItems(_ sender:NSButton){onOpenLoginItems?()}
 	@objc private func forgetDevices(_ sender:NSButton){onForgetRememberedDevices?()}
+	@objc private func saveName(_ sender:Any?){
+		do{
+			let name=try LocalDeviceIdentity.validate(nameField.stringValue)
+			nameError.isHidden=true
+			onDeviceNameChange?(name)
+		}catch{nameError.stringValue=error.localizedDescription; nameError.isHidden=false}
+	}
+	@objc private func resetName(_ sender:Any?){nameField.stringValue=""; nameError.isHidden=true; onDeviceNameChange?(nil)}
 }

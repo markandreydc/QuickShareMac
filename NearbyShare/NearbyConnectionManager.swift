@@ -274,7 +274,7 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 			0, 0
 		]
 		let name=Data(nameBytes).urlSafeBase64EncodedString()
-		let endpointInfo=EndpointInfo(name: Host.current().localizedName!, deviceType: .computer)
+		let endpointInfo=EndpointInfo(name: LocalDeviceIdentity.shared.deviceName, deviceType: .computer)
 		
 		guard let listenerPort=listener.port else {return}
 		let port:Int32=Int32(listenerPort.rawValue)
@@ -284,6 +284,12 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 			"n": endpointInfo.serialize().urlSafeBase64EncodedString().data(using: .utf8)!
 		]))
 		mdnsService?.publish()
+	}
+
+	public func refreshDeviceName(){
+		guard let service=mdnsService else {return}
+		let endpoint=EndpointInfo(name: LocalDeviceIdentity.shared.deviceName, deviceType: .computer)
+		service.setTXTRecord(NetService.data(fromTXTRecord: ["n":endpoint.serialize().urlSafeBase64EncodedString().data(using: .utf8)!]))
 	}
 	
 	func obtainUserConsent(for transfer: TransferMetadata, from device: RemoteDeviceInfo, connection: InboundNearbyConnection) {

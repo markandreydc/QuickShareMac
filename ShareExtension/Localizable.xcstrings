@@ -1,6 +1,7 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "InvalidDeviceName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter a device name without control characters, up to 171 UTF-8 bytes." } } } },
     "ConnectingBeforeApproval" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Opening the network connection and verifying Quick Share. A transfer request has not reached the phone yet." } } }
     },

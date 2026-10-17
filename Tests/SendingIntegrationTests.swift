@@ -14,6 +14,12 @@ struct SendingIntegrationTests{
 	static func main() throws{
 		_ = NSApplication.shared
 		NSApp.setActivationPolicy(.prohibited)
+		let maximumName=try LocalDeviceIdentity.validate(String(repeating: "a", count: LocalDeviceIdentity.maximumNameBytes))
+		let endpoint=EndpointInfo(name: maximumName, deviceType: .computer).serialize()
+		let encoded=endpoint.urlSafeBase64EncodedString().data(using: .utf8)!
+		let txt=NetService.data(fromTXTRecord: ["n":encoded])
+		expect(encoded.count+2<=255 && NetService.dictionary(fromTXTRecord: txt)["n"]==encoded, "The maximum device name must fit a Bonjour TXT record without losing discovery metadata")
+		expect(EndpointInfo(data: endpoint)?.name==maximumName, "The maximum device name must round-trip through endpoint metadata")
 		let directory=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-protocol-tests-"+UUID().uuidString)
 		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 		defer{try? FileManager.default.removeItem(at: directory)}
@@ -37,6 +43,7 @@ struct SendingIntegrationTests{
 		expect(accepted.clientSucceeded && accepted.clientError==nil, "Sender must complete a multi-file transfer")
 		expect(accepted.receiverDone && accepted.receiverError==nil, "Receiver must complete a multi-file transfer")
 		expect(accepted.clientPIN==accepted.metadata?.pinCode && accepted.clientPIN != nil, "Both endpoints must derive the same PIN")
+		expect(accepted.receivedSenderName=="Protocol Test Mac", "Outgoing handshakes must advertise the configured local device name")
 		expect(accepted.metadata?.savedFileURLs.count==3, "Receiver must report actual destination paths")
 		let urls=accepted.metadata!.savedFileURLs
 		expect(Set(urls).count==3, "Same-named files must get different destination paths")
@@ -134,6 +141,7 @@ private final class LoopbackTransfer:InboundNearbyConnectionDelegate, OutboundNe
 	var receiverError:Error?
 	var metadata:TransferMetadata?
 	var clientPIN:String?
+	var receivedSenderName:String?
 
 	init(urls:[URL], directory:URL, decision:Decision) throws{
 		self.urls=urls
@@ -153,7 +161,7 @@ private final class LoopbackTransfer:InboundNearbyConnectionDelegate, OutboundNe
 			guard let self=self else {return}
 			if case .ready=state, let port=self.listener.port{
 				let connection=NWConnection(host: "127.0.0.1", port: port, using: .tcp)
-				let sender=OutboundNearbyConnection(connection: connection, id: UUID().uuidString, urlsToSend: urls)
+				let sender=OutboundNearbyConnection(connection: connection, id: UUID().uuidString, urlsToSend: urls, localDeviceName: "Protocol Test Mac")
 				sender.delegate=self
 				self.sender=sender
 				sender.start()
@@ -178,6 +186,7 @@ private final class LoopbackTransfer:InboundNearbyConnectionDelegate, OutboundNe
 	}
 	func obtainUserConsent(for transfer:TransferMetadata, from device:RemoteDeviceInfo, connection:InboundNearbyConnection){
 		metadata=transfer
+		receivedSenderName=device.name
 		switch decision{
 		case .accept: connection.submitUserConsent(accepted: true)
 		case .reject: connection.submitUserConsent(accepted: false)

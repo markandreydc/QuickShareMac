@@ -37,11 +37,21 @@ struct UISmokeTests{
 		_ = NSApplication.shared
 		NSApp.setActivationPolicy(.prohibited)
 		let controller=MainWindowViewController()
-		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 640), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 680), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
 		window.contentViewController=controller
-		window.setContentSize(NSSize(width: 520, height: 640))
+		window.setContentSize(NSSize(width: 520, height: 680))
 		controller.update(receiving: true, transfers: [])
 		layout(window)
+		controller.update(receiving: true, transfers: [], deviceName: "Studio Mac")
+		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Studio Mac"}), "The main header must use the configured device name")
+		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue.contains("choose “Studio Mac”")}), "Receiving instructions must match the configured advertised name")
+		let duration=visible(controller.view).compactMap {$0 as? NSPopUpButton}.first!
+		expect(duration.selectedItem?.title=="Indefinitely", "Receiving duration must default to Indefinitely")
+		var selected:ReceivingDuration?
+		controller.onDurationChange={selected=$0}
+		duration.selectItem(withTag: ReceivingDuration.thirtyMinutes.rawValue)
+		NSApp.sendAction(duration.action!, to: duration.target, from: duration)
+		expect(selected == .thirtyMinutes, "The availability dropdown must forward duration changes")
 		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue.contains("same Wi-Fi")}), "Empty state must explain network requirements")
 		expect(!visible(controller.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Launch at login"}), "Startup options belong in Settings")
 		snapshot(window, "ready")
@@ -123,6 +133,17 @@ struct UISmokeTests{
 		expect(button("Forget all", in: settings.view).isEnabled, "Stored names should be forgettable")
 		_ = button("Set up login item in System Settings…", in: settings.view)
 		snapshot(settingsWindow, "settings")
+		let nameField=descendants(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="CustomDeviceName"})!
+		var savedNames:[String?]=[]
+		settings.onDeviceNameChange={savedNames.append($0)}
+		nameField.stringValue="  Studio Mac  "
+		button("Save name", in: settings.view).performClick(nil)
+		expect(savedNames.count==1 && savedNames[0]=="Studio Mac", "Settings must trim and save a custom device name")
+		nameField.stringValue="bad\nname"
+		button("Save name", in: settings.view).performClick(nil)
+		expect(savedNames.count==1, "Invalid names must not be saved")
+		button("Use Mac’s name", in: settings.view).performClick(nil)
+		expect(savedNames.count==2 && savedNames[1]==nil, "Reset must restore the system name rather than save an empty name")
 
 		let sender=PreviewShareController()
 		let sendWindow=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 500), styleMask: [.titled], backing: .buffered, defer: false)
@@ -173,6 +194,7 @@ struct UISmokeTests{
 		expect(button("Accept", in: controller.view).isEnabled, "Approval must remain usable in dark mode")
 		testMainWindowSending()
 		testStatusBarMenu()
+		testIdentityAndAvailability()
 		print("Passed \(checks) UI smoke checks")
 	}
 
@@ -180,7 +202,9 @@ struct UISmokeTests{
 		let controller=StatusBarMenu()
 		var receiving=false
 		var canSendFiles=true
-		controller.stateProvider={StatusBarMenu.State(receiving: receiving, canSendFiles: canSendFiles)}
+		var duration:ReceivingDuration = .indefinitely
+		var expiresAt:Date?
+		controller.stateProvider={StatusBarMenu.State(receiving: receiving, canSendFiles: canSendFiles, deviceName: "Studio Mac", duration: duration, expiresAt: expiresAt)}
 		let item=NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 		defer{NSStatusBar.system.removeStatusItem(item)}
 		controller.attach(to: item)
@@ -190,6 +214,9 @@ struct UISmokeTests{
 		expect(controller.menu.appearance==nil, "The status menu must not force a light or dark appearance")
 		expect(controller.menu.items.allSatisfy({$0.view==nil && $0.attributedTitle==nil}), "Menu items must use native views and text colors")
 		controller.menuNeedsUpdate(controller.menu)
+		let device=controller.menu.items.first(where: {$0.title=="Device: Studio Mac"})!
+		expect(!device.isEnabled && device.action==nil, "The status menu must display the device name read-only")
+		expect(controller.menu.items.contains(where: {$0.title=="Not visible · Receiving off" && !$0.isEnabled}), "The visibility label must not imply discovery is enabled when receiving is off")
 		let off=controller.menu.items.first(where: {$0.title=="Receiving: Off"})!
 		expect(off.state == .off, "The menu must show receiving off without a checkmark")
 		var showed=false
@@ -209,6 +236,15 @@ struct UISmokeTests{
 		controller.onToggleReceiving={receiving.toggle()}
 		controller.menu.performActionForItem(at: controller.menu.index(of: off))
 		expect(receiving && off.state == .on && off.title=="Receiving: On", "Receiving controls must refresh their title and checkmark")
+		expect(controller.menu.items.contains(where: {$0.title=="Visible to everyone on your network" && !$0.isEnabled && $0.action==nil}), "Visibility must be a read-only informational item")
+		controller.onDurationChange={duration=$0; expiresAt=$0 == .indefinitely ? nil : Date().addingTimeInterval(TimeInterval($0.rawValue))}
+		let durations=controller.menu.items.first(where: {$0.submenu != nil})!.submenu!
+		expect(durations.items.map(\.title)==["10 minutes","30 minutes","1 hour","Indefinitely"], "The native duration submenu must expose all requested choices")
+		durations.performActionForItem(at: durations.indexOfItem(withTitle: "10 minutes"))
+		expect(duration == .tenMinutes && durations.item(at: 0)?.state == .on, "Menu duration changes must update the selected checkmark")
+		expect(controller.menu.items.contains(where: {$0.title.hasPrefix("Available until ") && !$0.isHidden && !$0.isEnabled}), "Timed receiving must show its deadline read-only")
+		durations.performActionForItem(at: durations.indexOfItem(withTitle: "Indefinitely"))
+		expect(duration == .indefinitely && controller.menu.items.filter({$0.title.hasPrefix("Available until ")}).allSatisfy(\.isHidden), "Indefinite receiving must hide the obsolete deadline")
 		expect(controller.toolTip.contains("Click for menu") && !controller.toolTip.contains("right-click"), "The tooltip must describe the new click behavior")
 		var settings=false
 		controller.onSettings={settings=true}
@@ -227,11 +263,63 @@ struct UISmokeTests{
 		}
 	}
 
+	static func testIdentityAndAvailability(){
+		let domain="QuickShareMac.Tests."+UUID().uuidString
+		let preferences=UserDefaults(suiteName: domain)!
+		defer{preferences.removePersistentDomain(forName: domain)}
+		let identity=LocalDeviceIdentity(preferences: preferences, systemName: {"System Mac"})
+		expect(identity.deviceName=="System Mac" && identity.customName==nil, "An unset device name must follow the Mac's system name")
+		try! identity.setCustomName("  Travel Mac 🖥️  ")
+		expect(identity.deviceName=="Travel Mac 🖥️", "Unicode device names must be stored without surrounding whitespace")
+		expect(LocalDeviceIdentity(preferences: UserDefaults(suiteName: domain)!).customName=="Travel Mac 🖥️", "The custom name must persist across identity instances")
+		for invalid in ["   ","bad\u{0000}name",String(repeating: "😀", count: 64),String(repeating: "a", count: LocalDeviceIdentity.maximumNameBytes+1)]{
+			do{try identity.setCustomName(invalid); expect(false, "Invalid device name was accepted")}
+			catch{expect(identity.deviceName=="Travel Mac 🖥️", "Invalid input must preserve the existing name")}
+		}
+		try! identity.setCustomName(nil)
+		expect(identity.deviceName=="System Mac", "Reset must remove the override")
+		let longSystem=LocalDeviceIdentity(preferences: preferences, systemName: {String(repeating: "😀", count: 100)})
+		expect(longSystem.deviceName.utf8.count<=LocalDeviceIdentity.maximumNameBytes && longSystem.deviceName.allSatisfy({$0=="😀"}), "System-name truncation must preserve UTF-8 character boundaries")
+		var now=Date(timeIntervalSince1970: 100000)
+		let availability=ReceivingAvailability(preferences: preferences, now: {now})
+		var expirations=0
+		availability.onExpiration={expirations+=1}
+		expect(availability.duration == .indefinitely, "Fresh installations must remain available indefinitely by default")
+		availability.started()
+		expect(availability.expiresAt==nil, "Indefinite receiving must not schedule an expiration")
+		availability.select(.tenMinutes)
+		expect(availability.expiresAt==now.addingTimeInterval(600), "Selecting 10 minutes while receiving must start a new deadline")
+		now=now.addingTimeInterval(599)
+		availability.checkExpiration()
+		expect(availability.active && expirations==0, "Receiving must stay enabled before its deadline")
+		now=now.addingTimeInterval(1)
+		availability.checkExpiration()
+		availability.checkExpiration()
+		expect(!availability.active && expirations==1, "Expiry must stop receiving exactly once, including after a delayed wake")
+		availability.select(.thirtyMinutes)
+		expect(!availability.active && availability.expiresAt==nil, "Changing duration while off must not enable receiving")
+		availability.started()
+		expect(availability.expiresAt==now.addingTimeInterval(1800), "A new session must use the selected duration")
+		availability.select(.oneHour)
+		expect(availability.expiresAt==now.addingTimeInterval(3600), "Changing duration must replace the previous deadline")
+		now=now.addingTimeInterval(4000)
+		availability.checkExpiration()
+		expect(expirations==2, "A deadline passed during sleep must expire immediately when checked")
+		availability.started()
+		availability.select(.indefinitely)
+		now=now.addingTimeInterval(100000)
+		availability.checkExpiration()
+		expect(availability.active && availability.expiresAt==nil && expirations==2, "Choosing Indefinitely must cancel the old timer")
+		availability.stopped()
+		availability.select(.tenMinutes)
+		expect(ReceivingAvailability(preferences: preferences).duration == .tenMinutes, "The selected duration must persist, without persisting a live receiving session")
+	}
+
 	static func testMainWindowSending(){
 		let service=FakeSendingService()
 		let main=MainWindowViewController()
 		main.sendController.sender.service=service
-		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 640), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 680), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
 		window.contentViewController=main
 		main.update(receiving: true, transfers: [])
 		main.showSend()

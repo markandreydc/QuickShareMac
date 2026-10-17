@@ -1,6 +1,20 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "AvailableTenMinutes" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "10 minutes" } } } },
+    "AvailableThirtyMinutes" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "30 minutes" } } } },
+    "AvailableOneHour" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "1 hour" } } } },
+    "AvailableIndefinitely" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Indefinitely" } } } },
+    "AvailableFor" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Available for" } } } },
+    "AvailableUntil" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Available until %@" } } } },
+    "StatusAvailableFor" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Available for: %@" } } } },
+    "StatusDeviceName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Device: %@" } } } },
+    "VisibleToEveryoneOnNetwork" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Visible to everyone on your network" } } } },
+    "NotVisibleReceivingOff" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Not visible · Receiving off" } } } },
+    "DeviceNameSetting" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Device name" } } } },
+    "SaveDeviceName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Save name" } } } },
+    "UseMacName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Use Mac’s name" } } } },
+    "InvalidDeviceName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter a device name without control characters, up to 171 UTF-8 bytes." } } } },
     "ConnectingBeforeApproval" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Opening the network connection and verifying Quick Share. A transfer request has not reached the phone yet." } } }
     },

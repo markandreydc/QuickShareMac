@@ -17,6 +17,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private var settingsWindow:NSWindow?
 	private let windowController=MainWindowViewController()
 	private let settingsController=SettingsViewController()
+	private let availability=ReceivingAvailability()
+	private var wakeObserver:NSObjectProtocol?
 	private var activeIncomingTransfers:[String:TransferInfo]=[:]
 	private var recentlyFinishedTransfers:[String:IncomingTransferDisplay]=[:]
 	private var recentTransferOrder:[String]=[]
@@ -64,25 +66,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		NSApplication.shared.mainMenu=mainMenu
 		statusItem=NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 		statusMenu.stateProvider={ [weak self] in
-			StatusBarMenu.State(receiving: NearbyConnectionManager.shared.isReceiving, canSendFiles: self?.windowController.sendController.sender.isTransferring != true)
+			guard let self=self else {return StatusBarMenu.State(receiving: false, canSendFiles: false)}
+			return StatusBarMenu.State(receiving: NearbyConnectionManager.shared.isReceiving, canSendFiles: !self.windowController.sendController.sender.isTransferring, deviceName: LocalDeviceIdentity.shared.deviceName, duration: self.availability.duration, expiresAt: self.availability.expiresAt)
 		}
 		statusMenu.onShow={ [weak self] in self?.showMainWindow(nil) }
 		statusMenu.onSendFiles={ [weak self] in self?.sendFiles(nil) }
 		statusMenu.onToggleReceiving={ [weak self] in self?.setReceiving(!NearbyConnectionManager.shared.isReceiving) }
+		statusMenu.onDurationChange={ [weak self] duration in self?.availability.select(duration) }
+		statusMenu.onWillOpen={ [weak self] in self?.availability.checkExpiration() }
 		statusMenu.onSettings={ [weak self] in self?.showSettings(nil) }
 		statusMenu.onQuit={NSApplication.shared.terminate(nil)}
 		if let statusItem=statusItem{statusMenu.attach(to: statusItem)}
 		statusItem?.behavior = .removalAllowed
-		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 640),
+		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 680),
 							styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
 		window.title="QuickShareMac"
 		window.contentViewController=windowController
 		window.isReleasedWhenClosed=false
-		window.contentMinSize=NSSize(width: 520, height: 640)
+		window.contentMinSize=NSSize(width: 520, height: 680)
 		window.setFrameAutosaveName("QuickShareMacMainWindow")
 		if !window.setFrameUsingName("QuickShareMacMainWindow"){window.center()}
 		mainWindow=window
 		windowController.onReceivingChange={ [weak self] enabled in self?.setReceiving(enabled) }
+		windowController.onDurationChange={ [weak self] duration in self?.availability.select(duration) }
+		availability.onExpiration={ [weak self] in self?.setReceiving(false) }
+		availability.onChange={ [weak self] in self?.refreshWindow() }
+		wakeObserver=NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main){ [weak self] _ in
+			self?.availability.checkExpiration()
+			self?.refreshWindow()
+		}
 		windowController.onOpenSettings={ [weak self] in self?.showSettings(nil) }
 		settingsController.onStartReceivingOnLaunchChange={ [weak self] enabled in
 			guard let self=self else {return}
@@ -91,6 +103,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		}
 		settingsController.onLaunchAtLoginChange={ [weak self] enabled in self?.setLaunchAtLogin(enabled) }
 		settingsController.onOpenLoginItems={ [weak self] in self?.openLoginItems(nil) }
+		settingsController.onDeviceNameChange={ [weak self] name in
+			do{
+				try LocalDeviceIdentity.shared.setCustomName(name)
+				NearbyConnectionManager.shared.refreshDeviceName()
+				self?.refreshWindow()
+			}catch{self?.showError(error)}
+		}
 		windowController.onTransferDecision={ [weak self] id, accepted in
 			self?.respondToIncomingTransfer(id: id, decision: accepted)
 		}
@@ -128,7 +147,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		windowController.showSend()
 		windowController.sendController.chooseFiles(sender)
 	}
-	func applicationWillTerminate(_ notification:Notification){windowController.sendController.sender.shutdown()}
+	func applicationWillTerminate(_ notification:Notification){
+		availability.stopped()
+		if let observer=wakeObserver{NSWorkspace.shared.notificationCenter.removeObserver(observer)}
+		windowController.sendController.sender.shutdown()
+	}
 	func validateMenuItem(_ item:NSMenuItem) -> Bool{
 		if item.action == #selector(sendFiles(_:)){return !windowController.sendController.sender.isTransferring}
 		return true
@@ -136,7 +159,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 
 	@objc private func showSettings(_ sender:Any?){
 		if settingsWindow==nil{
-			let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 300), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+			let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 440), styleMask: [.titled, .closable], backing: .buffered, defer: false)
 			window.title=NSLocalizedString("SettingsTitle", value: "QuickShareMac Settings", comment: "")
 			window.contentViewController=settingsController
 			window.isReleasedWhenClosed=false
@@ -156,17 +179,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private func setReceiving(_ enabled:Bool){
 		if enabled{
 			do{
+				let wasReceiving=NearbyConnectionManager.shared.isReceiving
 				try NearbyConnectionManager.shared.startReceiving()
+				if !wasReceiving || !availability.active{availability.started()}
 			}catch{
 				showError(error)
 			}
 		}else{
 			NearbyConnectionManager.shared.stopReceiving()
+			availability.stopped()
 		}
 		refreshWindow()
 	}
 
 	func receivingStopped(with error:Error){
+		availability.stopped()
 		refreshWindow()
 		showError(error)
 	}
@@ -196,6 +223,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	}
 
 	private func refreshWindow(){
+		availability.checkExpiration()
 		let isReceiving=NearbyConnectionManager.shared.isReceiving
 		statusMenu.refresh()
 		statusItem?.button?.toolTip=statusMenu.toolTip
@@ -235,9 +263,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			return (activeIncomingTransfers[$0.id]?.createdAt ?? .distantPast) < (activeIncomingTransfers[$1.id]?.createdAt ?? .distantPast)
 		}
 		windowController.update(receiving: isReceiving,
-								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]})
+								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]}, deviceName: LocalDeviceIdentity.shared.deviceName, duration: availability.duration, expiresAt: availability.expiresAt)
 		if settingsWindow != nil{
-			settingsController.update(startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey), launchAtLogin: launchAtLogin, requiresLoginApproval: requiresLoginApproval, rememberedDeviceCount: rememberedDevices.count)
+			settingsController.update(startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey), launchAtLogin: launchAtLogin, requiresLoginApproval: requiresLoginApproval, rememberedDeviceCount: rememberedDevices.count, customDeviceName: LocalDeviceIdentity.shared.customName)
 		}
 	}
 	

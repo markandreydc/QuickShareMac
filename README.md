@@ -16,6 +16,8 @@ Send files between your Mac and Android devices using **Quick Share** over your 
 - Reveal completed downloads in Finder.
 - Continue transfers in the background when switching tabs or closing the window.
 - Control receiving from the main window or menu bar.
+- Set a custom device name without renaming your Mac.
+- Choose receiving availability for **10 minutes**, **30 minutes**, **1 hour**, or **Indefinitely** (the default).
 - Configure launch at login, receiving on startup, and remembered device names in Settings.
 
 ## Getting started
@@ -47,9 +49,15 @@ Select **Remember this device name** before accepting if you want a visual remin
 
 Closing the window does not quit the app. Click the Dock icon to reopen it, or click the menu bar icon and choose **Show QuickShareMac**. Both left-click and right-click open the standard macOS menu, with receiving controls, file sending, Settings, and Quit. The menu and monochrome icon follow the system appearance.
 
+The menu also shows the device name and a **read-only visibility status**. “Visible to everyone on your network” describes the current receiving policy; it is not a contact-only visibility selector. When receiving is off, the menu says the device is not visible.
+
+Use **Available for** in the Receive tab or menu to choose **10 minutes**, **30 minutes**, **1 hour**, or **Indefinitely**. The default is Indefinitely. Changing the duration while receiving starts a new timer; changing it while receiving is off only selects the duration for the next session. When the timer expires, new incoming connections stop, but active transfers can finish. Closing the window does not stop the timer, and elapsed time during sleep counts. The chosen duration is remembered; reopening the app with receiving on startup starts a fresh session.
+
 Turning receiving off stops new incoming connections; transfers already in progress can finish. Outgoing transfers do not require receiving to be enabled.
 
 In **Settings…**, choose whether receiving starts when the app opens. On macOS 13 or later, you can also enable **Launch at login**. On older systems, add the app to Login Items in System Settings.
+
+To use a custom name, enter it under **Device name** in Settings and click **Save name**. **Use Mac’s name** restores the system name. This changes only QuickShareMac’s identity, not your computer’s name. Discovery, receiving instructions, and outgoing handshakes use the chosen name, including the Share extension. The extension has read-only access to the separate preference containing that name.
 
 Recent transfer results last for the current app session, until you dismiss or clear them. They are not a permanent transfer log.
 
@@ -88,6 +96,21 @@ open DerivedData/Build/Products/Debug/QuickShareMac.app
 The default development build uses **ad-hoc signing** for local use. This is not notarization or a stable certificate-based identity. For consistent macOS permission identity across rebuilds, configure an Apple Development certificate and your team in Xcode. Do not disable code signing when building an app for device testing.
 
 For test instructions, see [Tests/README.md](Tests/README.md). The tests cover the UI and encrypted file transfers over localhost; Android discovery and QR handshakes still need real-device testing.
+
+### Package a release ZIP
+
+```sh
+Scripts/package-release.sh
+```
+
+This builds an optimized **universal Release app for macOS 12 or later**, supporting both Apple Silicon (`arm64`) and Intel (`x86_64`). It verifies the app and embedded code, includes the upstream/dependency licenses, and creates these files in the repository root:
+
+- `QuickShareMac.app.zip`
+- `QuickShareMac.app.zip.sha256`
+
+The ZIP contains `QuickShareMac.app` at its top level. The packaged app is also available at `DerivedData/Distribution/Build/Products/Release/QuickShareMac.app`.
+
+**Distribution warning:** this script uses ad-hoc signing. The app is **not Developer ID signed or notarized**, so recipients may need to approve it in Privacy & Security. For a normal Gatekeeper-approved public release, sign with your own Developer ID Application certificate and notarize/staple the app before archiving it. Do not describe the ad-hoc ZIP as notarized.
 
 ## Troubleshooting
 

@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		69E1A5002D01000100ABCDF1 /* LocalDeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A5002D01000100ABCDF0 /* LocalDeviceIdentity.swift */; };
+		69E1A6002D01000100ABCDF1 /* ReceivingAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E1A6002D01000100ABCDF0 /* ReceivingAvailability.swift */; };
 		691F53BC2ABB70840089FD92 /* DeviceListCell.xib in Resources */ = {isa = PBXBuildFile; fileRef = 691F53BA2ABB70840089FD92 /* DeviceListCell.xib */; };
 		691F53BE2ABF03820089FD92 /* OutboundNearbyConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691F53BD2ABF03820089FD92 /* OutboundNearbyConnection.swift */; };
 		693D8DC92E41325300E8E7F4 /* sharing_enums.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 693D8DC82E41325300E8E7F4 /* sharing_enums.pb.swift */; };
@@ -118,6 +120,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		69E1A5002D01000100ABCDF0 /* LocalDeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDeviceIdentity.swift; sourceTree = "<group>"; };
+		69E1A6002D01000100ABCDF0 /* ReceivingAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivingAvailability.swift; sourceTree = "<group>"; };
 		691F53BA2ABB70840089FD92 /* DeviceListCell.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = DeviceListCell.xib; sourceTree = "<group>"; };
 		691F53BD2ABF03820089FD92 /* OutboundNearbyConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundNearbyConnection.swift; sourceTree = "<group>"; };
 		693D8DC82E41325300E8E7F4 /* sharing_enums.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = sharing_enums.pb.swift; sourceTree = "<group>"; };
@@ -245,6 +249,7 @@
 			children = (
 				69B5994C30598C1300449F58 /* Info.plist */,
 				69DA9A1129E0BF5100A442DA /* AppDelegate.swift */,
+				69E1A6002D01000100ABCDF0 /* ReceivingAvailability.swift */,
 				69E1A0002D01000100ABCDF0 /* MainWindowViewController.swift */,
 				69E1A1002D01000100ABCDF0 /* SendViewController.swift */,
 				69E1A4002D01000100ABCDF0 /* StatusBarMenu.swift */,
@@ -275,6 +280,7 @@
 			children = (
 				69DA9A2729E18CB500A442DA /* Protobuf */,
 				69DA9A1E29E0C0B300A442DA /* NearbyConnectionManager.swift */,
+				69E1A5002D01000100ABCDF0 /* LocalDeviceIdentity.swift */,
 				69DA9A2229E17F0400A442DA /* InboundNearbyConnection.swift */,
 				691F53BD2ABF03820089FD92 /* OutboundNearbyConnection.swift */,
 				698DFAE529E2F91A0064F247 /* NearbyConnection.swift */,
@@ -467,6 +473,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				69DA9A1229E0BF5100A442DA /* AppDelegate.swift in Sources */,
+				69E1A6002D01000100ABCDF1 /* ReceivingAvailability.swift in Sources */,
 				69E1A0002D01000100ABCDF1 /* MainWindowViewController.swift in Sources */,
 				69E1A1002D01000100ABCDF1 /* SendViewController.swift in Sources */,
 				69E1A4002D01000100ABCDF1 /* StatusBarMenu.swift in Sources */,
@@ -482,6 +489,7 @@
 				69DCF48F2AB70E8C00CBE2CC /* securemessage.pb.swift in Sources */,
 				69DCF4912AB70E9700CBE2CC /* NearbyConnection.swift in Sources */,
 				69DCF4922AB70E9700CBE2CC /* NearbyConnectionManager.swift in Sources */,
+				69E1A5002D01000100ABCDF1 /* LocalDeviceIdentity.swift in Sources */,
 				693D8DC92E41325300E8E7F4 /* sharing_enums.pb.swift in Sources */,
 				69DCF48E2AB70E8C00CBE2CC /* securegcm.pb.swift in Sources */,
 				691F53BE2ABF03820089FD92 /* OutboundNearbyConnection.swift in Sources */,

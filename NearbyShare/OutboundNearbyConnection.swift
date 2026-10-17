@@ -18,6 +18,7 @@ import BigInt
 class OutboundNearbyConnection:NearbyConnection{
 	private var currentState:State = .initial
 	private let urlsToSend:[URL]
+	private let localDeviceName:String
 	private var ukeyClientFinishMsgData:Data?
 	private var queue:[OutgoingFileTransfer]=[]
 	private var currentTransfer:OutgoingFileTransfer?
@@ -34,8 +35,9 @@ class OutboundNearbyConnection:NearbyConnection{
 		case initial, sentUkeyClientInit, sentUkeyClientFinish, sentPairedKeyEncryption, sentPairedKeyResult, sentIntroduction, sendingFiles
 	}
 	
-	init(connection: NWConnection, id: String, urlsToSend:[URL]){
+	init(connection: NWConnection, id: String, urlsToSend:[URL], localDeviceName:String = LocalDeviceIdentity.shared.deviceName){
 		self.urlsToSend=urlsToSend
+		self.localDeviceName=localDeviceName
 		super.init(connection: connection, id: id)
 		if urlsToSend.count==1 && !urlsToSend[0].isFileURL{
 			textPayloadID=Int64.random(in: Int64.min...Int64.max)
@@ -159,8 +161,8 @@ class OutboundNearbyConnection:NearbyConnection{
 		frame.v1.type = .connectionRequest
 		frame.v1.connectionRequest=Location_Nearby_Connections_ConnectionRequestFrame()
 		frame.v1.connectionRequest.endpointID=String(bytes: NearbyConnectionManager.shared.endpointID, encoding: .ascii)!
-		frame.v1.connectionRequest.endpointName=Host.current().localizedName!
-		let endpointInfo=EndpointInfo(name: Host.current().localizedName!, deviceType: .computer)
+		frame.v1.connectionRequest.endpointName=localDeviceName
+		let endpointInfo=EndpointInfo(name: localDeviceName, deviceType: .computer)
 		frame.v1.connectionRequest.endpointInfo=endpointInfo.serialize()
 		frame.v1.connectionRequest.mediums=[.wifiLan]
 		sendFrameAsync(try frame.serializedData())
