@@ -124,20 +124,37 @@ struct UISmokeTests{
 		expect(visible(controller.view).compactMap({$0 as? NSScrollView}).first!.frame.width>600, "Transfer list must expand with the window")
 
 		let settings=SettingsViewController()
-		let settingsWindow=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 670), styleMask: [.titled], backing: .buffered, defer: false)
+		let settingsWindow=NSWindow(contentRect: NSRect(origin: .zero, size: SettingsViewController.defaultSize), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
 		settingsWindow.contentViewController=settings
 		settings.update(startReceivingOnLaunch: true, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 0)
 		settings.updateUpdates(automatic: false, checking: false, currentVersion: "1.0.0", availableRelease: nil, status: "")
 		layout(settingsWindow)
+		expect(settings.selectedSection == .general, "Settings must open on General by default")
+		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Check for Updates…"}), "Update controls must not clutter General settings")
+		expect(visible(settings.view).compactMap({$0 as? CardView}).count==3, "General settings must group device name, startup, and remembered names")
+		snapshot(settingsWindow, "settings-general")
+		let sections=descendants(settings.view).compactMap {$0 as? NSSegmentedControl}.first!
+		expect((0..<sections.segmentCount).map({sections.label(forSegment: $0)!})==["General","Updates","About"], "Settings must expose General, Updates, and About sections")
+		sections.selectedSegment=SettingsViewController.Section.about.rawValue
+		NSApp.sendAction(sections.action!, to: sections.target, from: sections)
+		layout(settingsWindow)
+		expect(settings.selectedSection == .about, "The native section control must switch Settings pages")
 		for credit in ["Developed by Mark Andrey · github.com/markandreydc", "Based on NearDrop by grishka · github.com/grishka/NearDrop"]{
 			let label=visible(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.stringValue==credit})
 			expect(label != nil, "Settings must display the developer and upstream credits")
 			if let label=label{expect(settings.view.bounds.contains(label.convert(label.bounds, to: settings.view)), "Settings credits must fit inside the window")}
 		}
+		expect(visible(settings.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Version 1.0.0"}), "About must show the installed app version")
+		snapshot(settingsWindow, "settings-about")
+		settings.show(.general)
+		layout(settingsWindow)
 		expect(!button("Forget all", in: settings.view).isEnabled, "Forget must be disabled when no names are stored")
 		settings.update(startReceivingOnLaunch: false, launchAtLogin: false, requiresLoginApproval: true, rememberedDeviceCount: 3)
 		expect(button("Forget all", in: settings.view).isEnabled, "Stored names should be forgettable")
 		_ = button("Set up login item in System Settings…", in: settings.view)
+		settings.show(.updates)
+		layout(settingsWindow)
+		expect(!visible(settings.view).compactMap({$0 as? NSTextField}).contains(where: {$0.identifier?.rawValue=="CustomDeviceName"}), "Device-name editing must stay on General")
 		var updateChecks=0
 		settings.onCheckForUpdates={updateChecks+=1}
 		button("Check for Updates…", in: settings.view).performClick(nil)
@@ -162,6 +179,11 @@ struct UISmokeTests{
 			expect(settings.view.bounds.contains(control.convert(control.bounds, to: settings.view)), "Update controls must fit in Settings")
 		}
 		snapshot(settingsWindow, "settings")
+		snapshot(settingsWindow, "settings-updates")
+		settings.update(startReceivingOnLaunch: false, launchAtLogin: false, requiresLoginApproval: true, rememberedDeviceCount: 3)
+		expect(settings.selectedSection == .updates, "State refreshes must preserve the selected Settings section")
+		settings.show(.general)
+		layout(settingsWindow)
 		let nameField=descendants(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="CustomDeviceName"})!
 		var savedNames:[String?]=[]
 		settings.onDeviceNameChange={savedNames.append($0)}
@@ -177,8 +199,20 @@ struct UISmokeTests{
 		button("Save name", in: settings.view).performClick(nil)
 		expect(savedNames.count==1, "Invalid names must not be saved")
 		expect(nameField.currentEditor() != nil, "Invalid names must retain focus for correction")
+		settingsWindow.setContentSize(NSSize(width: 520, height: 500))
+		layout(settingsWindow)
+		let settingsScroll=visible(settings.view).compactMap {$0 as? NSScrollView}.first!
+		expect(settingsScroll.documentView!.frame.width==settingsScroll.contentView.bounds.width, "Settings pages must fit horizontally at minimum size")
+		expect(settingsScroll.documentView!.frame.height>settingsScroll.contentView.bounds.height, "Expanded validation messages must scroll rather than clip at minimum size")
+		snapshot(settingsWindow, "settings-validation")
 		button("Use Mac’s name", in: settings.view).performClick(nil)
 		expect(savedNames.count==2 && savedNames[1]==nil, "Reset must restore the system name rather than save an empty name")
+		settingsWindow.setContentSize(NSSize(width: 700, height: 650))
+		settings.view.appearance=NSAppearance(named: .darkAqua)
+		settings.show(.updates)
+		layout(settingsWindow)
+		expect(button("Check for Updates…", in: settings.view).isEnabled, "Settings actions must remain usable after resizing and changing appearance")
+		snapshot(settingsWindow, "settings-dark-updates")
 
 		let sender=PreviewShareController()
 		let sendWindow=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 500), styleMask: [.titled], backing: .buffered, defer: false)

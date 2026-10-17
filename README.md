@@ -58,7 +58,9 @@ Use **Available for** in the Receive tab or menu to choose **10 minutes**, **30 
 
 Turning receiving off stops new incoming connections; transfers already in progress can finish. Outgoing transfers do not require receiving to be enabled.
 
-In **Settings…**, choose whether receiving starts when the app opens. On macOS 13 or later, you can also enable **Launch at login**. On older systems, add the app to Login Items in System Settings.
+**Settings…** is organized into **General**, **Updates**, and **About**. General contains device naming, startup options, and remembered names; Updates contains version checks and daily-check preferences; About shows the app version and developer/upstream credits. The window can be resized, and longer pages scroll when needed.
+
+In **General**, choose whether receiving starts when the app opens. On macOS 13 or later, you can also enable **Launch at login**. On older systems, add the app to Login Items in System Settings.
 
 To use a custom name, enter it under **Device name** in Settings and click **Save name**. **Use Mac’s name** restores the system name. This changes only QuickShareMac’s identity, not your computer’s name. Discovery, receiving instructions, and outgoing handshakes use the chosen name, including the Share extension. The extension has read-only access to the separate preference containing that name.
 

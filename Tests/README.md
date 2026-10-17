@@ -19,6 +19,9 @@ It also checks device-name validation/persistence, read-only visibility details,
 availability dropdowns, timer replacement/expiry, and deadlines passed during sleep.
 Settings and status-menu update actions, busy states, and update availability are
 also covered, without making update requests or opening a browser.
+Settings checks also cover General/Updates/About navigation, grouped controls,
+preserving the selected page on refresh, About credits/version, resizing,
+scrollable validation messages, and dark appearance.
 
 The integration suite exercises the real encrypted file-transfer protocol on
 `127.0.0.1`. Received files are written into a disposable temporary directory,

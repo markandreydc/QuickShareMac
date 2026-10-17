@@ -1,6 +1,12 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "GeneralSettings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "General" } } } },
+    "AboutSettings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "About" } } } },
+    "SettingsSections" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings sections" } } } },
+    "DeviceNameExplanation" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Shown to nearby devices. Your Mac’s system name is unchanged." } } } },
+    "AboutDescription" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Share files between your Mac and Android devices over your local network." } } } },
+    "CreditsSettings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Credits" } } } },
     "UpdateInvalidVersion" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This app's version could not be read. Download a current release from GitHub." } } } },
     "UpdateInvalidResponse" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "GitHub returned an unsupported release or an invalid response. Please visit the releases page." } } } },
     "UpdateRateLimited" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "GitHub temporarily limited update requests. Please try again later or visit the releases page." } } } },

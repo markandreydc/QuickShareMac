@@ -175,7 +175,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 
 	@objc private func showSettings(_ sender:Any?){
 		if settingsWindow==nil{
-			let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 670), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+			let window=NSWindow(contentRect: NSRect(origin: .zero, size: SettingsViewController.defaultSize), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+			window.contentMinSize=NSSize(width: 520, height: 500)
 			window.title=NSLocalizedString("SettingsTitle", value: "QuickShareMac Settings", comment: "")
 			window.contentViewController=settingsController
 			window.isReleasedWhenClosed=false
@@ -249,6 +250,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private func showUpdateResult(_ result:Result<UpdateChecker.Outcome,UpdateCheckError>){
 		guard updateAlert==nil else {return}
 		showSettings(nil)
+		settingsController.show(.updates)
 		guard let window=settingsWindow, window.attachedSheet==nil else {return}
 		let alert=NSAlert()
 		var destination:URL?

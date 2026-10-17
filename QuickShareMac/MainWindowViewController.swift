@@ -456,6 +456,12 @@ final class MainWindowViewController:NSViewController{
 }
 
 final class SettingsViewController:NSViewController{
+	enum Section:Int{case general, updates, about}
+	static let defaultSize=NSSize(width: 560, height: 540)
+	private(set) var selectedSection:Section = .general
+	private let sections=NSSegmentedControl(labels: [NSLocalizedString("GeneralSettings", value: "General", comment: ""),NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""),NSLocalizedString("AboutSettings", value: "About", comment: "")], trackingMode: .selectOne, target: nil, action: nil)
+	private let pages=NSTabView()
+	private let aboutVersionLabel=WindowUI.label("", size: 12, secondary: true)
 	var onStartReceivingOnLaunchChange:((Bool)->Void)?
 	var onLaunchAtLoginChange:((Bool)->Void)?
 	var onOpenLoginItems:(()->Void)?
@@ -479,17 +485,36 @@ final class SettingsViewController:NSViewController{
 	private let forgetButton=NSButton(title: NSLocalizedString("ForgetDevices", value: "Forget all", comment: ""), target: nil, action: nil)
 
 	override func loadView(){
-		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 460, height: 670))
+		view=WindowBackgroundView(frame: NSRect(origin: .zero, size: Self.defaultSize))
 		view.wantsLayer=true
-		let content=WindowUI.stack(spacing: 14)
-		WindowUI.pin(content, to: view, inset: 24)
-		WindowUI.fill(WindowUI.label(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""), size: 14, weight: .semibold), in: content)
+		sections.identifier=NSUserInterfaceItemIdentifier("SettingsSections")
+		sections.setAccessibilityLabel(NSLocalizedString("SettingsSections", value: "Settings sections", comment: ""))
+		sections.selectedSegment=selectedSection.rawValue
+		sections.target=self
+		sections.action=#selector(sectionChanged(_:))
+		sections.translatesAutoresizingMaskIntoConstraints=false
+		view.addSubview(sections)
+		pages.tabViewType = .noTabsNoBorder
+		pages.drawsBackground=false
+		pages.translatesAutoresizingMaskIntoConstraints=false
+		view.addSubview(pages)
+		NSLayoutConstraint.activate([
+			sections.topAnchor.constraint(equalTo: view.topAnchor, constant: 18),
+			sections.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+			pages.topAnchor.constraint(equalTo: sections.bottomAnchor, constant: 12),
+			pages.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+			pages.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+			pages.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+		])
+		let general=page(.general)
+		let device=card(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""), in: general)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("DeviceNameExplanation", value: "Shown to nearby devices. Your Mac’s system name is unchanged.", comment: ""), size: 12, secondary: true), in: device)
 		nameField.identifier=NSUserInterfaceItemIdentifier("CustomDeviceName")
 		nameField.setAccessibilityLabel(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""))
 		nameField.placeholderString=Host.current().localizedName ?? ProcessInfo.processInfo.hostName
 		nameField.target=self
 		nameField.action=#selector(saveName(_:))
-		WindowUI.fill(nameField, in: content)
+		WindowUI.fill(nameField, in: device)
 		let nameActions=WindowUI.stack(.horizontal)
 		let save=NSButton(title: NSLocalizedString("SaveDeviceName", value: "Save name", comment: ""), target: self, action: #selector(saveName(_:)))
 		save.bezelStyle = .rounded
@@ -497,24 +522,24 @@ final class SettingsViewController:NSViewController{
 		let reset=NSButton(title: NSLocalizedString("UseMacName", value: "Use Mac’s name", comment: ""), target: self, action: #selector(resetName(_:)))
 		reset.bezelStyle = .rounded
 		nameActions.addArrangedSubview(reset)
-		content.addArrangedSubview(nameActions)
+		device.addArrangedSubview(nameActions)
 		nameError.textColor = .systemRed
-		WindowUI.fill(nameError, in: content)
+		WindowUI.fill(nameError, in: device)
 		nameError.isHidden=true
-		WindowUI.fill(WindowUI.label(NSLocalizedString("StartupSettings", value: "Startup", comment: ""), size: 14, weight: .semibold), in: content)
+		let startup=card(NSLocalizedString("StartupSettings", value: "Startup", comment: ""), in: general)
 		startReceivingButton.target=self
 		startReceivingButton.action=#selector(startReceivingChanged(_:))
-		content.addArrangedSubview(startReceivingButton)
+		startup.addArrangedSubview(startReceivingButton)
 		loginButton.target=self
 		loginButton.action=#selector(launchAtLoginChanged(_:))
-		content.addArrangedSubview(loginButton)
+		startup.addArrangedSubview(loginButton)
 		loginHelpButton.target=self
 		loginHelpButton.action=#selector(openLoginItems(_:))
 		loginHelpButton.bezelStyle = .inline
-		content.addArrangedSubview(loginHelpButton)
+		startup.addArrangedSubview(loginHelpButton)
 		if #available(macOS 13.0, *){loginHelpButton.isHidden=true}else{loginButton.isHidden=true}
-		WindowUI.fill(WindowUI.label(NSLocalizedString("RememberedNames", value: "Remembered device names", comment: ""), size: 14, weight: .semibold), in: content)
-		WindowUI.fill(WindowUI.label(NSLocalizedString("RememberNameExplanation", value: "Remembering a name does not verify identity or skip approval. Always check the PIN.", comment: ""), size: 12, secondary: true), in: content)
+		let remembered=card(NSLocalizedString("RememberedNames", value: "Remembered device names", comment: ""), in: general)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("RememberNameExplanation", value: "Remembering a name does not verify identity or skip approval. Always check the PIN.", comment: ""), size: 12, secondary: true), in: remembered)
 		let rememberedRow=WindowUI.stack(.horizontal)
 		rememberedRow.addArrangedSubview(rememberedCountLabel)
 		rememberedRow.addArrangedSubview(WindowUI.spacer())
@@ -522,13 +547,11 @@ final class SettingsViewController:NSViewController{
 		forgetButton.target=self
 		forgetButton.action=#selector(forgetDevices(_:))
 		rememberedRow.addArrangedSubview(forgetButton)
-		WindowUI.fill(rememberedRow, in: content)
-		let updates=WindowUI.stack(spacing: 8)
-		let updateHeading=WindowUI.stack(.horizontal)
-		updateHeading.addArrangedSubview(WindowUI.label(NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""), size: 14, weight: .semibold))
-		updateHeading.addArrangedSubview(WindowUI.spacer())
-		updateHeading.addArrangedSubview(updateVersionLabel)
-		WindowUI.fill(updateHeading, in: updates)
+		WindowUI.fill(rememberedRow, in: remembered)
+
+		let updatePage=page(.updates)
+		let updates=card(NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""), in: updatePage)
+		WindowUI.fill(updateVersionLabel, in: updates)
 		automaticUpdatesButton.target=self
 		automaticUpdatesButton.action=#selector(automaticUpdatesChanged(_:))
 		updates.addArrangedSubview(automaticUpdatesButton)
@@ -546,11 +569,59 @@ final class SettingsViewController:NSViewController{
 		updates.addArrangedSubview(updateActions)
 		updateStatusLabel.isHidden=true
 		WindowUI.fill(updateStatusLabel, in: updates)
-		WindowUI.fill(updates, in: content)
-		let credits=WindowUI.stack(spacing: 4)
+
+		let about=page(.about)
+		let identity=WindowUI.stack(spacing: 8)
+		identity.alignment = .centerX
+		let icon=NSImageView(image: NSImage(named: "QuickShareMacBrandIcon") ?? NSApp.applicationIconImage)
+		icon.imageScaling = .scaleProportionallyUpOrDown
+		NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 64),icon.heightAnchor.constraint(equalToConstant: 64)])
+		identity.addArrangedSubview(icon)
+		identity.addArrangedSubview(WindowUI.label("QuickShareMac", size: 22, weight: .semibold))
+		identity.addArrangedSubview(aboutVersionLabel)
+		let description=WindowUI.label(NSLocalizedString("AboutDescription", value: "Share files between your Mac and Android devices over your local network.", comment: ""), size: 12, secondary: true)
+		description.alignment = .center
+		WindowUI.fill(description, in: identity)
+		WindowUI.fill(identity, in: about)
+		let credits=card(NSLocalizedString("CreditsSettings", value: "Credits", comment: ""), in: about)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true), in: credits)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("UpstreamCredit", value: "Based on NearDrop by grishka · github.com/grishka/NearDrop", comment: ""), size: 11, secondary: true), in: credits)
-		WindowUI.fill(credits, in: content)
+		pages.selectTabViewItem(at: selectedSection.rawValue)
+	}
+
+	private func page(_ section:Section)->NSStackView{
+		let scroll=NSScrollView()
+		scroll.drawsBackground=false
+		scroll.hasVerticalScroller=true
+		scroll.autohidesScrollers=true
+		let document=FlippedDocumentView()
+		document.translatesAutoresizingMaskIntoConstraints=false
+		scroll.documentView=document
+		document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor).isActive=true
+		let content=WindowUI.stack(spacing: 14)
+		WindowUI.pin(content, to: document, inset: 20)
+		let item=NSTabViewItem(identifier: section.rawValue)
+		item.view=scroll
+		pages.addTabViewItem(item)
+		return content
+	}
+	private func card(_ title:String, in parent:NSStackView)->NSStackView{
+		let card=CardView()
+		card.wantsLayer=true
+		let content=WindowUI.stack(spacing: 10)
+		WindowUI.pin(content, to: card, inset: 16)
+		WindowUI.fill(WindowUI.label(title, size: 13, weight: .semibold), in: content)
+		WindowUI.fill(card, in: parent)
+		return content
+	}
+	func show(_ section:Section){
+		_ = view
+		selectedSection=section
+		sections.selectedSegment=section.rawValue
+		pages.selectTabViewItem(at: section.rawValue)
+	}
+	@objc private func sectionChanged(_ sender:NSSegmentedControl){
+		if let section=Section(rawValue: sender.selectedSegment){show(section)}
 	}
 
 	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int, customDeviceName:String?=nil){
@@ -570,6 +641,7 @@ final class SettingsViewController:NSViewController{
 		checkUpdatesButton.isEnabled = !checking
 		checkUpdatesButton.title=checking ? NSLocalizedString("CheckingForUpdates", value: "Checking for updates…", comment: "") : NSLocalizedString("CheckForUpdates", value: "Check for Updates…", comment: "")
 		updateVersionLabel.stringValue=String(format: NSLocalizedString("InstalledVersion", value: "Version %@", comment: ""), currentVersion)
+		aboutVersionLabel.stringValue=updateVersionLabel.stringValue
 		viewReleaseButton.isHidden=availableRelease==nil
 		updateStatusLabel.stringValue=status
 		updateStatusLabel.isHidden=status.isEmpty
