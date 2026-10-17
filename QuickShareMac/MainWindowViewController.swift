@@ -73,7 +73,7 @@ final class MainWindowViewController:NSViewController{
 		header.orientation = .horizontal
 		header.alignment = .centerY
 		header.spacing=12
-		let icon=NSImageView(image: NSImage(named: NSImage.applicationIconName) ?? NSImage())
+		let icon=NSImageView(image: NSImage(named: "QuickShareMacBrandIcon") ?? NSImage())
 		icon.imageScaling = .scaleProportionallyUpOrDown
 		NSLayoutConstraint.activate([
 			icon.widthAnchor.constraint(equalToConstant: 44),

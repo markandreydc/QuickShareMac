@@ -23,6 +23,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
     func applicationDidFinishLaunching(_ aNotification: Notification) {
 		UserDefaults.standard.register(defaults: [startReceivingKey:true])
 		rememberedDevices=Set(UserDefaults.standard.stringArray(forKey: rememberedDevicesKey) ?? [])
+		if let appIcon=NSImage(named: "QuickShareMacBrandIcon"){
+			appIcon.isTemplate=false
+			NSApplication.shared.applicationIconImage=appIcon
+		}
 		let appMenu=NSMenu(title: "QuickShareMac")
 		appMenu.addItem(withTitle: NSLocalizedString("Quit", value: "Quit QuickShareMac", comment: ""), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 		let appMenuItem=NSMenuItem(title: "QuickShareMac", action: nil, keyEquivalent: "")
@@ -31,7 +35,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 		mainMenu.addItem(appMenuItem)
 		NSApplication.shared.mainMenu=mainMenu
 		statusItem=NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-		statusItem?.button?.image=NSImage(named: "MenuBarIcon")
+		let menuBarIcon=NSImage(named: "QuickShareMacBrandIcon")
+		menuBarIcon?.size=NSSize(width: 18, height: 18)
+		menuBarIcon?.isTemplate=false
+		statusItem?.button?.image=menuBarIcon
 		statusItem?.button?.target=self
 		statusItem?.button?.action=#selector(statusBarClicked(_:))
 		statusItem?.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
