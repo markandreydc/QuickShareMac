@@ -230,12 +230,17 @@ private final class TransferRowView:CardView{
 }
 
 final class MainWindowViewController:NSViewController{
+	static let defaultSize=NSSize(width: 560, height: 480)
+	static let minimumSize=NSSize(width: 520, height: 480)
 	let sendController=SendViewController()
 	private let tabs=NSSegmentedControl(labels: [NSLocalizedString("ReceiveTab", value: "Receive", comment: ""), NSLocalizedString("SendTab", value: "Send", comment: "")], trackingMode: .selectOne, target: nil, action: nil)
 	private let receiveContent=WindowUI.stack(spacing: 16)
 	var onReceivingChange:((Bool)->Void)?
 	var onDurationChange:((ReceivingDuration)->Void)?
 	var onOpenSettings:(()->Void)?
+	var onAlwaysOnTopChange:((Bool)->Void)?
+	private(set) var isAlwaysOnTop=false
+	private let pinButton=NSButton()
 	var onTransferDecision:((String,TransferDecision)->Void)?
 	var onRevealTransfer:((String)->Void)?
 	var onDismissTransfer:((String)->Void)?
@@ -257,12 +262,13 @@ final class MainWindowViewController:NSViewController{
 	private let enableButton=NSButton(title: NSLocalizedString("EnableReceiving", value: "Enable receiving", comment: ""), target: nil, action: nil)
 	private var transferRows:[String:TransferRowView]=[:]
 	private var listKeys:[String]=[]
+	private var pendingApprovalID:String?
 	private let recentHeading=WindowUI.stack(.horizontal)
 	private let activeHeading=WindowUI.label(NSLocalizedString("IncomingTransfers", value: "Incoming transfers", comment: ""), size: 13, weight: .semibold)
 	private var receiving=false
 
 	override func loadView(){
-		let drop=SendDropView(frame: NSRect(x: 0, y: 0, width: 560, height: 680))
+		let drop=SendDropView(frame: NSRect(origin: .zero, size: Self.defaultSize))
 		drop.onURLs={ [weak self] urls in
 			guard let self=self else {return false}
 			self.showSend()
@@ -288,6 +294,16 @@ final class MainWindowViewController:NSViewController{
 		let settings=NSButton(title: NSLocalizedString("Settings", value: "Settings…", comment: ""), target: self, action: #selector(openSettings(_:)))
 		settings.bezelStyle = .inline
 		header.addArrangedSubview(settings)
+		pinButton.identifier=NSUserInterfaceItemIdentifier("AlwaysOnTopPin")
+		pinButton.setButtonType(.pushOnPushOff)
+		pinButton.isBordered=false
+		pinButton.imagePosition = .imageOnly
+		pinButton.setAccessibilityLabel(NSLocalizedString("AlwaysOnTop", value: "Always on top", comment: ""))
+		pinButton.target=self
+		pinButton.action=#selector(toggleAlwaysOnTop(_:))
+		NSLayoutConstraint.activate([pinButton.widthAnchor.constraint(equalToConstant: 28),pinButton.heightAnchor.constraint(equalToConstant: 28)])
+		header.addArrangedSubview(pinButton)
+		updatePinButton()
 		WindowUI.fill(header, in: content)
 		tabs.selectedSegment=0
 		tabs.target=self
@@ -330,7 +346,6 @@ final class MainWindowViewController:NSViewController{
 		WindowUI.fill(approvalTitle, in: approvalStack)
 		WindowUI.fill(approvalRow, in: approvalStack)
 		approvalRow.onDecision={ [weak self] id, decision in self?.onTransferDecision?(id, decision) }
-		WindowUI.fill(approvalStack, in: receiveContent)
 
 		scrollView.hasVerticalScroller=true
 		scrollView.autohidesScrollers=true
@@ -373,8 +388,28 @@ final class MainWindowViewController:NSViewController{
 		WindowUI.fill(footer, in: receiveContent)
 	}
 
-	override func viewDidAppear(){super.viewDidAppear(); sendController.setActive(tabs.selectedSegment==1)}
+	override func viewDidAppear(){
+		super.viewDidAppear()
+		view.window?.level=isAlwaysOnTop ? .floating : .normal
+		sendController.setActive(tabs.selectedSegment==1)
+	}
 	override func viewWillDisappear(){super.viewWillDisappear(); sendController.setActive(false)}
+	func setAlwaysOnTop(_ enabled:Bool){
+		isAlwaysOnTop=enabled
+		_ = view
+		view.window?.level=enabled ? .floating : .normal
+		updatePinButton()
+	}
+	private func updatePinButton(){
+		pinButton.state=isAlwaysOnTop ? .on : .off
+		pinButton.image=NSImage(systemSymbolName: isAlwaysOnTop ? "pin.fill" : "pin", accessibilityDescription: nil)
+		pinButton.contentTintColor=isAlwaysOnTop ? .controlAccentColor : .secondaryLabelColor
+		pinButton.toolTip=isAlwaysOnTop ? NSLocalizedString("UnpinWindow", value: "Turn off always on top", comment: "") : NSLocalizedString("PinWindow", value: "Keep window on top", comment: "")
+	}
+	@objc private func toggleAlwaysOnTop(_ sender:NSButton){
+		setAlwaysOnTop(!isAlwaysOnTop)
+		onAlwaysOnTopChange?(isAlwaysOnTop)
+	}
 	func showReceive(){
 		_ = view
 		tabs.selectedSegment=0
@@ -405,6 +440,8 @@ final class MainWindowViewController:NSViewController{
 		statusLabel.stringValue=receiving ? NSLocalizedString("ReadyToReceive", value: "Ready to receive", comment: "") : NSLocalizedString("ReceivingOff", value: "Receiving off", comment: "")
 		visibilityLabel.stringValue=receiving ? NSLocalizedString("ReceivingVisibility", value: "Visible to everyone on your network while receiving.", comment: "") : NSLocalizedString("ReceivingOffDetail", value: "New requests are paused. Transfers in progress can finish.", comment: "")
 		let pending=transfers.filter {$0.state == .awaitingApproval}
+		let newApproval=pending.first?.id != nil && pending.first?.id != pendingApprovalID
+		pendingApprovalID=pending.first?.id
 		approvalStack.isHidden=pending.isEmpty
 		if let first=pending.first{
 			approvalTitle.stringValue=pending.count==1 ? NSLocalizedString("IncomingRequest", value: "Incoming request", comment: "") : String.localizedStringWithFormat(NSLocalizedString("PendingRequestCount", value: "Incoming request · %d waiting", comment: ""), pending.count)
@@ -429,6 +466,7 @@ final class MainWindowViewController:NSViewController{
 		emptyDetail.stringValue=receiving ? String(format: NSLocalizedString("ReceiveInstructions", value: "Open Quick Share on your Android device and choose “%@”.\nBoth devices must be on the same Wi-Fi network.", comment: ""), deviceName) : NSLocalizedString("EnableReceivingHint", value: "Enable receiving to let nearby devices send files to this Mac.", comment: "")
 		enableButton.isHidden=receiving
 		var desired:[(String,NSView)]=[]
+		if !pending.isEmpty{desired.append(("approval",approvalStack))}
 		if transfers.isEmpty{desired.append(("empty",empty))}
 		if !active.isEmpty{
 			desired.append(("active",activeHeading))
@@ -442,6 +480,11 @@ final class MainWindowViewController:NSViewController{
 			for child in rows.arrangedSubviews{rows.removeArrangedSubview(child); child.removeFromSuperview()}
 			for (_, child) in desired{WindowUI.fill(child, in: rows)}
 			listKeys=desired.map {$0.0}
+		}
+		if newApproval{
+			view.layoutSubtreeIfNeeded()
+			scrollView.contentView.scroll(to: .zero)
+			scrollView.reflectScrolledClipView(scrollView.contentView)
 		}
 	}
 

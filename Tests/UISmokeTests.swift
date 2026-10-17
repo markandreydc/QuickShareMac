@@ -37,12 +37,31 @@ struct UISmokeTests{
 		_ = NSApplication.shared
 		NSApp.setActivationPolicy(.prohibited)
 		let controller=MainWindowViewController()
-		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 680), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.minimumSize), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
 		window.contentViewController=controller
-		window.setContentSize(NSSize(width: 520, height: 680))
+		window.setContentSize(MainWindowViewController.minimumSize)
 		controller.update(receiving: true, transfers: [])
 		layout(window)
 		controller.update(receiving: true, transfers: [], deviceName: "Studio Mac")
+		let pin=visible(controller.view).compactMap {$0 as? NSButton}.first(where: {$0.identifier?.rawValue=="AlwaysOnTopPin"})!
+		let otherWindow=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
+		var pinChanges:[Bool]=[]
+		controller.onAlwaysOnTopChange={pinChanges.append($0)}
+		expect(pin.state == .off && window.level == .normal && !controller.isAlwaysOnTop, "Always on top must be off by default")
+		let pinFrame=pin.convert(pin.bounds, to: controller.view)
+		expect(pinFrame.midX>controller.view.bounds.midX && pinFrame.midY>controller.view.bounds.maxY-72, "The pin control must sit at the upper-right of the main window")
+		pin.performClick(nil)
+		expect(pin.state == .on && controller.isAlwaysOnTop && window.level == .floating, "Clicking the pin must keep the main window above normal windows")
+		expect(pin.toolTip=="Turn off always on top" && otherWindow.level == .normal, "Pinning must explain how to turn it off and leave other windows unchanged")
+		controller.showSend()
+		controller.showReceive()
+		expect(window.level == .floating && pin.state == .on, "Switching tabs must preserve the always-on-top state")
+		pin.performClick(nil)
+		expect(pinChanges==[true,false] && window.level == .normal && pin.toolTip=="Keep window on top", "Clicking again must restore normal stacking and report each user change once")
+		controller.setAlwaysOnTop(true)
+		controller.viewDidAppear()
+		expect(window.level == .floating && pinChanges==[true,false], "Restoring a saved pin setting must apply it without writing another user change")
+		controller.setAlwaysOnTop(false)
 		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Studio Mac"}), "The main header must use the configured device name")
 		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue.contains("choose “Studio Mac”")}), "Receiving instructions must match the configured advertised name")
 		let duration=visible(controller.view).compactMap {$0 as? NSPopUpButton}.first!
@@ -68,8 +87,11 @@ struct UISmokeTests{
 		let remember=button("Remember this device name", in: controller.view)
 		remember.state = .on
 		let accept=button("Accept", in: controller.view)
+		_ = accept.scrollToVisible(accept.bounds)
+		layout(window)
 		expect(accept.keyEquivalent.isEmpty, "Approval must not capture Return")
-		expect(accept.convert(accept.bounds, to: controller.view).minY>=0, "Approval controls must fit at the minimum window size")
+		expect(controller.view.bounds.contains(accept.convert(accept.bounds, to: controller.view)), "Approval controls must remain reachable by scrolling in the compact window")
+		expect(abs(window.contentView!.bounds.height-MainWindowViewController.minimumSize.height)<1, "Incoming requests must scroll instead of expanding the compact window")
 		expect(visible(controller.view).filter({$0 is NSProgressIndicator}).count==1, "Only active transfers should show progress")
 		controller.update(receiving: true, transfers: [transfer("a", .awaitingApproval), transfer("b", .receiving, progress: 0.8)])
 		expect(button("Remember this device name", in: controller.view) === remember, "Progress updates must preserve approval controls")
@@ -108,8 +130,11 @@ struct UISmokeTests{
 		controller.update(receiving: true, transfers: [longRequest])
 		layout(window)
 		let longAccept=button("Accept", in: controller.view)
+		_ = longAccept.scrollToVisible(longAccept.bounds)
+		layout(window)
 		let actionBounds=longAccept.convert(longAccept.bounds, to: controller.view)
 		expect(controller.view.bounds.contains(actionBounds), "Long sender names and filenames must not push approval controls outside the window")
+		expect(abs(window.contentView!.bounds.height-480)<1, "Even long approval requests must not force the window taller")
 		let history=(0..<20).map {transfer("history-\($0)", .completed)}
 		controller.update(receiving: true, transfers: [transfer("active", .receiving)]+history)
 		layout(window)
@@ -119,6 +144,8 @@ struct UISmokeTests{
 		let origin=scroll.contentView.bounds.origin
 		controller.update(receiving: true, transfers: [transfer("active", .receiving, progress: 0.9)]+history)
 		expect(scroll.contentView.bounds.origin==origin, "Progress updates must preserve scroll position")
+		controller.update(receiving: true, transfers: [transfer("fresh", .awaitingApproval, pin: "1234"), transfer("active", .receiving)]+history)
+		expect(scroll.contentView.bounds.origin == .zero, "A new approval request must scroll back to the top so its PIN is visible")
 		window.setContentSize(NSSize(width: 760, height: 900))
 		layout(window)
 		expect(visible(controller.view).compactMap({$0 as? NSScrollView}).first!.frame.width>600, "Transfer list must expand with the window")
@@ -552,7 +579,7 @@ struct UISmokeTests{
 		let service=FakeSendingService()
 		let main=MainWindowViewController()
 		main.sendController.sender.service=service
-		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 680), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
 		window.contentViewController=main
 		main.update(receiving: true, transfers: [])
 		main.showSend()
@@ -657,7 +684,7 @@ struct UISmokeTests{
 		let service=FakeSendingService()
 		let main=MainWindowViewController()
 		main.sendController.sender.service=service
-		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 680), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
 		window.contentViewController=main
 		main.update(receiving: true, transfers: [])
 		let drop=main.view as! SendDropView
@@ -688,7 +715,7 @@ struct UISmokeTests{
 		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==0, "Hovering must not switch away from Receive")
 		let overlay=visible(drop).first(where: {$0.identifier?.rawValue=="FileDropOverlay"})!
 		expect(drop.subviews.last === overlay && overlay.hitTest(.zero)==nil, "A single window-wide overlay must stay above content without intercepting events")
-		for size in [NSSize(width: 560, height: 680),NSSize(width: 700, height: 800)]{
+		for size in [MainWindowViewController.minimumSize,MainWindowViewController.defaultSize,NSSize(width: 700, height: 800)]{
 			window.setContentSize(size)
 			layout(window)
 			expect(overlay.frame==drop.bounds.insetBy(dx: 12, dy: 12), "The drag overlay must fill the whole window on resize, not just the Send card")

@@ -64,6 +64,8 @@ Select **Remember this device name** before accepting if you want a visual remin
 
 Closing the window does not quit the app. Click the Dock icon to reopen it, or click the menu bar icon and choose **Show QuickShareMac**. Both left-click and right-click open the standard macOS menu, with receiving controls, file sending, Settings, and Quit. The menu and monochrome icon follow the system appearance.
 
+The main window uses a compact layout; transfer requests and history scroll instead of forcing it taller, and a new incoming request scrolls back to the top so its PIN is visible. Click the **pin icon** at the upper right to keep the main window above normal windows. A filled pin means **Always on top** is enabled; click again to turn it off. The setting is remembered across launches and does not change other windows.
+
 The menu also shows the device name and a **read-only visibility status**. “Visible to everyone on your network” describes the current receiving policy; it is not a contact-only visibility selector. When receiving is off, the menu says the device is not visible.
 
 Use **Available for** in the Receive tab or menu to choose **10 minutes**, **30 minutes**, **1 hour**, or **Indefinitely**. The default is Indefinitely. Changing the duration while receiving starts a new timer; changing it while receiving is off only selects the duration for the next session. When the timer expires, new incoming connections stop, but active transfers can finish. Closing the window does not stop the timer, and elapsed time during sleep counts. The chosen duration is remembered; reopening the app with receiving on startup starts a fresh session.

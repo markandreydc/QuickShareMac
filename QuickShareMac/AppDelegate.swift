@@ -85,14 +85,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		statusMenu.onQuit={NSApplication.shared.terminate(nil)}
 		if let statusItem=statusItem{statusMenu.attach(to: statusItem)}
 		statusItem?.behavior = .removalAllowed
-		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 680),
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize),
 							styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
 		window.title="QuickShareMac"
 		window.contentViewController=windowController
 		window.isReleasedWhenClosed=false
-		window.contentMinSize=NSSize(width: 520, height: 680)
+		window.contentMinSize=MainWindowViewController.minimumSize
 		window.setFrameAutosaveName("QuickShareMacMainWindow")
 		if !window.setFrameUsingName("QuickShareMacMainWindow"){window.center()}
+		if !UserDefaults.standard.bool(forKey: "CompactMainWindowSizeAppliedV2"){
+			let restored=window.contentRect(forFrameRect: window.frame).size
+			if abs(restored.height-680)<1 || abs(restored.height-580)<1{
+				let top=window.frame.maxY
+				window.setContentSize(NSSize(width: restored.width, height: MainWindowViewController.defaultSize.height))
+				window.setFrameOrigin(NSPoint(x: window.frame.minX, y: top-window.frame.height))
+			}
+			UserDefaults.standard.set(true, forKey: "CompactMainWindowSizeAppliedV2")
+		}
+		windowController.setAlwaysOnTop(UserDefaults.standard.bool(forKey: "AlwaysOnTop"))
+		windowController.onAlwaysOnTopChange={enabled in UserDefaults.standard.set(enabled, forKey: "AlwaysOnTop")}
 		mainWindow=window
 		windowController.onReceivingChange={ [weak self] enabled in self?.setReceiving(enabled) }
 		windowController.onDurationChange={ [weak self] duration in self?.availability.select(duration) }
