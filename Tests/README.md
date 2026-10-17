@@ -15,6 +15,10 @@ It covers Send/Receive navigation, file-only selection and drag-and-drop, Share
 extension link handling, approval,
 progress, cancellation, retry isolation, background completion, history, and native
 menu bar behavior (menu attachment, appearance defaults, actions, and live state).
+Drag checks cover the window-wide overlay on both tabs, filename/count previews,
+copy-only cursor feedback, resizing/dark appearance, rejected folders/links/missing
+files, drop-time revalidation, active-transfer changes during a hover, cleanup on
+exit/cancel/window removal, and recipient selection without automatic sending.
 It also checks explicit system/custom device-name choices, prefilled custom input,
 Save/Cancel draft handling, refresh isolation, friendly inline validation,
 save confirmation/failure handling, and name persistence; read-only visibility details,

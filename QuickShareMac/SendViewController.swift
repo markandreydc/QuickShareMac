@@ -1,31 +1,191 @@
 import Cocoa
 
-final class SendDropView:WindowBackgroundView{
-	var acceptsItems=true
-	var onURLs:(([URL])->Bool)?
+enum FileDropFeedback:Equatable{
+	case ready([URL]), folder, busy, unsupported, unreadable
+	var canDrop:Bool{if case .ready=self{return true}; return false}
+}
+
+private final class DropOutlineView:NSView{
+	var color:NSColor = .controlAccentColor{didSet{needsDisplay=true}}
+	override func draw(_ dirtyRect:NSRect){
+		color.withAlphaComponent(0.7).setStroke()
+		let outline=NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 14, yRadius: 14)
+		outline.lineWidth=2
+		outline.setLineDash([8,6], count: 2, phase: 0)
+		outline.stroke()
+	}
+}
+
+private final class FileDropOverlay:NSVisualEffectView{
+	private let tint=NSView()
+	private let outline=DropOutlineView()
+	private let icon=NSImageView()
+	private let title=WindowUI.label("", size: 24, weight: .semibold)
+	private let subtitle=WindowUI.label("", size: 14, secondary: true)
+	private let details=WindowUI.label("", size: 12, secondary: true)
+	private var acceptsDrop=true
 	override init(frame:NSRect){
 		super.init(frame: frame)
-		registerForDraggedTypes([.fileURL])
+		identifier=NSUserInterfaceItemIdentifier("FileDropOverlay")
+		material = .contentBackground
+		blendingMode = .withinWindow
+		state = .active
+		wantsLayer=true
+		layer?.cornerRadius=18
+		layer?.masksToBounds=true
+		tint.wantsLayer=true
+		WindowUI.pin(tint, to: self, inset: 0)
+		WindowUI.pin(outline, to: self, inset: 12)
+		let content=WindowUI.stack(spacing: 12)
+		content.alignment = .centerX
+		content.translatesAutoresizingMaskIntoConstraints=false
+		addSubview(content)
+		NSLayoutConstraint.activate([
+			content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 36),
+			content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -36),
+			content.centerYAnchor.constraint(equalTo: centerYAnchor),
+			icon.widthAnchor.constraint(equalToConstant: 64),
+			icon.heightAnchor.constraint(equalToConstant: 64)
+		])
+		icon.imageScaling = .scaleProportionallyUpOrDown
+		content.addArrangedSubview(icon)
+		for label in [title,subtitle,details]{
+			label.alignment = .center
+			WindowUI.fill(label, in: content)
+		}
+		details.maximumNumberOfLines=2
+		details.lineBreakMode = .byTruncatingMiddle
+	}
+	required init?(coder:NSCoder){fatalError("init(coder:) has not been implemented")}
+	// Never become a second drag destination or intercept the normal window UI.
+	override func hitTest(_ point:NSPoint)->NSView?{nil}
+	func show(_ feedback:FileDropFeedback){
+		acceptsDrop=feedback.canDrop
+		let symbol:String
+		details.stringValue=""
+		switch feedback{
+		case .ready(let urls):
+			symbol="arrow.up.doc"
+			title.stringValue=NSLocalizedString("DropToSend", value: "Drop to send", comment: "")
+			subtitle.stringValue=NSLocalizedString("DropChooseDeviceNext", value: "Choose a nearby device next", comment: "")
+			details.stringValue=urls.count==1 ? urls[0].lastPathComponent : String.localizedStringWithFormat(NSLocalizedString("DropFileCount", value: "%d files", comment: ""), urls.count)
+		case .folder:
+			symbol="folder"
+			title.stringValue=NSLocalizedString("DropFolderTitle", value: "Can’t send folders", comment: "")
+			subtitle.stringValue=NSLocalizedString("DropFolderHelp", value: "Compress this folder into a ZIP first.", comment: "")
+		case .busy:
+			symbol="clock"
+			title.stringValue=NSLocalizedString("DropBusyTitle", value: "Transfer in progress", comment: "")
+			subtitle.stringValue=NSLocalizedString("DropBusyHelp", value: "Finish or cancel the current transfer first.", comment: "")
+		case .unsupported:
+			symbol="doc"
+			title.stringValue=NSLocalizedString("DropFilesOnlyTitle", value: "Files only", comment: "")
+			subtitle.stringValue=NSLocalizedString("DropFilesToSend", value: "Drop files here to send", comment: "")
+		case .unreadable:
+			symbol="exclamationmark.triangle"
+			title.stringValue=NSLocalizedString("DropUnreadableTitle", value: "Can’t read these files", comment: "")
+			subtitle.stringValue=NSLocalizedString("DropUnreadableHelp", value: "Choose files you can open, then try again.", comment: "")
+		}
+		icon.image=NSImage(systemSymbolName: symbol, accessibilityDescription: title.stringValue)
+		details.isHidden=details.stringValue.isEmpty
+		setAccessibilityLabel([title.stringValue,subtitle.stringValue,details.stringValue].filter {!$0.isEmpty}.joined(separator: ". "))
+		updateColors()
+	}
+	private func updateColors(){
+		let color:NSColor=acceptsDrop ? .controlAccentColor : .systemOrange
+		icon.contentTintColor=color
+		outline.color=color
+		effectiveAppearance.performAsCurrentDrawingAppearance{tint.layer?.backgroundColor=color.withAlphaComponent(0.06).cgColor}
+	}
+	override func viewDidChangeEffectiveAppearance(){super.viewDidChangeEffectiveAppearance(); updateColors()}
+}
+
+final class SendDropView:WindowBackgroundView{
+	var acceptsItems=true{didSet{if oldValue != acceptsItems, let pasteboard=dragPasteboard{_ = previewDrop(from: pasteboard, sourceOperationMask: sourceOperationMask)}}}
+	var onURLs:(([URL])->Bool)?
+	private(set) var dropFeedback:FileDropFeedback?
+	private let overlay=FileDropOverlay(frame: .zero)
+	private var dragPasteboard:NSPasteboard?
+	private var sourceOperationMask:NSDragOperation = .copy
+	private var cachedChangeCount:Int?
+	private var cachedFeedback:FileDropFeedback?
+	override init(frame:NSRect){
+		super.init(frame: frame)
+		registerForDraggedTypes([.fileURL,.URL,.string,.tiff,.png])
 	}
 	required init?(coder:NSCoder){fatalError("init(coder:) has not been implemented")}
 	static func urls(from pasteboard:NSPasteboard) -> [URL]{
 		let urls=pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] ?? []
 		return urls.allSatisfy(\.isFileURL) ? urls : []
 	}
+	private static func fileFeedback(from pasteboard:NSPasteboard)->FileDropFeedback{
+		let urls=urls(from: pasteboard)
+		guard !urls.isEmpty else {return .unsupported}
+		for url in urls{
+			var scoped=false
+			defer{if scoped{url.stopAccessingSecurityScopedResource()}}
+			do{
+				let keys:Set<URLResourceKey>=[.isDirectoryKey,.isRegularFileKey]
+				let values:URLResourceValues
+				do{values=try url.resourceValues(forKeys: keys)}
+				catch{
+					let failure=error as NSError
+					guard failure.domain==NSCocoaErrorDomain, failure.code==NSFileReadNoPermissionError else {return .unreadable}
+					scoped=url.startAccessingSecurityScopedResource()
+					guard scoped else {return .unreadable}
+					values=try url.resourceValues(forKeys: keys)
+				}
+				if values.isDirectory==true{return .folder}
+				guard values.isRegularFile==true else {return .unreadable}
+				if !FileManager.default.isReadableFile(atPath: url.path){
+					if !scoped{scoped=url.startAccessingSecurityScopedResource()}
+					guard FileManager.default.isReadableFile(atPath: url.path) else {return .unreadable}
+				}
+			}catch{return .unreadable}
+		}
+		return .ready(urls)
+	}
+	@discardableResult func previewDrop(from pasteboard:NSPasteboard, sourceOperationMask:NSDragOperation = .copy)->NSDragOperation{
+		if dragPasteboard !== pasteboard || cachedChangeCount != pasteboard.changeCount{
+			cachedFeedback=nil
+			cachedChangeCount=pasteboard.changeCount
+		}
+		if acceptsItems && sourceOperationMask.contains(.copy) && cachedFeedback==nil{cachedFeedback=Self.fileFeedback(from: pasteboard)}
+		dragPasteboard=pasteboard
+		self.sourceOperationMask=sourceOperationMask
+		let feedback:FileDropFeedback = !acceptsItems ? .busy : !sourceOperationMask.contains(.copy) ? .unsupported : cachedFeedback ?? .unsupported
+		dropFeedback=feedback
+		if overlay.superview==nil{WindowUI.pin(overlay, to: self, inset: 12)}
+		overlay.show(feedback)
+		overlay.isHidden=false
+		return feedback.canDrop ? .copy : []
+	}
+	func endDropPreview(){
+		overlay.isHidden=true
+		dropFeedback=nil
+		dragPasteboard=nil
+		cachedChangeCount=nil
+		cachedFeedback=nil
+	}
+	@discardableResult func receiveDrop(from pasteboard:NSPasteboard, sourceOperationMask:NSDragOperation = .copy)->Bool{
+		endDropPreview()
+		guard acceptsItems, sourceOperationMask.contains(.copy), case .ready(let urls)=Self.fileFeedback(from: pasteboard) else {return false}
+		return onURLs?(urls) ?? false
+	}
 	override func draggingEntered(_ sender:NSDraggingInfo) -> NSDragOperation{
-		let accepts=acceptsItems && !Self.urls(from: sender.draggingPasteboard).isEmpty
-		layer?.borderColor=NSColor.controlAccentColor.cgColor
-		layer?.borderWidth=accepts ? 2 : 0
-		return accepts ? .copy : []
+		previewDrop(from: sender.draggingPasteboard, sourceOperationMask: sender.draggingSourceOperationMask)
 	}
 	override func draggingUpdated(_ sender:NSDraggingInfo) -> NSDragOperation{draggingEntered(sender)}
-	override func draggingExited(_ sender:NSDraggingInfo?){layer?.borderWidth=0}
-	override func performDragOperation(_ sender:NSDraggingInfo) -> Bool{
-		layer?.borderWidth=0
-		guard acceptsItems else {return false}
-		let urls=Self.urls(from: sender.draggingPasteboard)
-		return !urls.isEmpty && (onURLs?(urls) ?? false)
+	override func draggingExited(_ sender:NSDraggingInfo?){endDropPreview()}
+	override func draggingEnded(_ sender:NSDraggingInfo){endDropPreview()}
+	override func concludeDragOperation(_ sender:NSDraggingInfo?){endDropPreview()}
+	override func prepareForDragOperation(_ sender:NSDraggingInfo)->Bool{
+		acceptsItems && sender.draggingSourceOperationMask.contains(.copy) && Self.fileFeedback(from: sender.draggingPasteboard).canDrop
 	}
+	override func performDragOperation(_ sender:NSDraggingInfo) -> Bool{
+		receiveDrop(from: sender.draggingPasteboard, sourceOperationMask: sender.draggingSourceOperationMask)
+	}
+	override func viewDidMoveToWindow(){super.viewDidMoveToWindow(); if window==nil{endDropPreview()}}
 }
 
 final class SendViewController:NSViewController{
@@ -35,16 +195,17 @@ final class SendViewController:NSViewController{
 	private let content=WindowUI.stack(spacing: 16)
 	private let senderCard=CardView()
 	private let errorLabel=WindowUI.label("", size: 12, secondary: true)
+	private let selectionTitle=WindowUI.label("", size: 16, weight: .semibold)
+	private let selectionHelp=WindowUI.label("", size: 12, secondary: true)
+	private var selectedFiles:[URL]=[]
 	private let chooseButton=NSButton(title: NSLocalizedString("SendFiles", value: "Send files…", comment: ""), target: nil, action: nil)
 	private let history=WindowUI.stack(spacing: 10)
 	private let historyHeading=WindowUI.stack(.horizontal)
 	private var historyButtons:[NSButton]=[]
 
 	override func loadView(){
-		let drop=SendDropView(frame: NSRect(x: 0, y: 0, width: 520, height: 500))
-		drop.wantsLayer=true
-		drop.onURLs={ [weak self] urls in self?.selectItems(urls) ?? false }
-		view=drop
+		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 520, height: 500))
+		view.wantsLayer=true
 		let scroll=NSScrollView()
 		scroll.hasVerticalScroller=true
 		scroll.autohidesScrollers=true
@@ -60,8 +221,11 @@ final class SendViewController:NSViewController{
 		selection.wantsLayer=true
 		let selectionContent=WindowUI.stack(spacing: 10)
 		WindowUI.pin(selectionContent, to: selection, inset: 16)
-		WindowUI.fill(WindowUI.label(NSLocalizedString("DropFilesToSend", value: "Drop files here to send", comment: ""), size: 16, weight: .semibold), in: selectionContent)
-		WindowUI.fill(WindowUI.label(NSLocalizedString("SendFilesSelectionHint", value: "Choose files, then select a device. Nothing is sent until you choose a recipient.", comment: ""), size: 12, secondary: true), in: selectionContent)
+		selectionTitle.identifier=NSUserInterfaceItemIdentifier("SendSelectionTitle")
+		selectionTitle.maximumNumberOfLines=2
+		selectionTitle.lineBreakMode = .byTruncatingMiddle
+		WindowUI.fill(selectionTitle, in: selectionContent)
+		WindowUI.fill(selectionHelp, in: selectionContent)
 		chooseButton.bezelStyle = .rounded
 		chooseButton.target=self
 		chooseButton.action=#selector(chooseFiles(_:))
@@ -94,6 +258,7 @@ final class SendViewController:NSViewController{
 		WindowUI.fill(history, in: content)
 		historyHeading.isHidden=true
 		history.isHidden=true
+		updateControls()
 	}
 
 	func setActive(_ active:Bool){
@@ -107,6 +272,7 @@ final class SendViewController:NSViewController{
 				throw NSError(domain: "QuickShareMac.Send", code: 1, userInfo: [NSLocalizedDescriptionKey:NSLocalizedString("SendFilesOnly", value: "The Send tab accepts files only. To share a link, use the macOS Share menu.", comment: "")])
 			}
 			try sender.configureItems(urls)
+			selectedFiles=urls
 			errorLabel.isHidden=true
 			senderCard.isHidden=false
 			updateControls()
@@ -132,13 +298,23 @@ final class SendViewController:NSViewController{
 	}
 	private func clearSelection(){
 		sender.shutdown()
+		selectedFiles=[]
 		senderCard.isHidden=true
 		updateControls()
 	}
 	private func updateControls(){
 		let enabled = !sender.isTransferring
 		chooseButton.isEnabled=enabled
-		(view as? SendDropView)?.acceptsItems=enabled
+		if sender.state == .choosingDevice && !selectedFiles.isEmpty{
+			selectionTitle.stringValue=selectedFiles.count==1 ? selectedFiles[0].lastPathComponent : String.localizedStringWithFormat(NSLocalizedString("FilesReadyToSend", value: "%d files ready to send", comment: ""), selectedFiles.count)
+			selectionHelp.stringValue=NSLocalizedString("DropReadyChooseDevice", value: "Choose a nearby device. Nothing is sent until you choose a recipient.", comment: "")
+		}else if !enabled{
+			selectionTitle.stringValue=NSLocalizedString("DropBusyTitle", value: "Transfer in progress", comment: "")
+			selectionHelp.stringValue=NSLocalizedString("KeepDevicesConnected", value: "Keep both devices connected until the transfer finishes.", comment: "")
+		}else{
+			selectionTitle.stringValue=NSLocalizedString("DropFilesToSend", value: "Drop files here to send", comment: "")
+			selectionHelp.stringValue=NSLocalizedString("SendFilesSelectionHint", value: "Choose files, then select a device. Nothing is sent until you choose a recipient.", comment: "")
+		}
 		for button in historyButtons{button.isEnabled=enabled}
 		onTransferActivityChange?(!enabled)
 	}

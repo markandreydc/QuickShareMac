@@ -349,6 +349,7 @@ struct UISmokeTests{
 		snapshot(window, "dark-approval")
 		expect(button("Accept", in: controller.view).isEnabled, "Approval must remain usable in dark mode")
 		testMainWindowSending()
+		testFileDropExperience()
 		testStatusBarMenu()
 		testUpdateResultPresentation()
 		testIdentityAndAvailability()
@@ -650,6 +651,105 @@ struct UISmokeTests{
 		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==1, "Dropping files must select the Send tab")
 		main.sendController.sender.shutdown()
 		testConnectionErrorUI()
+	}
+
+	static func testFileDropExperience(){
+		let service=FakeSendingService()
+		let main=MainWindowViewController()
+		main.sendController.sender.service=service
+		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 680), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		window.contentViewController=main
+		main.update(receiving: true, transfers: [])
+		let drop=main.view as! SendDropView
+		let directory=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-drop-tests-\(UUID().uuidString)")
+		try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		let first=directory.appendingPathComponent("first.txt")
+		let second=directory.appendingPathComponent("second.txt")
+		try! Data("first".utf8).write(to: first)
+		try! Data("second".utf8).write(to: second)
+		let pasteboard=NSPasteboard.withUniqueName()
+		defer{
+			main.sendController.sender.shutdown()
+			pasteboard.releaseGlobally()
+			try? FileManager.default.removeItem(at: directory)
+		}
+		func write(_ urls:[URL]){
+			pasteboard.clearContents()
+			pasteboard.writeObjects(urls.map {$0 as NSURL})
+		}
+		func shows(_ text:String)->Bool{visible(drop).compactMap {$0 as? NSTextField}.contains {$0.stringValue==text}}
+		func selectionTitle()->String{
+			descendants(main.sendController.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="SendSelectionTitle"})!.stringValue
+		}
+		write([first])
+		expect(drop.previewDrop(from: pasteboard) == .copy, "A valid file hover must advertise a copy operation")
+		expect(drop.dropFeedback == .ready([first]) && shows("Drop to send") && shows("Choose a nearby device next") && shows("first.txt"), "The overlay must explain the next step and preview the dragged filename")
+		expect(service.discoveryStarts==0 && service.attempts.isEmpty, "Hovering must neither start discovery nor send files")
+		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==0, "Hovering must not switch away from Receive")
+		let overlay=visible(drop).first(where: {$0.identifier?.rawValue=="FileDropOverlay"})!
+		expect(drop.subviews.last === overlay && overlay.hitTest(.zero)==nil, "A single window-wide overlay must stay above content without intercepting events")
+		for size in [NSSize(width: 560, height: 680),NSSize(width: 700, height: 800)]{
+			window.setContentSize(size)
+			layout(window)
+			expect(overlay.frame==drop.bounds.insetBy(dx: 12, dy: 12), "The drag overlay must fill the whole window on resize, not just the Send card")
+		}
+		snapshot(window, "drop-ready-receive")
+		drop.appearance=NSAppearance(named: .darkAqua)
+		snapshot(window, "drop-ready-dark")
+		drop.appearance=nil
+		_ = drop.previewDrop(from: pasteboard)
+		expect(descendants(drop).filter({$0.identifier?.rawValue=="FileDropOverlay"}).count==1, "Dragging updates must reuse the overlay rather than stack new views")
+		drop.draggingExited(nil)
+		expect(drop.dropFeedback==nil && overlay.isHidden && service.attempts.isEmpty, "Leaving or canceling a drag must dismiss the overlay without doing work")
+		_ = drop.previewDrop(from: pasteboard)
+		expect(drop.receiveDrop(from: pasteboard), "Dropping a valid file on Receive must prepare Send")
+		expect(drop.dropFeedback==nil && overlay.isHidden, "The overlay must disappear after a drop")
+		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==1, "A successful drop must switch to Send")
+		expect(selectionTitle()=="first.txt" && shows("Choose a nearby device. Nothing is sent until you choose a recipient."), "After dropping, the filename and recipient-selection instruction must be prominent")
+		expect(service.discoveryStarts==1 && service.attempts.isEmpty && main.sendController.sender.state == .choosingDevice, "Dropping must discover devices but never select a recipient or send automatically")
+		write([first,second])
+		expect(drop.previewDrop(from: pasteboard) == .copy && shows("2 files"), "Multi-file drags must preview their file count")
+		expect(drop.receiveDrop(from: pasteboard) && selectionTitle()=="2 files ready to send", "Multiple dropped files must show a ready-to-send summary")
+		expect(descendants(main.view).compactMap({$0 as? SendDropView}).count==1, "Send must not introduce a nested drag target that limits the overlay to its card")
+		main.showReceive()
+		write([directory])
+		expect(drop.previewDrop(from: pasteboard).isEmpty && drop.dropFeedback == .folder, "Folders must be rejected before dropping")
+		expect(shows("Compress this folder into a ZIP first."), "Folder rejection must explain how to send it")
+		snapshot(window, "drop-folder")
+		expect(!drop.receiveDrop(from: pasteboard) && selectionTitle()=="2 files ready to send", "Rejected folders must not replace the previous selection")
+		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==0, "Rejected drops must not switch tabs")
+		write([first,directory])
+		expect(drop.previewDrop(from: pasteboard).isEmpty && drop.dropFeedback == .folder, "A mixed file/folder drag must reject the whole selection")
+		write([first,URL(string: "https://example.com")!])
+		expect(drop.previewDrop(from: pasteboard).isEmpty && drop.dropFeedback == .unsupported && shows("Files only"), "Mixed web links and files must not be silently truncated")
+		pasteboard.clearContents()
+		pasteboard.setString("unsupported text", forType: .string)
+		expect(drop.previewDrop(from: pasteboard).isEmpty && shows("Drop files here to send"), "Unsupported content must explain the accepted input")
+		write([directory.appendingPathComponent("missing.txt")])
+		expect(drop.previewDrop(from: pasteboard).isEmpty && drop.dropFeedback == .unreadable, "Missing or unreadable files must not advertise a valid drop")
+		write([first])
+		expect(drop.previewDrop(from: pasteboard, sourceOperationMask: .move).isEmpty, "A source that forbids copying must not advertise a copy operation")
+		expect(!drop.receiveDrop(from: pasteboard, sourceOperationMask: .move), "Drops must never request a destructive move of source files")
+		let disappearing=directory.appendingPathComponent("disappearing.txt")
+		try! Data().write(to: disappearing)
+		write([disappearing])
+		expect(drop.previewDrop(from: pasteboard) == .copy, "A file must initially be accepted while it exists")
+		try! FileManager.default.removeItem(at: disappearing)
+		expect(!drop.receiveDrop(from: pasteboard) && overlay.isHidden, "A file deleted after hover must be revalidated at drop time")
+		write([first])
+		_ = drop.previewDrop(from: pasteboard)
+		main.sendController.sender.selectDevice(RemoteDeviceInfo(name: "Test phone", type: .phone, id: "drop-phone"))
+		expect(!drop.acceptsItems && drop.dropFeedback == .busy && shows("Finish or cancel the current transfer first."), "A transfer starting during a hover must immediately update the overlay to its blocked state")
+		expect(!drop.receiveDrop(from: pasteboard) && service.attempts.count==1, "Busy drops must not replace or start another transfer")
+		_ = drop.previewDrop(from: pasteboard)
+		snapshot(window, "drop-busy")
+		main.sendController.sender.cancel(nil)
+		expect(drop.acceptsItems && drop.dropFeedback == .ready([first]), "Finishing or canceling a transfer must immediately restore an in-progress drag preview")
+		drop.concludeDragOperation(nil)
+		expect(overlay.isHidden && drop.dropFeedback==nil, "Concluding a drag must always clear its preview")
+		_ = drop.previewDrop(from: pasteboard)
+		window.contentViewController=nil
+		expect(overlay.isHidden && drop.dropFeedback==nil, "Removing the view from its window must clear an abandoned preview")
 	}
 
 	static func testConnectionErrorUI(){

@@ -40,12 +40,14 @@ Both devices must be on the **same Wi-Fi/local network**. Keep your Android devi
 ### Send files to Android
 
 1. Open QuickShareMac and select **Send**.
-2. Click **Send files…** or drag files into the window. You can also use **File → Send files…** (`⌘O`).
+2. Click **Send files…** or drag files onto either the Receive or Send tab. A window-wide **Drop to send** overlay previews the filename or file count and explains that you choose a nearby device next. Drop to open Send and begin device discovery—nothing is sent automatically. You can also use **File → Send files…** (`⌘O`).
 3. Open Quick Share on your Android device and choose its receiving mode, if available.
 4. Select the device in QuickShareMac, or choose **Connect with QR code…** and scan the code with your phone’s camera.
 5. Check that the PIN matches on both devices, then accept on Android.
 
 The Send tab is **files only**. To send a folder, compress it in Finder and send the ZIP file instead.
+
+During dragging, folders, unreadable files, and unsupported content show a specific explanation instead of an accepted-drop highlight. While an outgoing transfer is active, drops are blocked until you finish or cancel it. Leaving the window or canceling the drag dismisses the overlay without changing your selection.
 
 Alternatively, select files in Finder and choose **Share → QuickShareMac**. Links can still be shared through the macOS Share extension, such as Safari’s Share menu; there is no link-sharing control in the main Send tab.
 
