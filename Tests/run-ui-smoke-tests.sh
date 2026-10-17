@@ -12,6 +12,8 @@ xcrun swiftc -swift-version 5 -I "$BUILD" -L "$BUILD" \
   -Xlinker -rpath -Xlinker "$BUILD" -lNearbyShare \
   "$BUILD/QRCode.o" "$BUILD/QRCodeGenerator.o" "$BUILD/SwiftImageReadWrite.o" \
   "$ROOT/QuickShareMac/MainWindowViewController.swift" \
+  "$ROOT/QuickShareMac/SendViewController.swift" \
+  "$ROOT/Shared/SendTransferViewController.swift" \
   "$ROOT/ShareExtension/ShareViewController.swift" \
   "$ROOT/Tests/UISmokeTests.swift" -o "$OUTPUT/ui-smoke-tests"
 DYLD_LIBRARY_PATH="$BUILD:${DYLD_LIBRARY_PATH:-}" "$OUTPUT/ui-smoke-tests"

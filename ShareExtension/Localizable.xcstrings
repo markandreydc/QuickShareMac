@@ -1,6 +1,54 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "ConnectingBeforeApproval" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Opening the network connection and verifying Quick Share. A transfer request has not reached the phone yet." } } }
+    },
+    "LocalNetworkBlocked" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "macOS blocked local-network access." } } }
+    },
+    "LocalNetworkBlockedHelp" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "macOS denied this connection. Allow QuickShareMac in System Settings → Privacy & Security → Local Network. If already enabled, quit and reopen this signed build, then retry." } } }
+    },
+    "OpenNetworkSettings" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Network Settings…" } } }
+    },
+    "RecipientRefusedConnection" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The receiving device refused the connection." } } }
+    },
+    "RecipientRefusedHelp" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Quick Share on the unlocked phone and choose Receive, or retry using Connect with QR code. Keep both devices on the same Wi-Fi network." } } }
+    },
+    "FinishCurrentTransfer" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Finish or cancel the current transfer before choosing other items." } } }
+    },
+    "RecipientUnavailable" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This device is no longer available, or already has a transfer in progress. Retry to find it again." } } }
+    },
+    "RetryChooseRecipient" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry to choose a recipient again, or select other items to send." } } }
+    },
+    "RetryTransfer" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry…" } } }
+    },
+    "SelectionTooLarge" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The selected files are too large to send together." } } }
+    },
+    "SendConnectionInterrupted" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The connection was interrupted, or a selected file could not be read." } } }
+    },
+    "SendRetryHelp" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Check Quick Share on the receiving device, available storage, and the Wi-Fi connection. Retry to choose the recipient again." } } }
+    },
+    "SendSecureConnectionFailed" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not establish a secure Quick Share connection." } } }
+    },
+    "UnreadableSelection" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "One of the selected files is not readable. Choose it again in Finder." } } }
+    },
+    "UnsupportedSelection" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose files, or one HTTP or HTTPS link. Files and links cannot be sent together." } } }
+    },
     "Cancel" : {
       "localizations" : {
         "en" : {

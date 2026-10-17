@@ -22,7 +22,7 @@ struct IncomingTransferDisplay{
 	let savedFileURLs:[URL]
 }
 
-private enum WindowUI{
+enum WindowUI{
 	static func stack(_ orientation:NSUserInterfaceLayoutOrientation = .vertical, spacing:CGFloat = 8) -> NSStackView{
 		let stack=NSStackView()
 		stack.orientation=orientation
@@ -76,7 +76,7 @@ private enum WindowUI{
 	}
 }
 
-private class CardView:NSView{
+class CardView:NSView{
 	override var wantsUpdateLayer:Bool { true }
 	override func updateLayer(){
 		layer?.backgroundColor=NSColor.controlBackgroundColor.cgColor
@@ -90,11 +90,11 @@ private class CardView:NSView{
 	}
 }
 
-private final class FlippedDocumentView:NSView{
+final class FlippedDocumentView:NSView{
 	override var isFlipped:Bool { true }
 }
 
-private final class WindowBackgroundView:NSView{
+class WindowBackgroundView:NSView{
 	override var wantsUpdateLayer:Bool {true}
 	override func updateLayer(){layer?.backgroundColor=NSColor.windowBackgroundColor.cgColor}
 	override func viewDidChangeEffectiveAppearance(){
@@ -229,6 +229,9 @@ private final class TransferRowView:CardView{
 }
 
 final class MainWindowViewController:NSViewController{
+	let sendController=SendViewController()
+	private let tabs=NSSegmentedControl(labels: [NSLocalizedString("ReceiveTab", value: "Receive", comment: ""), NSLocalizedString("SendTab", value: "Send", comment: "")], trackingMode: .selectOne, target: nil, action: nil)
+	private let receiveContent=WindowUI.stack(spacing: 16)
 	var onReceivingChange:((Bool)->Void)?
 	var onOpenSettings:(()->Void)?
 	var onTransferDecision:((String,TransferDecision)->Void)?
@@ -254,7 +257,13 @@ final class MainWindowViewController:NSViewController{
 	private var receiving=false
 
 	override func loadView(){
-		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 560, height: 640))
+		let drop=SendDropView(frame: NSRect(x: 0, y: 0, width: 560, height: 640))
+		drop.onURLs={ [weak self] urls in
+			guard let self=self else {return false}
+			self.showSend()
+			return self.sendController.selectItems(urls)
+		}
+		view=drop
 		view.wantsLayer=true
 		let content=WindowUI.stack(spacing: 16)
 		WindowUI.pin(content, to: view, inset: 20)
@@ -275,11 +284,24 @@ final class MainWindowViewController:NSViewController{
 		settings.bezelStyle = .inline
 		header.addArrangedSubview(settings)
 		WindowUI.fill(header, in: content)
+		tabs.selectedSegment=0
+		tabs.target=self
+		tabs.action=#selector(tabChanged(_:))
+		tabs.setAccessibilityLabel(NSLocalizedString("TransferMode", value: "Transfer mode", comment: ""))
+		content.addArrangedSubview(tabs)
+		let tabHost=NSView()
+		WindowUI.fill(tabHost, in: content)
+		tabHost.setContentHuggingPriority(.defaultLow, for: .vertical)
+		WindowUI.pin(receiveContent, to: tabHost, inset: 0)
+		sendController.onTransferActivityChange={ [weak drop] active in drop?.acceptsItems = !active }
+		addChild(sendController)
+		WindowUI.pin(sendController.view, to: tabHost, inset: 0)
+		sendController.view.isHidden=true
 
 		let receiveCard=CardView()
 		receiveCard.wantsLayer=true
-		let receiveContent=WindowUI.stack(spacing: 5)
-		WindowUI.pin(receiveContent, to: receiveCard, inset: 14)
+		let receiveCardContent=WindowUI.stack(spacing: 5)
+		WindowUI.pin(receiveCardContent, to: receiveCard, inset: 14)
 		let receiveRow=WindowUI.stack(.horizontal)
 		receiveRow.addArrangedSubview(statusLabel)
 		receiveRow.addArrangedSubview(WindowUI.spacer())
@@ -287,13 +309,13 @@ final class MainWindowViewController:NSViewController{
 		receivingSwitch.action=#selector(receivingChanged(_:))
 		receivingSwitch.setAccessibilityLabel(NSLocalizedString("ReceivingEnabled", value: "Receiving enabled", comment: ""))
 		receiveRow.addArrangedSubview(receivingSwitch)
-		WindowUI.fill(receiveRow, in: receiveContent)
-		WindowUI.fill(visibilityLabel, in: receiveContent)
-		WindowUI.fill(receiveCard, in: content)
+		WindowUI.fill(receiveRow, in: receiveCardContent)
+		WindowUI.fill(visibilityLabel, in: receiveCardContent)
+		WindowUI.fill(receiveCard, in: receiveContent)
 		WindowUI.fill(approvalTitle, in: approvalStack)
 		WindowUI.fill(approvalRow, in: approvalStack)
 		approvalRow.onDecision={ [weak self] id, decision in self?.onTransferDecision?(id, decision) }
-		WindowUI.fill(approvalStack, in: content)
+		WindowUI.fill(approvalStack, in: receiveContent)
 
 		scrollView.hasVerticalScroller=true
 		scrollView.autohidesScrollers=true
@@ -305,7 +327,7 @@ final class MainWindowViewController:NSViewController{
 		scrollView.documentView=document
 		WindowUI.pin(rows, to: document, inset: 0)
 		document.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor).isActive=true
-		WindowUI.fill(scrollView, in: content)
+		WindowUI.fill(scrollView, in: receiveContent)
 		scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive=true
 
 		empty.alignment = .centerX
@@ -333,8 +355,28 @@ final class MainWindowViewController:NSViewController{
 		let downloads=NSButton(title: NSLocalizedString("OpenDownloads", value: "Open Downloads", comment: ""), target: self, action: #selector(openDownloads(_:)))
 		downloads.bezelStyle = .inline
 		footer.addArrangedSubview(downloads)
-		WindowUI.fill(footer, in: content)
+		WindowUI.fill(footer, in: receiveContent)
 	}
+
+	override func viewDidAppear(){super.viewDidAppear(); sendController.setActive(tabs.selectedSegment==1)}
+	override func viewWillDisappear(){super.viewWillDisappear(); sendController.setActive(false)}
+	func showReceive(){
+		_ = view
+		tabs.selectedSegment=0
+		updateTab()
+	}
+	func showSend(){
+		_ = view
+		tabs.selectedSegment=1
+		updateTab()
+	}
+	private func updateTab(){
+		view.window?.makeFirstResponder(nil)
+		receiveContent.isHidden=tabs.selectedSegment != 0
+		sendController.view.isHidden=tabs.selectedSegment != 1
+		sendController.setActive(tabs.selectedSegment==1)
+	}
+	@objc private func tabChanged(_ sender:NSSegmentedControl){updateTab()}
 
 	func update(receiving:Bool, transfers:[IncomingTransferDisplay]){
 		_ = view

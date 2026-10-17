@@ -1,6 +1,7 @@
 import Cocoa
 import NearbyShare
 import Vision
+import Network
 
 // Standalone AppKit smoke tests; no receiver or device discovery is started.
 // Build the app, then run Tests/run-ui-smoke-tests.sh.
@@ -170,8 +171,151 @@ struct UISmokeTests{
 		layout(window)
 		snapshot(window, "dark-approval")
 		expect(button("Accept", in: controller.view).isEnabled, "Approval must remain usable in dark mode")
+		testMainWindowSending()
 		print("Passed \(checks) UI smoke checks")
 	}
+
+	static func testMainWindowSending(){
+		let service=FakeSendingService()
+		let main=MainWindowViewController()
+		main.sendController.sender.service=service
+		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 640), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+		window.contentViewController=main
+		main.update(receiving: true, transfers: [])
+		main.showSend()
+		layout(window)
+		_ = button("Send files…", in: main.view)
+		expect(service.discoveryStarts==0, "Opening Send without items must not start discovery")
+		let url=URL(string: "https://example.com/share")!
+		button("Share link…", in: main.view).performClick(nil)
+		let linkField=visible(main.view).compactMap {$0 as? NSTextField}.first(where: {$0.placeholderString=="https://example.com"})!
+		linkField.stringValue="not a link"
+		button("Choose link", in: main.view).performClick(nil)
+		expect(service.discoveryStarts==0, "Invalid link input must not start discovery")
+		linkField.stringValue=url.absoluteString
+		button("Choose link", in: main.view).performClick(nil)
+		expect(main.sendController.sender.hasItems, "The link-entry button must select the entered link")
+		expect(service.discoveryStarts==1 && service.attempts.isEmpty, "Choosing items must discover, not automatically send (discovery: \(service.discoveryStarts), transfers: \(service.attempts.count))")
+		expect(!main.sendController.selectItems([URL(fileURLWithPath: "/")]), "Folders must be rejected before connecting")
+		expect(!main.sendController.selectItems([URL(string: "mailto:someone@example.com")!]), "Unsupported link schemes must be rejected")
+		expect(!main.sendController.selectItems([URL(string: "https://user:password@example.com")!]), "Links containing credentials must be rejected")
+		let device=RemoteDeviceInfo(name: "Android test phone", type: .phone, id: "test-device")
+		service.discoveryDelegate?.addDevice(device: device)
+		service.discoveryDelegate?.addDevice(device: device)
+		let collection=visible(main.view).compactMap {$0 as? NSCollectionView}.first!
+		expect(collection.numberOfItems(inSection: 0)==1, "Discovery must deduplicate device updates")
+		main.sendController.sender.selectDevice(device)
+		expect(main.sendController.sender.state == .connecting && service.attempts.count==1, "Choosing a device must start a transfer")
+		expect(!(main.view as! SendDropView).acceptsItems, "The window must not advertise replacement drops during an active transfer")
+		expect(!main.sendController.selectItems([url]), "Choosing replacement items during a transfer must be blocked")
+		let oldAttempt=service.attempts[0]
+		oldAttempt.connectionWasEstablished(pinCode: "2468")
+		expect(main.sendController.sender.state == .awaitingApproval, "Established connections must wait for approval")
+		expect(visible(main.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="2468"}), "Sending must show the verification PIN")
+		main.showReceive()
+		main.sendController.sender.viewWillDisappear()
+		expect(service.cancellations==0 && main.sendController.sender.isTransferring, "Switching to Receive must not cancel a send")
+		main.showSend()
+		main.sendController.sender.cancel(nil)
+		expect(service.cancellations==1 && main.sendController.recentTransfers.first?.state == .canceled, "Cancel must stop sending and record its result")
+		main.sendController.sender.retry(nil)
+		expect(main.sendController.sender.state == .choosingDevice && service.attempts.count==1, "Retry must rediscover rather than automatically resend")
+		main.sendController.sender.selectDevice(device)
+		oldAttempt.transferFinished()
+		oldAttempt.connectionFailed(with: NearbyError.inputOutput)
+		expect(main.sendController.sender.state == .connecting, "Late callbacks from canceled attempts must not affect a retry")
+		let currentAttempt=service.attempts[1]
+		currentAttempt.connectionWasEstablished(pinCode: "1357")
+		currentAttempt.transferAccepted()
+		currentAttempt.transferProgress(progress: .nan)
+		currentAttempt.transferProgress(progress: .infinity)
+		currentAttempt.transferProgress(progress: 0.5)
+		expect(main.sendController.sender.state == .sending, "Accepted transfers must report sending progress")
+		main.showReceive()
+		currentAttempt.transferFinished()
+		expect(main.sendController.recentTransfers.count==2 && main.sendController.recentTransfers.first?.state == .completed, "Background completion must remain in outgoing history")
+		expect((main.view as! SendDropView).acceptsItems, "The window must accept drops again after a transfer finishes")
+		currentAttempt.transferFinished()
+		expect(main.sendController.recentTransfers.count==2, "Duplicate completion callbacks must not duplicate history")
+		main.showSend()
+		layout(window)
+		snapshot(window, "main-send-complete")
+		button("Send again…", in: main.view).performClick(nil)
+		expect(main.sendController.sender.state == .choosingDevice && service.attempts.count==2, "History Send again must ask for a recipient")
+		service.canStart=false
+		main.sendController.sender.selectDevice(device)
+		expect(main.sendController.sender.state == .failed, "A vanished recipient must fail immediately rather than hang")
+		expect(main.sendController.recentTransfers.first?.state == .failed, "Failed sends must be retained in history")
+		let pasteboard=NSPasteboard.withUniqueName()
+		pasteboard.setString("https://example.com", forType: .string)
+		expect(SendDropView.urls(from: pasteboard).first?.host=="example.com", "Dropped web-link text must be recognized")
+		pasteboard.clearContents()
+		pasteboard.setString("not a link", forType: .string)
+		expect(SendDropView.urls(from: pasteboard).isEmpty, "Arbitrary text must not be treated as a URL")
+		pasteboard.clearContents()
+		pasteboard.writeObjects([NSURL(fileURLWithPath: "/Users/Shared/first.txt"), NSURL(fileURLWithPath: "/Users/Shared/second.txt")])
+		expect(SendDropView.urls(from: pasteboard).count==2, "Finder-style multi-file drags must preserve all file URLs")
+		pasteboard.releaseGlobally()
+		let file=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-send-test-\(UUID().uuidString).txt")
+		try! Data().write(to: file)
+		defer{try? FileManager.default.removeItem(at: file)}
+		expect(main.sendController.selectItems([file]), "An empty regular file must be selectable")
+		expect(!main.sendController.selectItems([file,url]), "Mixed files and web links must not be silently truncated")
+		main.sendController.sender.shutdown()
+		expect(main.sendController.sender.state == .idle && !main.sendController.sender.hasItems, "Shutdown must release the selection")
+		main.showReceive()
+		expect((main.view as! SendDropView).onURLs?([file])==true, "Dropping files on Receive must route them to Send")
+		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==1, "Dropping files must select the Send tab")
+		main.sendController.sender.shutdown()
+		testConnectionErrorUI()
+	}
+
+	static func testConnectionErrorUI(){
+		let sender=SendTransferViewController()
+		let service=FakeSendingService()
+		sender.service=service
+		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 500), styleMask: [.titled], backing: .buffered, defer: false)
+		window.contentViewController=sender
+		try! sender.configureItems([URL(string: "https://example.com")!])
+		let device=RemoteDeviceInfo(name: "Test phone", type: .phone, id: "policy-test")
+		sender.selectDevice(device)
+		service.attempts[0].connectionFailed(with: NearbyError.localNetworkDenied)
+		expect(sender.state == .failed, "Permission denial must leave Connecting immediately")
+		expect(visible(sender.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="macOS blocked local-network access."}), "Permission failures must explain the actual blockage")
+		expect(visible(sender.view).filter({$0 is NSProgressIndicator}).isEmpty, "Permission failures must not leave a progress animation")
+		var opened=false
+		sender.onOpenNetworkSettings={opened=true}
+		button("Open Network Settings…", in: sender.view).performClick(nil)
+		expect(opened, "Permission failure must offer a working Settings action")
+		snapshot(window, "local-network-blocked")
+		sender.retry(nil)
+		expect(!visible(sender.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Open Network Settings…"}), "Retry must reset permission-specific controls")
+		sender.selectDevice(device)
+		service.attempts[1].connectionFailed(with: NWError.posix(.ECONNREFUSED))
+		expect(visible(sender.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="The receiving device refused the connection."}), "A phone refusing a connection must not be blamed on Mac permission")
+		expect(!visible(sender.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Open Network Settings…"}), "Refused connections must not show irrelevant permission controls")
+		sender.shutdown()
+	}
+}
+
+private final class FakeSendingService:SendingService{
+	var discoveryStarts=0
+	var discoveryStops=0
+	var cancellations=0
+	var canStart=true
+	weak var discoveryDelegate:ShareExtensionDelegate?
+	var attempts:[ShareExtensionDelegate]=[]
+	func startDeviceDiscovery(){discoveryStarts+=1}
+	func stopDeviceDiscovery(){discoveryStops+=1}
+	func addShareExtensionDelegate(_ delegate:ShareExtensionDelegate){discoveryDelegate=delegate}
+	func removeShareExtensionDelegate(_ delegate:ShareExtensionDelegate){discoveryDelegate=nil}
+	func startOutgoingTransfer(deviceID:String, delegate:ShareExtensionDelegate, urls:[URL]) -> Bool{
+		if canStart{attempts.append(delegate)}
+		return canStart
+	}
+	func cancelOutgoingTransfer(id:String){cancellations+=1}
+	func generateQrCodeKey() -> String{String(repeating: "A", count: 48)}
+	func clearQrCodeKey(){}
 }
 
 private final class PreviewShareController:ShareViewController{

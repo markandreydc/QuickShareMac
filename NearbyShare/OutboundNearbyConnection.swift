@@ -26,6 +26,7 @@ class OutboundNearbyConnection:NearbyConnection{
 	private var totalBytesSent:Int64=0
 	private var cancelled:Bool=false
 	private var textPayloadID:Int64=0
+	private var reportedResult=false
 	
 	public var qrCodePrivateKey:ECPrivateKey?
 	
@@ -61,7 +62,26 @@ class OutboundNearbyConnection:NearbyConnection{
 			cancel.v1.type = .cancel
 			try? sendTransferSetupFrame(cancel)
 		}
-		try? sendDisconnectionAndDisconnect()
+		abort(with: NearbyError.canceled(reason: .userCanceled))
+	}
+
+	override func handleConnectionClosure(){
+		super.handleConnectionClosure()
+		try? currentTransfer?.handle?.close()
+		for transfer in queue{try? transfer.handle?.close()}
+		if !reportedResult{
+			reportFailure(lastError ?? (cancelled ? NearbyError.canceled(reason: .userCanceled) : NearbyError.inputOutput))
+		}
+	}
+	private func reportFailure(_ error:Error){
+		guard !reportedResult else {return}
+		reportedResult=true
+		delegate?.outboundConnection(connection: self, failedWithError: error)
+	}
+	private func reportSuccess(){
+		guard !reportedResult else {return}
+		reportedResult=true
+		delegate?.outboundConnectionTransferFinished(connection: self)
 	}
 	
 	override func connectionReady() {
@@ -109,7 +129,7 @@ class OutboundNearbyConnection:NearbyConnection{
 		if frame.hasV1 && frame.v1.hasType, case .cancel = frame.v1.type {
 			print("Transfer canceled")
 			try sendDisconnectionAndDisconnect()
-			delegate?.outboundConnection(connection: self, failedWithError: NearbyError.canceled(reason: .userCanceled))
+			reportFailure(NearbyError.canceled(reason: .userCanceled))
 			return
 		}
 		print(frame)
@@ -129,7 +149,7 @@ class OutboundNearbyConnection:NearbyConnection{
 	
 	override func protocolError() {
 		super.protocolError()
-		delegate?.outboundConnection(connection: self, failedWithError: lastError!)
+		reportFailure(lastError ?? NearbyError.inputOutput)
 	}
 	
 	private func sendConnectionRequest() throws {
@@ -310,7 +330,9 @@ class OutboundNearbyConnection:NearbyConnection{
 				meta.payloadID=Int64.random(in: Int64.min...Int64.max)
 				queue.append(OutgoingFileTransfer(url: url, payloadID: meta.payloadID, handle: try FileHandle(forReadingFrom: url), totalBytes: meta.size, currentOffset: 0))
 				introduction.v1.introduction.fileMetadata.append(meta)
-				totalBytesToSend+=meta.size
+				let (total, overflow)=totalBytesToSend.addingReportingOverflow(meta.size)
+				guard meta.size>=0, !overflow else {throw NearbyError.inputOutput}
+				totalBytesToSend=total
 			}
 		}
 		#if DEBUG
@@ -333,28 +355,30 @@ class OutboundNearbyConnection:NearbyConnection{
 				try sendNextFileChunk()
 			}
 		case .reject, .unknown:
-			delegate?.outboundConnection(connection: self, failedWithError: NearbyError.canceled(reason: .userRejected))
+			reportFailure(NearbyError.canceled(reason: .userRejected))
 			try sendDisconnectionAndDisconnect()
 		case .notEnoughSpace:
-			delegate?.outboundConnection(connection: self, failedWithError: NearbyError.canceled(reason: .notEnoughSpace))
+			reportFailure(NearbyError.canceled(reason: .notEnoughSpace))
 			try sendDisconnectionAndDisconnect()
 		case .timedOut:
-			delegate?.outboundConnection(connection: self, failedWithError: NearbyError.canceled(reason: .timedOut))
+			reportFailure(NearbyError.canceled(reason: .timedOut))
 			try sendDisconnectionAndDisconnect()
 		case .unsupportedAttachmentType:
-			delegate?.outboundConnection(connection: self, failedWithError: NearbyError.canceled(reason: .unsupportedType))
+			reportFailure(NearbyError.canceled(reason: .unsupportedType))
 			try sendDisconnectionAndDisconnect()
 		}
 	}
 	
 	private func sendURL() throws{
-		try sendBytesPayload(data: Data(urlsToSend[0].absoluteString.utf8), id: textPayloadID)
-		delegate?.outboundConnectionTransferFinished(connection: self)
-		try sendDisconnectionAndDisconnect()
+		try sendBytesPayload(data: Data(urlsToSend[0].absoluteString.utf8), id: textPayloadID) { [weak self] in
+			guard let self=self, !self.reportedResult, !self.cancelled else {return}
+			do{try self.sendDisconnectionAndDisconnect(); self.reportSuccess()}
+			catch{self.lastError=error; self.protocolError()}
+		}
 	}
 	
 	private func sendNextFileChunk() throws{
-		if cancelled{
+		if cancelled || reportedResult{
 			return
 		}
 		if currentTransfer==nil || currentTransfer?.currentOffset==currentTransfer?.totalBytes{
@@ -366,10 +390,14 @@ class OutboundNearbyConnection:NearbyConnection{
 				print("Disconnecting because all files have been transferred")
 				#endif
 				try sendDisconnectionAndDisconnect()
-				delegate?.outboundConnectionTransferFinished(connection: self)
+				reportSuccess()
 				return
 			}
 			currentTransfer=queue.removeFirst()
+		}
+		if currentTransfer!.totalBytes==0{
+			try sendCurrentFileEnd()
+			return
 		}
 		
 		let fileBuffer:Data
@@ -381,6 +409,7 @@ class OutboundNearbyConnection:NearbyConnection{
 		} else {
 			fileBuffer=currentTransfer!.handle!.readData(ofLength: 512*1024)
 		}
+		guard !fileBuffer.isEmpty, currentTransfer!.currentOffset+Int64(fileBuffer.count)<=currentTransfer!.totalBytes else {throw NearbyError.inputOutput}
 		
 		var transfer=Location_Nearby_Connections_PayloadTransferFrame()
 		transfer.packetType = .data
@@ -400,7 +429,9 @@ class OutboundNearbyConnection:NearbyConnection{
 		wrapper.v1.payloadTransfer=transfer
 		try encryptAndSendOfflineFrame(wrapper, completion: {
 			do{
-				try self.sendNextFileChunk()
+				guard !self.cancelled, !self.reportedResult else {return}
+				if self.currentTransfer!.currentOffset==self.currentTransfer!.totalBytes{try self.sendCurrentFileEnd()}
+				else{try self.sendNextFileChunk()}
 			}catch{
 				self.lastError=error
 				self.protocolError()
@@ -410,28 +441,24 @@ class OutboundNearbyConnection:NearbyConnection{
 		print("sent file chunk, current transfer: \(String(describing: currentTransfer))")
 		#endif
 		totalBytesSent+=Int64(fileBuffer.count)
-		delegate?.outboundConnection(connection: self, transferProgress: Double(totalBytesSent)/Double(totalBytesToSend))
+		delegate?.outboundConnection(connection: self, transferProgress: totalBytesToSend>0 ? Double(totalBytesSent)/Double(totalBytesToSend) : 1)
 		
-		if currentTransfer!.currentOffset==currentTransfer!.totalBytes{
-			// Signal end of file (yes, all this for one bit)
-			var transfer=Location_Nearby_Connections_PayloadTransferFrame()
-			transfer.packetType = .data
-			transfer.payloadChunk.offset=currentTransfer!.currentOffset
-			transfer.payloadChunk.flags=1 // <- this one here
-			transfer.payloadHeader.id=currentTransfer!.payloadID
-			transfer.payloadHeader.type = .file
-			transfer.payloadHeader.totalSize=Int64(currentTransfer!.totalBytes)
-			transfer.payloadHeader.isSensitive=false
-			
-			var wrapper=Location_Nearby_Connections_OfflineFrame()
-			wrapper.version = .v1
-			wrapper.v1=Location_Nearby_Connections_V1Frame()
-			wrapper.v1.type = .payloadTransfer
-			wrapper.v1.payloadTransfer=transfer
-			try encryptAndSendOfflineFrame(wrapper)
-			#if DEBUG
-			print("sent EOF, current transfer: \(String(describing: currentTransfer))")
-			#endif
+	}
+
+	private func sendCurrentFileEnd() throws{
+		guard !cancelled, !reportedResult, let file=currentTransfer else {return}
+		var eof=Location_Nearby_Connections_OfflineFrame()
+		eof.version = .v1
+		eof.v1.type = .payloadTransfer
+		eof.v1.payloadTransfer.packetType = .data
+		eof.v1.payloadTransfer.payloadHeader.id=file.payloadID
+		eof.v1.payloadTransfer.payloadHeader.type = .file
+		eof.v1.payloadTransfer.payloadHeader.totalSize=file.totalBytes
+		eof.v1.payloadTransfer.payloadChunk.offset=file.currentOffset
+		eof.v1.payloadTransfer.payloadChunk.flags=1
+		try encryptAndSendOfflineFrame(eof) { [weak self] in
+			guard let self=self else {return}
+			do{try self.sendNextFileChunk()}catch{self.lastError=error; self.protocolError()}
 		}
 	}
 	

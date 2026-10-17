@@ -10,6 +10,7 @@ import Network
 import CommonCrypto
 import CryptoKit
 import System
+import os.log
 
 import SwiftECC
 import BigInt
@@ -17,6 +18,7 @@ import BigInt
 class NearbyConnection{
 	internal static let SANE_FRAME_LENGTH=5*1024*1024
 	internal static let dispatchQueue=DispatchQueue(label: "me.grishka.QuickShareMac.queue", qos: .utility) // FIFO (non-concurrent) queue to avoid those exciting concurrency bugs
+	private static let log=OSLog(subsystem: "me.grishka.QuickShareMac", category: "Connection")
 	
 	internal let connection:NWConnection
 	internal var remoteDeviceInfo:RemoteDeviceInfo?
@@ -53,23 +55,58 @@ class NearbyConnection{
 	}
 	
 	func start(){
-		connection.stateUpdateHandler={state in
-			if case .ready = state {
-				self.connectionReady()
-				self.receiveFrameAsync()
-			} else if case .failed(let err) = state {
-				guard !self.connectionClosed else {return}
-				self.lastError=err
-				print("Error opening socket: \(err)")
-				self.connectionClosed=true
-				self.notifyConnectionClosed()
-			} else if case .cancelled = state {
-				self.connectionClosed=true
-				self.notifyConnectionClosed()
+		connection.stateUpdateHandler={ [weak self] state in
+			self?.handleConnectionState(state)
+		}
+		connection.pathUpdateHandler={ [weak self] path in
+			guard let self=self, !self.connectionClosed else {return}
+			if #available(macOS 11.0, *), path.status == .unsatisfied, path.unsatisfiedReason == .localNetworkDenied{
+				os_log("Local-network policy blocked connection %{public}@", log: Self.log, type: .error, self.id)
+				self.abort(with: NearbyError.localNetworkDenied)
 			}
 		}
-		//connection.start(queue: .global(qos: .utility))
 		connection.start(queue: NearbyConnection.dispatchQueue)
+	}
+
+	// Network.framework delivers these callbacks on dispatchQueue. Keeping the
+	// transition handling separate also lets regression tests inject waiting states.
+	internal func handleConnectionState(_ state:NWConnection.State){
+		guard !connectionClosed else {return}
+		switch state{
+		case .ready:
+			os_log("Transport ready for connection %{public}@", log: Self.log, type: .info, id)
+			connectionReady()
+			receiveFrameAsync()
+		case .waiting(let error), .failed(let error):
+			var policyDenied=false
+			if #available(macOS 11.0, *){policyDenied=connection.currentPath?.unsatisfiedReason == .localNetworkDenied}
+			let failure=Self.connectionFailure(error, policyDenied: policyDenied)
+			os_log("Connection %{public}@ stopped: %{public}@", log: Self.log, type: .error, id, String(describing: error))
+			// A blocked path must not retry silently behind a permanent Connecting UI.
+			abort(with: failure)
+		case .cancelled:
+			connectionClosed=true
+			notifyConnectionClosed()
+		default: break
+		}
+	}
+
+	internal static func connectionFailure(_ error:NWError, policyDenied:Bool = false) -> Error{
+		if policyDenied{return NearbyError.localNetworkDenied}
+		switch error{
+		case .dns(let code) where code == -65570: return NearbyError.localNetworkDenied // kDNSServiceErr_PolicyDenied
+		case .posix(let code) where code == .EACCES || code == .EPERM: return NearbyError.localNetworkDenied
+		default: return error
+		}
+	}
+
+	internal func abort(with error:Error?=nil){
+		guard !connectionClosed else {return}
+		if let error=error{lastError=error}
+		connectionClosed=true
+		// Unlike sending a final frame, cancel works even before TCP is ready.
+		connection.cancel()
+		notifyConnectionClosed()
 	}
 	
 	func connectionReady(){}
@@ -85,7 +122,7 @@ class NearbyConnection{
 	}
 	
 	internal func protocolError(){
-		disconnect()
+		abort()
 	}
 	
 	internal func processReceivedFrame(frameData:Data){
@@ -182,6 +219,11 @@ class NearbyConnection{
 		])
 		lengthPrefixedData.append(frame)
 		connection.send(content: lengthPrefixedData, completion: .contentProcessed({ error in
+			if let error=error{
+				self.lastError=error
+				self.protocolError()
+				return
+			}
 			if let completion=completion{
 				completion()
 			}
@@ -233,7 +275,7 @@ class NearbyConnection{
 		try sendBytesPayload(data: try frame.serializedData(), id: Int64.random(in: Int64.min...Int64.max))
 	}
 	
-	internal func sendBytesPayload(data:Data, id:Int64) throws{
+	internal func sendBytesPayload(data:Data, id:Int64, completion:(()->Void)?=nil) throws{
 		var transfer=Location_Nearby_Connections_PayloadTransferFrame()
 		transfer.packetType = .data
 		transfer.payloadChunk.offset=0
@@ -255,7 +297,7 @@ class NearbyConnection{
 		transfer.payloadChunk.offset=Int64(transfer.payloadChunk.body.count)
 		transfer.payloadChunk.clearBody()
 		wrapper.v1.payloadTransfer=transfer
-		try encryptAndSendOfflineFrame(wrapper)
+		try encryptAndSendOfflineFrame(wrapper, completion: completion)
 	}
 	
 	internal func decryptAndProcessReceivedSecureMessage(_ smsg:Securemessage_SecureMessage) throws{
@@ -431,9 +473,12 @@ class NearbyConnection{
 	internal func disconnect(){
 		NearbyConnection.dispatchQueue.async {
 			guard !self.connectionClosed else {return}
+			guard case .ready=self.connection.state else {self.abort(); return}
 			self.connectionClosed=true
-			self.connection.send(content: nil, isComplete: true, completion: .contentProcessed({ _ in }))
+			self.connection.send(content: nil, isComplete: true, completion: .contentProcessed({ _ in self.connection.cancel() }))
 			self.notifyConnectionClosed()
+			// Do not retain a dead socket indefinitely if the FIN completion stalls.
+			NearbyConnection.dispatchQueue.asyncAfter(deadline: .now()+1){ [weak connection=self.connection] in connection?.cancel() }
 		}
 	}
 	

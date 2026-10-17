@@ -10,7 +10,7 @@ import NearbyShare
 import ServiceManagement
 
 @main
-class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
+class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemValidation{
 	private var statusItem:NSStatusItem?
 	private var mainWindow:NSWindow?
 	private var settingsWindow:NSWindow?
@@ -39,6 +39,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 		appMenuItem.submenu=appMenu
 		let mainMenu=NSMenu()
 		mainMenu.addItem(appMenuItem)
+		let fileMenu=NSMenu(title: NSLocalizedString("FileMenu", value: "File", comment: ""))
+		let sendFiles=fileMenu.addItem(withTitle: NSLocalizedString("SendFiles", value: "Send files…", comment: ""), action: #selector(sendFiles(_:)), keyEquivalent: "o")
+		sendFiles.target=self
+		let sendLink=fileMenu.addItem(withTitle: NSLocalizedString("ShareLink", value: "Share link…", comment: ""), action: #selector(sendLink(_:)), keyEquivalent: "l")
+		sendLink.target=self
+		let fileMenuItem=NSMenuItem(title: fileMenu.title, action: nil, keyEquivalent: "")
+		fileMenuItem.submenu=fileMenu
+		mainMenu.addItem(fileMenuItem)
+		let editMenu=NSMenu(title: NSLocalizedString("EditMenu", value: "Edit", comment: ""))
+		editMenu.addItem(withTitle: NSLocalizedString("Cut", value: "Cut", comment: ""), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+		editMenu.addItem(withTitle: NSLocalizedString("Copy", value: "Copy", comment: ""), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+		editMenu.addItem(withTitle: NSLocalizedString("Paste", value: "Paste", comment: ""), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+		editMenu.addItem(withTitle: NSLocalizedString("SelectAll", value: "Select All", comment: ""), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+		let editMenuItem=NSMenuItem(title: editMenu.title, action: nil, keyEquivalent: "")
+		editMenuItem.submenu=editMenu
+		mainMenu.addItem(editMenuItem)
 		let windowMenu=NSMenu(title: NSLocalizedString("Window", value: "Window", comment: ""))
 		windowMenu.addItem(withTitle: NSLocalizedString("Minimize", value: "Minimize", comment: ""), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
 		windowMenu.addItem(withTitle: NSLocalizedString("Close", value: "Close", comment: ""), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
@@ -111,6 +127,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 		NSApplication.shared.activate(ignoringOtherApps: true)
 	}
 
+	@objc private func sendFiles(_ sender:Any?){
+		showMainWindow(sender)
+		windowController.showSend()
+		windowController.sendController.chooseFiles(sender)
+	}
+	@objc private func sendLink(_ sender:Any?){
+		showMainWindow(sender)
+		windowController.showSend()
+		windowController.sendController.showLinkEntry(sender)
+	}
+	func applicationWillTerminate(_ notification:Notification){windowController.sendController.sender.shutdown()}
+	func validateMenuItem(_ item:NSMenuItem) -> Bool{
+		if item.action == #selector(sendFiles(_:)) || item.action == #selector(sendLink(_:)){return !windowController.sendController.sender.isTransferring}
+		return true
+	}
+
 	@objc private func showSettings(_ sender:Any?){
 		if settingsWindow==nil{
 			let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 300), styleMask: [.titled, .closable], backing: .buffered, defer: false)
@@ -133,6 +165,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 		let menu=NSMenu()
 		let showItem=menu.addItem(withTitle: NSLocalizedString("ShowApp", value: "Show QuickShareMac", comment: ""), action: #selector(showMainWindow(_:)), keyEquivalent: "")
 		showItem.target=self
+		let sendItem=menu.addItem(withTitle: NSLocalizedString("SendFiles", value: "Send files…", comment: ""), action: #selector(sendFiles(_:)), keyEquivalent: "")
+		sendItem.target=self
 		let receiving=NearbyConnectionManager.shared.isReceiving
 		let receiveItem=menu.addItem(withTitle: receiving ? NSLocalizedString("MenuReceivingOn", value: "Receiving: On", comment: "") : NSLocalizedString("MenuReceivingOff", value: "Receiving: Off", comment: ""), action: #selector(toggleReceiving(_:)), keyEquivalent: "")
 		receiveItem.target=self
@@ -301,6 +335,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate{
 			totalBytes=overflow ? Int64.max : sum
 		}
 		self.activeIncomingTransfers[transfer.id]=TransferInfo(device: device, transfer: transfer, description: fileStr, totalBytes: totalBytes)
+		windowController.showReceive()
 		showMainWindow(nil)
 	}
 

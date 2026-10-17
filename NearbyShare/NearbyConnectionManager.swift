@@ -17,7 +17,7 @@ public struct RemoteDeviceInfo{
 	public let qrCodeData:Data?
 	public var id:String?
 	
-	init(name: String, type: DeviceType, id: String? = nil) {
+	public init(name: String, type: DeviceType, id: String? = nil) {
 		self.name = name
 		self.type = type
 		self.id = id
@@ -55,12 +55,20 @@ public struct RemoteDeviceInfo{
 }
 
 
-public enum NearbyError:Error{
+public enum NearbyError:LocalizedError{
 	case protocolError(_ message:String)
 	case requiredFieldMissing(_ message:String)
 	case ukey2
 	case inputOutput
+	case localNetworkDenied
 	case canceled(reason:CancellationReason)
+
+	public var errorDescription:String?{
+		if case .localNetworkDenied=self{
+			return NSLocalizedString("LocalNetworkBlocked", value: "macOS blocked local-network access.", comment: "")
+		}
+		return nil
+	}
 	
 	public enum CancellationReason{
 		case userRejected, userCanceled, notEnoughSpace, unsupportedType, timedOut
@@ -221,9 +229,9 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 			switch state{
 			case .ready:
 				self.initMDNS(listener: listener)
-			case .failed(let error):
+			case .waiting(let error), .failed(let error):
 				self.stopReceiving()
-				self.mainAppDelegate?.receivingStopped(with: error)
+				self.mainAppDelegate?.receivingStopped(with: NearbyConnection.connectionFailure(error))
 			default:
 				break
 			}
@@ -301,8 +309,20 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 		if discoveryRefCount==0{
 			foundServices.removeAll()
 			if browser==nil{
-				browser=NWBrowser(for: .bonjourWithTXTRecord(type: "_FC9F5ED42C8A._tcp.", domain: nil), using: .tcp)
-				browser?.browseResultsChangedHandler={newResults, changes in
+				let browser=NWBrowser(for: .bonjourWithTXTRecord(type: "_FC9F5ED42C8A._tcp.", domain: nil), using: .tcp)
+				self.browser=browser
+				browser.stateUpdateHandler={ [weak self, weak browser] state in
+					guard let self=self, let browser=browser, self.browser === browser else {return}
+					switch state{
+					case .waiting(let error), .failed(let error):
+						let failure=NearbyConnection.connectionFailure(error)
+						// Delegates can stop discovery while handling the failure.
+						let delegates=self.shareExtensionDelegates
+						for delegate in delegates{delegate.connectionFailed(with: failure)}
+					default: break
+					}
+				}
+				browser.browseResultsChangedHandler={newResults, changes in
 					for change in changes{
 						switch change{
 						case let .added(res):
@@ -342,8 +362,8 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 	}
 	
 	public func cancelOutgoingTransfer(id:String){
-		guard let transfer=outgoingTransfers[id] else {return}
-		transfer.connection.cancel()
+		guard let transfer=outgoingTransfers.removeValue(forKey: id) else {return}
+		NearbyConnection.dispatchQueue.async {transfer.connection.cancel()}
 	}
 	
 	private func endpointID(for service:NWBrowser.Result)->String?{
@@ -460,53 +480,54 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 		qrCodeData=nil
 	}
 	
-	public func startOutgoingTransfer(deviceID:String, delegate:ShareExtensionDelegate, urls:[URL]){
-		guard let info=foundServices[deviceID] else {return}
+	@discardableResult public func startOutgoingTransfer(deviceID:String, delegate:ShareExtensionDelegate, urls:[URL]) -> Bool{
+		guard let info=foundServices[deviceID], let device=info.device, outgoingTransfers[deviceID]==nil, !urls.isEmpty else {return false}
 		let tcp=NWProtocolTCP.Options.init()
 		tcp.noDelay=true
 		let nwconn=NWConnection(to: info.service.endpoint, using: NWParameters(tls: .none, tcp: tcp))
 		let conn=OutboundNearbyConnection(connection: nwconn, id: deviceID, urlsToSend: urls)
 		conn.delegate=self
 		conn.qrCodePrivateKey=qrCodePrivateKey
-		let transfer=OutgoingTransferInfo(service: info.service, device: info.device!, connection: conn, delegate: delegate)
+		let transfer=OutgoingTransferInfo(service: info.service, device: device, connection: conn, delegate: delegate)
 		outgoingTransfers[deviceID]=transfer
 		conn.start()
+		return true
 	}
 	
 	func outboundConnectionWasEstablished(connection: OutboundNearbyConnection) {
-		guard let transfer=outgoingTransfers[connection.id] else {return}
 		DispatchQueue.main.async {
-			transfer.delegate.connectionWasEstablished(pinCode: connection.pinCode!)
+			guard let transfer=self.outgoingTransfers[connection.id], transfer.connection === connection, let pin=connection.pinCode else {return}
+			transfer.delegate.connectionWasEstablished(pinCode: pin)
 		}
 	}
 	
 	func outboundConnectionTransferAccepted(connection: OutboundNearbyConnection) {
-		guard let transfer=outgoingTransfers[connection.id] else {return}
 		DispatchQueue.main.async {
+			guard let transfer=self.outgoingTransfers[connection.id], transfer.connection === connection else {return}
 			transfer.delegate.transferAccepted()
 		}
 	}
 	
 	func outboundConnection(connection: OutboundNearbyConnection, transferProgress: Double) {
-		guard let transfer=outgoingTransfers[connection.id] else {return}
 		DispatchQueue.main.async {
+			guard let transfer=self.outgoingTransfers[connection.id], transfer.connection === connection else {return}
 			transfer.delegate.transferProgress(progress: transferProgress)
 		}
 	}
 	
 	func outboundConnection(connection: OutboundNearbyConnection, failedWithError: Error) {
-		guard let transfer=outgoingTransfers[connection.id] else {return}
 		DispatchQueue.main.async {
+			guard let transfer=self.outgoingTransfers[connection.id], transfer.connection === connection else {return}
+			self.outgoingTransfers.removeValue(forKey: connection.id)
 			transfer.delegate.connectionFailed(with: failedWithError)
 		}
-		outgoingTransfers.removeValue(forKey: connection.id)
 	}
 	
 	func outboundConnectionTransferFinished(connection: OutboundNearbyConnection) {
-		guard let transfer=outgoingTransfers[connection.id] else {return}
 		DispatchQueue.main.async {
+			guard let transfer=self.outgoingTransfers[connection.id], transfer.connection === connection else {return}
+			self.outgoingTransfers.removeValue(forKey: connection.id)
 			transfer.delegate.transferFinished()
 		}
-		outgoingTransfers.removeValue(forKey: connection.id)
 	}
 }

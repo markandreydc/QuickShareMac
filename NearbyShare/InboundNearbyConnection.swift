@@ -23,13 +23,20 @@ class InboundNearbyConnection: NearbyConnection{
 	
 	private var textPayloadID:Int64=0
 	private var completionTimeout:DispatchWorkItem?
+	private let downloadDirectory:URL?
 	
 	enum State{
 		case initial, receivedConnectionRequest, sentUkeyServerInit, receivedUkeyClientFinish, sentConnectionResponse, sentPairedKeyResult, receivedPairedKeyResult, waitingForUserConsent, receivingFiles, disconnected
 	}
 	
-	override init(connection: NWConnection, id:String) {
+	init(connection: NWConnection, id:String, downloadDirectory:URL?=nil) {
+		self.downloadDirectory=downloadDirectory
 		super.init(connection: connection, id: id)
+	}
+
+	private func downloadsDirectory() throws -> URL{
+		if let directory=downloadDirectory{return directory.resolvingSymlinksInPath()}
+		return try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true).resolvingSymlinksInPath()
 	}
 	
 	override func handleConnectionClosure() {
@@ -340,7 +347,7 @@ class InboundNearbyConnection: NearbyConnection{
 	
 	private func makeFileDestinationURL(_ initialDest:URL) -> URL{
 		var dest=initialDest
-		if FileManager.default.fileExists(atPath: dest.path){
+		if FileManager.default.fileExists(atPath: dest.path) || transferredFiles.values.contains(where: {$0.destinationURL==dest}){
 			var counter=1
 			var path:String
 			let ext=dest.pathExtension
@@ -351,7 +358,7 @@ class InboundNearbyConnection: NearbyConnection{
 					path+=".\(ext)"
 				}
 				counter+=1
-			}while FileManager.default.fileExists(atPath: path)
+			}while FileManager.default.fileExists(atPath: path) || transferredFiles.values.contains(where: {$0.destinationURL.path==path})
 			dest=URL(fileURLWithPath: path)
 		}
 		return dest
@@ -361,7 +368,7 @@ class InboundNearbyConnection: NearbyConnection{
 		guard frame.hasV1, frame.v1.hasIntroduction else { throw NearbyError.requiredFieldMissing("shareNearbyFrame.v1.introduction") }
 		currentState = .waitingForUserConsent
 		if frame.v1.introduction.fileMetadata.count>0 && frame.v1.introduction.textMetadata.isEmpty{
-			let downloadsDirectory=(try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)).resolvingSymlinksInPath()
+			let downloadsDirectory=try downloadsDirectory()
 			for file in frame.v1.introduction.fileMetadata{
 				let dest=makeFileDestinationURL(downloadsDirectory.appendingPathComponent(file.name))
 				let info=InternalFileInfo(meta: FileMetadata(name: file.name, size: file.size, mimeType: file.mimeType),
@@ -382,7 +389,7 @@ class InboundNearbyConnection: NearbyConnection{
 					self.delegate?.obtainUserConsent(for: metadata, from: self.remoteDeviceInfo!, connection: self)
 				}
 			}else if case .text=meta.type{
-				let downloadsDirectory=(try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)).resolvingSymlinksInPath()
+				let downloadsDirectory=try downloadsDirectory()
 				let dateFormatter=DateFormatter()
 				dateFormatter.dateFormat="yyyy-MM-dd HH.mm.ss"
 				let dest=makeFileDestinationURL(downloadsDirectory.appendingPathComponent("\(dateFormatter.string(from: Date())).txt"))
