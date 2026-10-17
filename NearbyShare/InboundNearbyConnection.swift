@@ -97,6 +97,7 @@ class InboundNearbyConnection: NearbyConnection{
 	}
 	
 	override func processFileChunk(frame: Location_Nearby_Connections_PayloadTransferFrame) throws{
+		guard currentState == .receivingFiles else { throw NearbyError.protocolError("File chunk received before transfer was accepted") }
 		let id=frame.payloadHeader.id
 		guard let fileInfo=transferredFiles[id] else { throw NearbyError.protocolError("File payload ID \(id) is not known") }
 		let currentOffset=fileInfo.bytesTransferred
@@ -106,6 +107,10 @@ class InboundNearbyConnection: NearbyConnection{
 			fileInfo.fileHandle?.write(frame.payloadChunk.body)
 			transferredFiles[id]!.bytesTransferred+=Int64(frame.payloadChunk.body.count)
 			fileInfo.progress?.completedUnitCount=transferredFiles[id]!.bytesTransferred
+			let bytesReceived=Int64(frame.payloadChunk.body.count)
+			DispatchQueue.main.async {
+				self.delegate?.incomingConnection(connection: self, didReceiveBytes: bytesReceived)
+			}
 		}else if (frame.payloadChunk.flags & 1)==1{
 			try fileInfo.fileHandle?.close()
 			transferredFiles[id]!.fileHandle=nil
@@ -128,6 +133,10 @@ class InboundNearbyConnection: NearbyConnection{
 			fileInfo.fileHandle?.write(payload)
 			transferredFiles[id]!.bytesTransferred+=Int64(payload.count)
 			fileInfo.progress?.completedUnitCount=transferredFiles[id]!.bytesTransferred
+			let bytesReceived=Int64(payload.count)
+			DispatchQueue.main.async {
+				self.delegate?.incomingConnection(connection: self, didReceiveBytes: bytesReceived)
+			}
 			try fileInfo.fileHandle?.close()
 			transferredFiles[id]!.fileHandle=nil
 			fileInfo.progress?.unpublish()
@@ -344,7 +353,7 @@ class InboundNearbyConnection: NearbyConnection{
 	}
 	
 	func submitUserConsent(accepted:Bool){
-		DispatchQueue.global(qos: .utility).async {
+		NearbyConnection.dispatchQueue.async {
 			if accepted{
 				self.acceptTransfer()
 			}else{
@@ -405,5 +414,6 @@ class InboundNearbyConnection: NearbyConnection{
 
 protocol InboundNearbyConnectionDelegate{
 	func obtainUserConsent(for transfer:TransferMetadata, from device:RemoteDeviceInfo, connection:InboundNearbyConnection)
+	func incomingConnection(connection:InboundNearbyConnection, didReceiveBytes count:Int64)
 	func connectionWasTerminated(connection:InboundNearbyConnection, error:Error?)
 }

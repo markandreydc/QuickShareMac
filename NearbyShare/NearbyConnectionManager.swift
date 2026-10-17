@@ -169,7 +169,9 @@ struct EndpointInfo{
 
 public protocol MainAppDelegate{
 	func obtainUserConsent(for transfer:TransferMetadata, from device:RemoteDeviceInfo)
+	func incomingTransfer(id:String, didReceiveBytes count:Int64)
 	func incomingTransfer(id:String, didFinishWith error:Error?)
+	func receivingStopped(with error:Error)
 }
 
 public protocol ShareExtensionDelegate:AnyObject{
@@ -185,7 +187,7 @@ public protocol ShareExtensionDelegate:AnyObject{
 
 public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNearbyConnectionDelegate, OutboundNearbyConnectionDelegate{
 	
-	private var tcpListener:NWListener;
+	private var tcpListener:NWListener?
 	public let endpointID:[UInt8]=generateEndpointID()
 	private var mdnsService:NetService?
 	private var activeConnections:[String:InboundNearbyConnection]=[:]
@@ -205,29 +207,43 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 	
 	public static let shared=NearbyConnectionManager()
 	
-	override init() {
-		tcpListener=try! NWListener(using: NWParameters(tls: .none))
-		super.init()
-	}
-	
-	public func becomeVisible(){
-		startTCPListener()
-	}
-	
-	private func startTCPListener(){
-		tcpListener.stateUpdateHandler={(state:NWListener.State) in
-			if case .ready = state {
-				self.initMDNS()
+	public var isReceiving:Bool { tcpListener != nil }
+
+	public func startReceiving() throws{
+		guard tcpListener==nil else {return}
+		let listener=try NWListener(using: NWParameters(tls: .none))
+		tcpListener=listener
+		listener.stateUpdateHandler={ [weak self, weak listener] state in
+			guard let self=self, let listener=listener, self.tcpListener === listener else {return}
+			switch state{
+			case .ready:
+				self.initMDNS(listener: listener)
+			case .failed(let error):
+				self.stopReceiving()
+				self.mainAppDelegate?.receivingStopped(with: error)
+			default:
+				break
 			}
 		}
-		tcpListener.newConnectionHandler={(connection:NWConnection) in
+		listener.newConnectionHandler={ [weak self, weak listener] (connection:NWConnection) in
+			guard let self=self, let listener=listener, self.tcpListener === listener else {
+				connection.cancel()
+				return
+			}
 			let id=UUID().uuidString
 			let conn=InboundNearbyConnection(connection: connection, id: id)
 			self.activeConnections[id]=conn
 			conn.delegate=self
 			conn.start()
 		}
-		tcpListener.start(queue: .global(qos: .utility))
+		listener.start(queue: .main)
+	}
+
+	public func stopReceiving(){
+		mdnsService?.stop()
+		mdnsService=nil
+		tcpListener?.cancel()
+		tcpListener=nil
 	}
 	
 	private static func generateEndpointID()->[UInt8]{
@@ -239,7 +255,7 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 		return id
 	}
 	
-	private func initMDNS(){
+	private func initMDNS(listener:NWListener){
 		let nameBytes:[UInt8]=[
 			0x23, // PCP
 			endpointID[0], endpointID[1], endpointID[2], endpointID[3],
@@ -249,7 +265,8 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 		let name=Data(nameBytes).urlSafeBase64EncodedString()
 		let endpointInfo=EndpointInfo(name: Host.current().localizedName!, deviceType: .computer)
 		
-		let port:Int32=Int32(tcpListener.port!.rawValue)
+		guard let listenerPort=listener.port else {return}
+		let port:Int32=Int32(listenerPort.rawValue)
 		mdnsService=NetService(domain: "", type: "_FC9F5ED42C8A._tcp.", name: name, port: port)
 		mdnsService?.delegate=self
 		mdnsService?.setTXTRecord(NetService.data(fromTXTRecord: [
@@ -263,10 +280,13 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 		delegate.obtainUserConsent(for: transfer, from: device)
 	}
 	
+	func incomingConnection(connection:InboundNearbyConnection, didReceiveBytes count:Int64){
+		mainAppDelegate?.incomingTransfer(id: connection.id, didReceiveBytes: count)
+	}
+
 	func connectionWasTerminated(connection:InboundNearbyConnection, error:Error?){
-		guard let delegate=mainAppDelegate else {return}
-		delegate.incomingTransfer(id: connection.id, didFinishWith: error)
 		activeConnections.removeValue(forKey: connection.id)
+		mainAppDelegate?.incomingTransfer(id: connection.id, didFinishWith: error)
 	}
 	
 	public func submitUserConsent(transferID:String, accept:Bool){

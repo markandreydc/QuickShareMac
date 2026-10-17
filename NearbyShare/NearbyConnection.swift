@@ -16,7 +16,7 @@ import BigInt
 
 class NearbyConnection{
 	internal static let SANE_FRAME_LENGTH=5*1024*1024
-	private static let dispatchQueue=DispatchQueue(label: "me.grishka.QuickShareMac.queue", qos: .utility) // FIFO (non-concurrent) queue to avoid those exciting concurrency bugs
+	internal static let dispatchQueue=DispatchQueue(label: "me.grishka.QuickShareMac.queue", qos: .utility) // FIFO (non-concurrent) queue to avoid those exciting concurrency bugs
 	
 	internal let connection:NWConnection
 	internal var remoteDeviceInfo:RemoteDeviceInfo?
