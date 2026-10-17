@@ -4,6 +4,10 @@
 
 Send files between your Mac and Android devices using **Quick Share** over your local network.
 
+**[Download QuickShareMac for macOS](https://github.com/markandreydc/QuickShareMac/releases/latest/download/QuickShareMac.app.zip)** · macOS 12 or later · Apple Silicon and Intel
+
+No GitHub account or coding tools needed. See [installation instructions](#installation) below.
+
 Developed by Mark Andrey · github.com/markandreydc
 
 **QuickShareMac is a fork of [NearDrop](https://github.com/grishka/NearDrop), created by [grishka](https://github.com/grishka).** NearDrop provides the original Quick Share/Nearby Share implementation and protocol research that this app builds on. This fork adds a dedicated Send/Receive interface, transfer history, settings, and connection diagnostics.
@@ -86,7 +90,12 @@ For maintainers: publish a **stable GitHub Release** in `markandreydc/QuickShare
 
 ## Installation
 
-If a prebuilt QuickShareMac release is available, download it, unzip it, and move **QuickShareMac.app** to **Applications**. Otherwise, build from source below.
+1. **[Download QuickShareMac](https://github.com/markandreydc/QuickShareMac/releases/latest/download/QuickShareMac.app.zip)** (ZIP file, latest version).
+2. Open the downloaded ZIP file to extract **QuickShareMac.app**.
+3. Drag **QuickShareMac.app** into your **Applications** folder.
+4. Open **QuickShareMac** from Applications.
+
+Requires **macOS 12 or later**, on Apple Silicon or Intel. You do not need a GitHub account, Xcode, or Terminal to install the app.
 
 When macOS requests access, allow **Local Network** communication. You can review this under **System Settings → Privacy & Security → Local Network**.
 
