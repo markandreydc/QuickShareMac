@@ -124,10 +124,15 @@ struct UISmokeTests{
 		expect(visible(controller.view).compactMap({$0 as? NSScrollView}).first!.frame.width>600, "Transfer list must expand with the window")
 
 		let settings=SettingsViewController()
-		let settingsWindow=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+		let settingsWindow=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 500), styleMask: [.titled], backing: .buffered, defer: false)
 		settingsWindow.contentViewController=settings
 		settings.update(startReceivingOnLaunch: true, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 0)
 		layout(settingsWindow)
+		for credit in ["Developed by Mark Andrey · github.com/markandreydc", "Based on NearDrop by grishka · github.com/grishka/NearDrop"]{
+			let label=visible(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.stringValue==credit})
+			expect(label != nil, "Settings must display the developer and upstream credits")
+			if let label=label{expect(settings.view.bounds.contains(label.convert(label.bounds, to: settings.view)), "Settings credits must fit inside the window")}
+		}
 		expect(!button("Forget all", in: settings.view).isEnabled, "Forget must be disabled when no names are stored")
 		settings.update(startReceivingOnLaunch: false, launchAtLogin: false, requiresLoginApproval: true, rememberedDeviceCount: 3)
 		expect(button("Forget all", in: settings.view).isEnabled, "Stored names should be forgettable")
@@ -137,11 +142,17 @@ struct UISmokeTests{
 		var savedNames:[String?]=[]
 		settings.onDeviceNameChange={savedNames.append($0)}
 		nameField.stringValue="  Studio Mac  "
+		settingsWindow.makeFirstResponder(nameField)
+		expect(nameField.currentEditor() != nil, "The device name field must be focused before testing save")
 		button("Save name", in: settings.view).performClick(nil)
-		expect(savedNames.count==1 && savedNames[0]=="Studio Mac", "Settings must trim and save a custom device name")
+		expect(savedNames.count==1 && savedNames[0]=="Studio Mac", "Settings must trim and save a custom device name once; got \(savedNames)")
+		expect(nameField.currentEditor()==nil, "Saving a valid name must remove focus from the field")
+		expect(nameField.stringValue=="Studio Mac", "The saved field must display the trimmed name")
 		nameField.stringValue="bad\nname"
+		settingsWindow.makeFirstResponder(nameField)
 		button("Save name", in: settings.view).performClick(nil)
 		expect(savedNames.count==1, "Invalid names must not be saved")
+		expect(nameField.currentEditor() != nil, "Invalid names must retain focus for correction")
 		button("Use Mac’s name", in: settings.view).performClick(nil)
 		expect(savedNames.count==2 && savedNames[1]==nil, "Reset must restore the system name rather than save an empty name")
 

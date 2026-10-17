@@ -34,6 +34,7 @@ for name in ['swift-protobuf','SwiftECC','ASN1','BigInt','qrcode','swift-qrcode-
     if not licenses: raise SystemExit('Missing dependency license: '+name)
     for path in licenses: copy_license(path,destination/(name+'-'+path.name+'.txt'))
 (destination/'Acknowledgements.txt').write_text(
+    'Developed by Mark Andrey · github.com/markandreydc\n\n'
     'QuickShareMac is a fork of NearDrop by grishka and contributors.\n'
     'Original project and protocol implementation: https://github.com/grishka/NearDrop\n'
     'Dependency license texts are included alongside this acknowledgement.\n',encoding='utf-8')

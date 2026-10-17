@@ -159,7 +159,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 
 	@objc private func showSettings(_ sender:Any?){
 		if settingsWindow==nil{
-			let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 440), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+			let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 500), styleMask: [.titled, .closable], backing: .buffered, defer: false)
 			window.title=NSLocalizedString("SettingsTitle", value: "QuickShareMac Settings", comment: "")
 			window.contentViewController=settingsController
 			window.isReleasedWhenClosed=false

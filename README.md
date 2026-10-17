@@ -4,6 +4,8 @@
 
 Send files between your Mac and Android devices using **Quick Share** over your local network.
 
+Developed by Mark Andrey · github.com/markandreydc
+
 **QuickShareMac is a fork of [NearDrop](https://github.com/grishka/NearDrop), created by [grishka](https://github.com/grishka).** NearDrop provides the original Quick Share/Nearby Share implementation and protocol research that this app builds on. This fork adds a dedicated Send/Receive interface, transfer history, settings, and connection diagnostics.
 
 ## Features

@@ -463,6 +463,7 @@ final class SettingsViewController:NSViewController{
 	var onDeviceNameChange:((String?)->Void)?
 	private let nameField=NSTextField(string: "")
 	private let nameError=WindowUI.label("", size: 11)
+	private var savingName=false
 	private let startReceivingButton=NSButton(checkboxWithTitle: NSLocalizedString("StartReceivingOnLaunch", value: "Start receiving when app opens", comment: ""), target: nil, action: nil)
 	private let loginButton=NSButton(checkboxWithTitle: NSLocalizedString("LaunchAtLogin", value: "Launch at login", comment: ""), target: nil, action: nil)
 	private let loginHelpButton=NSButton(title: NSLocalizedString("SetUpLoginItem", value: "Set up login item in System Settings…", comment: ""), target: nil, action: nil)
@@ -470,7 +471,7 @@ final class SettingsViewController:NSViewController{
 	private let forgetButton=NSButton(title: NSLocalizedString("ForgetDevices", value: "Forget all", comment: ""), target: nil, action: nil)
 
 	override func loadView(){
-		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 460, height: 440))
+		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 460, height: 500))
 		view.wantsLayer=true
 		let content=WindowUI.stack(spacing: 14)
 		WindowUI.pin(content, to: view, inset: 24)
@@ -514,6 +515,10 @@ final class SettingsViewController:NSViewController{
 		forgetButton.action=#selector(forgetDevices(_:))
 		rememberedRow.addArrangedSubview(forgetButton)
 		WindowUI.fill(rememberedRow, in: content)
+		let credits=WindowUI.stack(spacing: 4)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true), in: credits)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("UpstreamCredit", value: "Based on NearDrop by grishka · github.com/grishka/NearDrop", comment: ""), size: 11, secondary: true), in: credits)
+		WindowUI.fill(credits, in: content)
 	}
 
 	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int, customDeviceName:String?=nil){
@@ -531,9 +536,15 @@ final class SettingsViewController:NSViewController{
 	@objc private func openLoginItems(_ sender:NSButton){onOpenLoginItems?()}
 	@objc private func forgetDevices(_ sender:NSButton){onForgetRememberedDevices?()}
 	@objc private func saveName(_ sender:Any?){
+		// Ending field editing can dispatch this action again through AppKit.
+		guard !savingName else {return}
+		savingName=true
+		defer{savingName=false}
 		do{
 			let name=try LocalDeviceIdentity.validate(nameField.stringValue)
 			nameError.isHidden=true
+			view.window?.makeFirstResponder(nil)
+			nameField.stringValue=name
 			onDeviceNameChange?(name)
 		}catch{nameError.stringValue=error.localizedDescription; nameError.isHidden=false}
 	}
