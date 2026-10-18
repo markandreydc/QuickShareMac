@@ -115,7 +115,7 @@ struct UISmokeTests{
 		if #available(macOS 26.0, *){
 			expect(mode.borderShape == .roundedRectangle && settingsButton.borderShape == .roundedRectangle && pin.borderShape == .roundedRectangle, "Modern macOS controls must use rounded rectangles rather than capsules")
 		}
-		expect((controller.view as? WindowBackgroundView)?.backgroundStyle == .soft, "The main window must use the soft background without changing Settings")
+		expect((controller.view as? WindowBackgroundView)?.backgroundStyle == .soft, "The main window must use the shared soft background")
 		let cards=visible(controller.view).compactMap {$0 as? CardView}
 		expect(!cards.isEmpty && cards.allSatisfy(\.usesSoftAppearance), "Main window cards must use the rounded soft appearance")
 		for appearance in [NSAppearance.Name.aqua,.darkAqua]{
@@ -253,7 +253,7 @@ struct UISmokeTests{
 		expect(settings.selectedSection == .general, "Settings must open on General by default")
 		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Check for Updates…"}), "Update controls must not clutter General settings")
 		expect(visible(settings.view).compactMap({$0 as? CardView}).count==5, "General settings must group device name, startup, remembered names, received files, and sending")
-		expect(visible(settings.view).compactMap({$0 as? CardView}).allSatisfy {!$0.usesSoftAppearance}, "Main-window styling must not change the Settings card appearance")
+		expect(visible(settings.view).compactMap({$0 as? CardView}).allSatisfy(\.usesSoftAppearance), "Settings cards must match the main window's soft appearance")
 		let compress=button("Compress folders into ZIP files before sending", in: settings.view)
 		expect(compress.state == .off, "Folder compression must default to off")
 		var compressionChanges:[Bool]=[]
@@ -295,7 +295,7 @@ struct UISmokeTests{
 			layout(settingsWindow)
 			let frame=developerFooter.convert(developerFooter.bounds, to: settings.view)
 			expect(developerFooter.alignment == .center && abs(frame.midX-settings.view.bounds.midX)<1, "The developer footer must remain horizontally centered when Settings resizes")
-			expect(abs(frame.minY-settings.view.bounds.minY-16)<1, "The developer credit must stay at the bottom of the Settings window")
+			expect(abs(frame.minY-settings.view.bounds.minY-20)<1, "The developer credit must use the same bottom inset as the main window")
 		}
 		var footerAncestor=developerFooter.superview
 		while let ancestor=footerAncestor{
@@ -308,7 +308,7 @@ struct UISmokeTests{
 		snapshot(settingsWindow, "settings-about")
 		settings.show(.general)
 		layout(settingsWindow)
-		expect(!visible(settings.view).contains(where: {$0 === developerFooter}), "The About footer must not appear on other Settings pages")
+		expect(visible(settings.view).contains(where: {$0 === developerFooter}), "The shared developer footer must remain visible on General")
 		expect(!button("Forget all", in: settings.view).isEnabled, "Forget must be disabled when no names are stored")
 		settings.update(startReceivingOnLaunch: false, launchAtLogin: false, requiresLoginApproval: true, rememberedDeviceCount: 3)
 		expect(button("Forget all", in: settings.view).isEnabled, "Stored names should be forgettable")
@@ -535,6 +535,7 @@ struct UISmokeTests{
 		testDynamicWindowHeight()
 		testMainWindowAppearance()
 		testCompactReceiveInstructions()
+		testSettingsAppearance()
 		print("Passed \(checks) UI smoke checks")
 	}
 
@@ -610,6 +611,63 @@ struct UISmokeTests{
 		main.update(receiving: true, transfers: [transfer("compact-request", .awaitingApproval)])
 		main.fitWindowToContent()
 		expect(!visible(main.view).contains {$0.identifier?.rawValue=="ReceiveIdleInstructions"} && button("Accept", in: main.view).isEnabled, "Incoming requests must replace the compact idle guidance with approval controls")
+	}
+
+	static func testSettingsAppearance(){
+		let settings=SettingsViewController()
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: SettingsViewController.defaultSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		window.contentViewController=settings
+		settings.update(startReceivingOnLaunch: true, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 2, customDeviceName: "Studio Mac", receivedFilesFolderName: "A very long custom received-files folder name that must truncate instead of pushing its controls outside the window", receivedFilesFolderIsCustom: true)
+		settings.updateUpdates(frequency: .weekly, checking: false, currentVersion: "1.0.0", availableRelease: nil, status: "")
+		let brand=descendants(settings.view).compactMap {$0 as? NSImageView}.first {$0.identifier?.rawValue=="SettingsBrandIcon"}!
+		let navigation=descendants(settings.view).compactMap {$0 as? NSSegmentedControl}.first!
+		let footer=descendants(settings.view).first {$0.identifier?.rawValue=="DeveloperCreditFooter"}!
+		expect((settings.view as? WindowBackgroundView)?.backgroundStyle == .soft, "Settings must reuse the main window's soft background")
+		expect(brand.image === NSImage(named: "QuickShareMacBrandIcon"), "The Settings header must reuse the unchanged logo artwork")
+		expect((0..<navigation.segmentCount).allSatisfy {navigation.image(forSegment: $0) != nil} && navigation.controlSize == .large && navigation.selectedSegmentBezelColor == .systemBlue, "Settings navigation must match the main window's icon tabs and blue selection")
+		var cardColors:[CGColor]=[]
+		for (appearance,name) in [(NSAppearance.Name.aqua,"light"),(.darkAqua,"dark")]{
+			settings.view.appearance=NSAppearance(named: appearance)
+			for size in [SettingsViewController.minimumSize,SettingsViewController.defaultSize]{
+				window.setContentSize(size)
+				for section in [SettingsViewController.Section.general,.updates,.about]{
+					settings.show(section)
+					layout(window)
+					let brandFrame=brand.convert(brand.bounds, to: settings.view)
+					let navigationFrame=navigation.convert(navigation.bounds, to: settings.view)
+					let footerFrame=footer.convert(footer.bounds, to: settings.view)
+					expect(brand.bounds.size==NSSize(width: 32, height: 32) && abs(brandFrame.minX-20)<1 && brandFrame.minY>navigationFrame.maxY, "Settings must use a compact upper-left brand header above navigation")
+					expect(abs(navigationFrame.minX-20)<1 && settings.view.bounds.contains(navigationFrame), "Icon tabs must align with the main window's 20-point content inset")
+					expect(!footer.isHiddenOrHasHiddenAncestor && abs(footerFrame.minY-20)<1 && abs(footerFrame.midX-settings.view.bounds.midX)<1, "The developer footer must stay fixed on every Settings page")
+					let cards=visible(settings.view).compactMap {$0 as? CardView}
+					expect(!cards.isEmpty && cards.allSatisfy(\.usesSoftAppearance), "Every Settings page must use the same soft cards as Send/Receive")
+					for card in cards{
+						card.updateLayer()
+						expect(card.layer?.cornerRadius==8 && card.layer?.borderWidth==1, "Settings cards must retain the reduced corner radius and subtle borders in both appearances")
+					}
+					if section == .general{
+						let scroll=visible(settings.view).compactMap {$0 as? NSScrollView}.first!
+						expect(scroll.documentView!.bounds.height>scroll.contentView.bounds.height, "General settings must scroll instead of pushing the header and footer outside the window")
+						expect(button("Save changes", in: settings.view).bezelColor == .systemBlue, "Saving a device name must use the shared blue primary action")
+						let folder=visible(settings.view).compactMap {$0 as? NSTextField}.first {$0.identifier?.rawValue=="ReceivedFilesFolder"}!
+						expect(folder.maximumNumberOfLines==1 && folder.lineBreakMode == .byTruncatingMiddle && folder.toolTip==folder.stringValue, "Long folder names must truncate and remain available in a tooltip")
+						let choose=button("Choose…", in: settings.view)
+						let reset=button("Use Downloads", in: settings.view)
+						let row=choose.superview!
+						expect(row.bounds.contains(choose.convert(choose.bounds, to: row)) && row.bounds.contains(reset.convert(reset.bounds, to: row)), "Folder actions must stay inside their row at the minimum Settings width")
+						let origin=scroll.contentView.bounds.origin
+						scroll.contentView.scroll(to: NSPoint(x: 0, y: 80))
+						expect(brand.convert(brand.bounds, to: settings.view)==brandFrame && footer.convert(footer.bounds, to: settings.view)==footerFrame, "Scrolling Settings must leave the header and footer fixed")
+						scroll.contentView.scroll(to: origin)
+						cardColors.append(cards[0].layer!.backgroundColor!)
+					}else if section == .updates{
+						expect(button("Check for Updates…", in: settings.view).bezelColor == .systemBlue, "Manual update checks must use the shared blue primary action")
+					}
+					if size==SettingsViewController.defaultSize{snapshot(window, "settings-\(section.rawValue)-\(name)")}
+				}
+			}
+		}
+		expect(cardColors.first != cardColors.last, "Settings card colors must resolve separately for light and dark mode")
 	}
 
 	static func testSettingsDefaults(){

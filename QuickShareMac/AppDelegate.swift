@@ -331,8 +331,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	@objc private func showSettings(_ sender:Any?){
 		if settingsWindow==nil{
 			let window=NSWindow(contentRect: NSRect(origin: .zero, size: SettingsViewController.defaultSize), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-			window.contentMinSize=NSSize(width: 520, height: 500)
+			window.contentMinSize=SettingsViewController.minimumSize
 			window.title=NSLocalizedString("SettingsTitle", value: "QuickShareMac Settings", comment: "")
+			window.titleVisibility = .hidden
+			window.titlebarAppearsTransparent=true
 			window.contentViewController=settingsController
 			window.isReleasedWhenClosed=false
 			window.center()

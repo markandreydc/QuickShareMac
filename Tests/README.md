@@ -52,8 +52,12 @@ persistence, restored state, and leaving other windows unaffected. Header checks
 wiring, the unchanged brand artwork in a compact upper-left header, smaller title
 typography, long device-name truncation without overlapping actions, Send/Receive tab
 order and icons, soft backgrounds, blue primary actions, reduced card corner radii,
-less-rounded native buttons/tabs, and light/dark card colors. Settings retains its
-existing layout, with the same reduced corner rounding as the rest of the app.
+less-rounded native buttons/tabs, and light/dark card colors. Settings appearance
+checks cover the same compact unchanged-logo header, soft background/cards,
+reduced corner radii, icon navigation, blue Save/Check for Updates actions, and a
+fixed developer footer across all pages. Narrow/default window sizes and both
+appearances are checked, including long folder-name truncation, visible folder
+actions, scrollable General content, and header/footer stability during scrolling.
 The developer credit footer is checked on both the Receive and Send tabs for
 centering, bottom placement, resizing, and staying outside cards/scrolling content.
 Auto-fit checks cover compact initial size, tab and selection changes, keeping the

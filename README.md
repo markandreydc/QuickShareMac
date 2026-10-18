@@ -90,7 +90,7 @@ Use **Available for** in the Receive tab or menu to choose **10 minutes**, **30 
 
 Turning receiving off stops new incoming connections; transfers already in progress can finish. Outgoing transfers do not require receiving to be enabled.
 
-**Settings…** is organized into **General**, **Updates**, and **About**. General contains device naming, startup options, and remembered names; Updates contains version checks and daily-check preferences; About shows the app version and developer/upstream credits. The window can be resized, and longer pages scroll when needed.
+**Settings…** is organized into **General**, **Updates**, and **About**. It matches the Send/Receive window with the unchanged logo in a compact header, icon tabs, soft backgrounds and cards, subtle borders, blue primary actions, and light/dark appearances. The header, tabs, and developer-credit footer stay fixed while longer pages scroll; the window can be resized. General contains device naming, startup options, and remembered names; Updates contains version checks and daily-check preferences; About shows the app version and upstream credits.
 
 In **General**, choose whether receiving starts when the app opens. On macOS 13 or later, you can also enable **Launch at login**. On older systems, add the app to Login Items in System Settings.
 

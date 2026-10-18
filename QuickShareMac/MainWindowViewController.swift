@@ -617,7 +617,8 @@ final class MainWindowViewController:NSViewController{
 
 final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	enum Section:Int{case general, updates, about}
-	static let defaultSize=NSSize(width: 560, height: 540)
+	static let defaultSize=NSSize(width: 620, height: 600)
+	static let minimumSize=NSSize(width: 520, height: 500)
 	private(set) var selectedSection:Section = .general
 	private let sections=NSSegmentedControl(labels: [NSLocalizedString("GeneralSettings", value: "General", comment: ""),NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""),NSLocalizedString("AboutSettings", value: "About", comment: "")], trackingMode: .selectOne, target: nil, action: nil)
 	private let pages=NSTabView()
@@ -666,29 +667,53 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	override func loadView(){
 		view=WindowBackgroundView(frame: NSRect(origin: .zero, size: Self.defaultSize))
 		view.wantsLayer=true
+		(view as? WindowBackgroundView)?.backgroundStyle = .soft
+		let content=WindowUI.stack(spacing: 16)
+		WindowUI.pin(content, to: view, inset: 20)
+		let header=WindowUI.stack(.horizontal, spacing: 10)
+		let brand=NSImageView(image: NSImage(named: "QuickShareMacBrandIcon") ?? NSApp.applicationIconImage)
+		brand.identifier=NSUserInterfaceItemIdentifier("SettingsBrandIcon")
+		brand.imageScaling = .scaleProportionallyUpOrDown
+		NSLayoutConstraint.activate([brand.widthAnchor.constraint(equalToConstant: 32),brand.heightAnchor.constraint(equalToConstant: 32)])
+		header.addArrangedSubview(brand)
+		let titles=WindowUI.stack(spacing: 2)
+		let title=WindowUI.label("QuickShareMac", size: 16, weight: .semibold)
+		title.identifier=NSUserInterfaceItemIdentifier("SettingsAppTitle")
+		titles.addArrangedSubview(title)
+		titles.addArrangedSubview(WindowUI.label(NSLocalizedString("SettingsHeading", value: "Settings", comment: ""), size: 11, secondary: true))
+		header.addArrangedSubview(titles)
+		header.addArrangedSubview(WindowUI.spacer())
+		WindowUI.fill(header, in: content)
 		sections.identifier=NSUserInterfaceItemIdentifier("SettingsSections")
 		sections.segmentStyle = .smallSquare
+		sections.controlSize = .large
+		sections.selectedSegmentBezelColor = .systemBlue
 		if #available(macOS 26.0, *){sections.borderShape = .roundedRectangle}
+		for (index,symbol) in ["slider.horizontal.3","arrow.triangle.2.circlepath","info.circle"].enumerated(){
+			sections.setImage(NSImage(systemSymbolName: symbol, accessibilityDescription: nil), forSegment: index)
+			sections.setWidth(128, forSegment: index)
+		}
 		sections.setAccessibilityLabel(NSLocalizedString("SettingsSections", value: "Settings sections", comment: ""))
 		sections.selectedSegment=selectedSection.rawValue
 		sections.target=self
 		sections.action=#selector(sectionChanged(_:))
-		sections.translatesAutoresizingMaskIntoConstraints=false
-		view.addSubview(sections)
+		let navigation=WindowUI.stack(.horizontal)
+		navigation.addArrangedSubview(sections)
+		navigation.addArrangedSubview(WindowUI.spacer())
+		WindowUI.fill(navigation, in: content)
 		pages.tabViewType = .noTabsNoBorder
 		pages.drawsBackground=false
-		pages.translatesAutoresizingMaskIntoConstraints=false
-		view.addSubview(pages)
-		NSLayoutConstraint.activate([
-			sections.topAnchor.constraint(equalTo: view.topAnchor, constant: 18),
-			sections.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-			pages.topAnchor.constraint(equalTo: sections.bottomAnchor, constant: 12),
-			pages.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-			pages.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-			pages.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-		])
+		pages.setContentHuggingPriority(.defaultLow, for: .vertical)
+		pages.heightAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive=true
+		WindowUI.fill(pages, in: content)
+		let developerCredit=WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true)
+		developerCredit.identifier=NSUserInterfaceItemIdentifier("DeveloperCreditFooter")
+		developerCredit.alignment = .center
+		developerCredit.setContentHuggingPriority(.required, for: .vertical)
+		developerCredit.setContentCompressionResistancePriority(.required, for: .vertical)
+		WindowUI.fill(developerCredit, in: content)
 		let general=page(.general)
-		let device=card(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""), in: general)
+		let device=card(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""), symbol: "desktopcomputer", in: general)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("DeviceNameExplanation", value: "Shown to nearby devices. Your Mac’s system name is unchanged.", comment: ""), size: 12, secondary: true), in: device)
 		for button in [systemNameButton,customNameButton]{
 			button.target=self
@@ -701,6 +726,8 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		nameField.identifier=NSUserInterfaceItemIdentifier("CustomDeviceName")
 		nameField.setAccessibilityLabel(NSLocalizedString("CustomDeviceNameLabel", value: "Custom device name", comment: ""))
 		nameField.placeholderString=NSLocalizedString("EnterDeviceName", value: "Enter a device name", comment: "")
+		nameField.bezelStyle = .roundedBezel
+		nameField.font=NSFont.systemFont(ofSize: 13)
 		nameField.delegate=self
 		WindowUI.fill(nameField, in: device)
 		nameMessage.identifier=NSUserInterfaceItemIdentifier("DeviceNameMessage")
@@ -711,13 +738,12 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		saveNameButton.target=self
 		saveNameButton.action=#selector(saveName(_:))
 		for button in [cancelNameButton,saveNameButton]{
-			button.bezelStyle = .regularSquare
-			if #available(macOS 26.0, *){button.borderShape = .roundedRectangle}
+			styleButton(button, primary: button === saveNameButton)
 			nameActions.addArrangedSubview(button)
 		}
 		device.addArrangedSubview(nameActions)
 		resetNameDraft()
-		let startup=card(NSLocalizedString("StartupSettings", value: "Startup", comment: ""), in: general)
+		let startup=card(NSLocalizedString("StartupSettings", value: "Startup", comment: ""), symbol: "power", in: general)
 		startReceivingButton.target=self
 		startReceivingButton.action=#selector(startReceivingChanged(_:))
 		startup.addArrangedSubview(startReceivingButton)
@@ -729,28 +755,33 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		loginHelpButton.bezelStyle = .inline
 		startup.addArrangedSubview(loginHelpButton)
 		if #available(macOS 13.0, *){loginHelpButton.isHidden=true}else{loginButton.isHidden=true}
-		let remembered=card(NSLocalizedString("RememberedNames", value: "Remembered device names", comment: ""), in: general)
+		let remembered=card(NSLocalizedString("RememberedNames", value: "Remembered device names", comment: ""), symbol: "person.crop.circle", in: general)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("RememberNameExplanation", value: "Remembering a name does not verify identity or skip approval. Always check the PIN.", comment: ""), size: 12, secondary: true), in: remembered)
 		let rememberedRow=WindowUI.stack(.horizontal)
 		rememberedRow.addArrangedSubview(rememberedCountLabel)
 		rememberedRow.addArrangedSubview(WindowUI.spacer())
-		forgetButton.bezelStyle = .inline
+		styleButton(forgetButton)
+		forgetButton.controlSize = .small
 		forgetButton.target=self
 		forgetButton.action=#selector(forgetDevices(_:))
 		rememberedRow.addArrangedSubview(forgetButton)
 		WindowUI.fill(rememberedRow, in: remembered)
 
-		let receivedFiles=card(NSLocalizedString("ReceivedFilesSettings", value: "Received files", comment: ""), in: general)
+		let receivedFiles=card(NSLocalizedString("ReceivedFilesSettings", value: "Received files", comment: ""), symbol: "folder", in: general)
 		let folderRow=WindowUI.stack(.horizontal)
 		folderRow.addArrangedSubview(WindowUI.label(NSLocalizedString("SaveReceivedFilesTo", value: "Save received files to:", comment: ""), size: 12, secondary: true))
 		receivedFilesFolderLabel.identifier=NSUserInterfaceItemIdentifier("ReceivedFilesFolder")
+		receivedFilesFolderLabel.maximumNumberOfLines=1
+		receivedFilesFolderLabel.lineBreakMode = .byTruncatingMiddle
 		folderRow.addArrangedSubview(receivedFilesFolderLabel)
 		folderRow.addArrangedSubview(WindowUI.spacer())
-		chooseFolderButton.bezelStyle = .inline
+		styleButton(chooseFolderButton)
+		chooseFolderButton.controlSize = .small
 		chooseFolderButton.target=self
 		chooseFolderButton.action=#selector(chooseReceivedFilesFolder(_:))
 		folderRow.addArrangedSubview(chooseFolderButton)
-		useDownloadsButton.bezelStyle = .inline
+		styleButton(useDownloadsButton)
+		useDownloadsButton.controlSize = .small
 		useDownloadsButton.target=self
 		useDownloadsButton.action=#selector(useDownloadsFolder(_:))
 		useDownloadsButton.isHidden=true
@@ -758,7 +789,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		WindowUI.fill(folderRow, in: receivedFiles)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("ReceivedFilesFolderExplanation", value: "Incoming files are saved to this folder. The default is Downloads.", comment: ""), size: 11, secondary: true), in: receivedFiles)
 
-		let sending=card(NSLocalizedString("SendingSettings", value: "Sending", comment: ""), in: general)
+		let sending=card(NSLocalizedString("SendingSettings", value: "Sending", comment: ""), symbol: "paperplane", in: general)
 		compressFoldersButton.identifier=NSUserInterfaceItemIdentifier("CompressFoldersBeforeSending")
 		compressFoldersButton.state=SendPreferences.compressFolders() ? .on : .off
 		compressFoldersButton.target=self
@@ -766,12 +797,13 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		sending.addArrangedSubview(compressFoldersButton)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("CompressFoldersExplanation", value: "Applies to folders chosen, dropped, or shared from Finder. When off, files are sent directly with folder paths; folder layout depends on the receiver, and empty subfolders are omitted. Changes apply to your next selection.", comment: ""), size: 11, secondary: true), in: sending)
 		let reset=NSButton(title: NSLocalizedString("ResetToDefaults", value: "Reset to defaults…", comment: ""), target: self, action: #selector(resetToDefaults(_:)))
-		reset.bezelStyle = .regularSquare
-		if #available(macOS 26.0, *){reset.borderShape = .roundedRectangle}
+		styleButton(reset)
+		reset.image=NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: nil)
+		reset.imagePosition = .imageLeading
 		general.addArrangedSubview(reset)
 
 		let updatePage=page(.updates)
-		let updates=card(NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""), in: updatePage)
+		let updates=card(NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""), symbol: "arrow.triangle.2.circlepath", in: updatePage)
 		WindowUI.fill(updateVersionLabel, in: updates)
 		let frequencyRow=WindowUI.stack(.horizontal)
 		frequencyRow.addArrangedSubview(WindowUI.label(NSLocalizedString("UpdateCheckFrequencyLabel", value: "Check for updates:", comment: ""), size: 12))
@@ -790,23 +822,23 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		let updateActions=WindowUI.stack(.horizontal)
 		checkUpdatesButton.target=self
 		checkUpdatesButton.action=#selector(checkForUpdates(_:))
-		checkUpdatesButton.bezelStyle = .regularSquare
-		if #available(macOS 26.0, *){checkUpdatesButton.borderShape = .roundedRectangle}
+		styleButton(checkUpdatesButton, primary: true)
 		updateActions.addArrangedSubview(checkUpdatesButton)
 		viewReleaseButton.target=self
 		viewReleaseButton.action=#selector(viewRelease(_:))
-		viewReleaseButton.bezelStyle = .regularSquare
-		if #available(macOS 26.0, *){viewReleaseButton.borderShape = .roundedRectangle}
+		styleButton(viewReleaseButton)
 		viewReleaseButton.isHidden=true
 		updateActions.addArrangedSubview(viewReleaseButton)
 		updates.addArrangedSubview(updateActions)
 		updateStatusLabel.isHidden=true
 		WindowUI.fill(updateStatusLabel, in: updates)
 
-		let developerCredit=WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true)
-		developerCredit.identifier=NSUserInterfaceItemIdentifier("DeveloperCreditFooter")
-		let about=page(.about, footer: developerCredit)
+		let about=page(.about)
+		let identityCard=CardView()
+		identityCard.wantsLayer=true
+		identityCard.usesSoftAppearance=true
 		let identity=WindowUI.stack(spacing: 8)
+		WindowUI.pin(identity, to: identityCard, inset: 16)
 		identity.alignment = .centerX
 		let icon=NSImageView(image: NSImage(named: "QuickShareMacBrandIcon") ?? NSApp.applicationIconImage)
 		icon.imageScaling = .scaleProportionallyUpOrDown
@@ -817,13 +849,13 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		let description=WindowUI.label(NSLocalizedString("AboutDescription", value: "Share files between your Mac and Android devices over your local network.", comment: ""), size: 12, secondary: true)
 		description.alignment = .center
 		WindowUI.fill(description, in: identity)
-		WindowUI.fill(identity, in: about)
-		let credits=card(NSLocalizedString("CreditsSettings", value: "Credits", comment: ""), in: about)
+		WindowUI.fill(identityCard, in: about)
+		let credits=card(NSLocalizedString("CreditsSettings", value: "Credits", comment: ""), symbol: "heart", in: about)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("UpstreamCredit", value: "Based on NearDrop by grishka · github.com/grishka/NearDrop", comment: ""), size: 11, secondary: true), in: credits)
 		pages.selectTabViewItem(at: selectedSection.rawValue)
 	}
 
-	private func page(_ section:Section, footer:NSTextField?=nil)->NSStackView{
+	private func page(_ section:Section)->NSStackView{
 		let scroll=NSScrollView()
 		scroll.drawsBackground=false
 		scroll.hasVerticalScroller=true
@@ -832,40 +864,34 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		document.translatesAutoresizingMaskIntoConstraints=false
 		scroll.documentView=document
 		document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor).isActive=true
-		let content=WindowUI.stack(spacing: 14)
-		WindowUI.pin(content, to: document, inset: 20)
+		let content=WindowUI.stack(spacing: 16)
+		WindowUI.pin(content, to: document, inset: 0)
 		let item=NSTabViewItem(identifier: section.rawValue)
-		if let footer=footer{
-			let container=NSView()
-			scroll.translatesAutoresizingMaskIntoConstraints=false
-			footer.translatesAutoresizingMaskIntoConstraints=false
-			footer.alignment = .center
-			footer.setContentHuggingPriority(.required, for: .vertical)
-			footer.setContentCompressionResistancePriority(.required, for: .vertical)
-			container.addSubview(scroll)
-			container.addSubview(footer)
-			NSLayoutConstraint.activate([
-				scroll.topAnchor.constraint(equalTo: container.topAnchor),
-				scroll.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-				scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-				scroll.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -16),
-				footer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
-				footer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
-				footer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -16)
-			])
-			item.view=container
-		}else{item.view=scroll}
+		item.view=scroll
 		pages.addTabViewItem(item)
 		return content
 	}
-	private func card(_ title:String, in parent:NSStackView)->NSStackView{
+	private func card(_ title:String, symbol:String, in parent:NSStackView)->NSStackView{
 		let card=CardView()
 		card.wantsLayer=true
+		card.usesSoftAppearance=true
 		let content=WindowUI.stack(spacing: 10)
 		WindowUI.pin(content, to: card, inset: 16)
-		WindowUI.fill(WindowUI.label(title, size: 13, weight: .semibold), in: content)
+		let heading=WindowUI.stack(.horizontal, spacing: 8)
+		let icon=WindowUI.symbol(symbol, description: title)
+		icon.contentTintColor = .systemBlue
+		NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 18),icon.heightAnchor.constraint(equalToConstant: 18)])
+		heading.addArrangedSubview(icon)
+		heading.addArrangedSubview(WindowUI.label(title, size: 14, weight: .semibold))
+		heading.addArrangedSubview(WindowUI.spacer())
+		WindowUI.fill(heading, in: content)
 		WindowUI.fill(card, in: parent)
 		return content
+	}
+	private func styleButton(_ button:NSButton, primary:Bool = false){
+		button.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){button.borderShape = .roundedRectangle}
+		if primary{button.bezelColor = .systemBlue}
 	}
 	func show(_ section:Section){
 		_ = view
@@ -896,6 +922,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		rememberedCountLabel.stringValue=String.localizedStringWithFormat(NSLocalizedString("RememberedDevicesCount", value: "%d remembered device names", comment: ""), rememberedDeviceCount)
 		forgetButton.isEnabled=rememberedDeviceCount>0
 		receivedFilesFolderLabel.stringValue=receivedFilesFolderName
+		receivedFilesFolderLabel.toolTip=receivedFilesFolderName
 		useDownloadsButton.isHidden = !receivedFilesFolderIsCustom
 	}
 
