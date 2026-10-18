@@ -669,7 +669,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	private let currentNameLabel=WindowUI.label("", size: 13, weight: .semibold)
 	private let editNameButton=NSButton(title: NSLocalizedString("EditDeviceName", value: "Edit name…", comment: ""), target: nil, action: nil)
 	private let nameEditor=WindowUI.stack(spacing: 8)
-	private let nameActions=WindowUI.stack(.horizontal)
+	private let nameActions=WindowUI.stack(spacing: 8)
 	private var savedCustomName:String?
 	private var systemDeviceName=LocalDeviceIdentity.shared.systemDeviceName
 	private var usesCustomName=false
@@ -773,11 +773,15 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		cancelNameButton.action=#selector(cancelNameChanges(_:))
 		saveNameButton.target=self
 		saveNameButton.action=#selector(saveName(_:))
-		for button in [cancelNameButton,saveNameButton]{
-			styleButton(button, primary: button === saveNameButton)
-			nameActions.addArrangedSubview(button)
-		}
-		nameEditor.addArrangedSubview(nameActions)
+		styleButton(cancelNameButton)
+		styleButton(saveNameButton, primary: true)
+		// The save action spans the name field's width directly beneath it,
+		// with Cancel as a smaller secondary action on its own line below.
+		WindowUI.fill(saveNameButton, in: nameActions)
+		let cancelRow=WindowUI.stack(.horizontal)
+		cancelRow.addArrangedSubview(cancelNameButton)
+		nameActions.addArrangedSubview(cancelRow)
+		WindowUI.fill(nameActions, in: nameEditor)
 		WindowUI.fill(nameEditor, in: device)
 		resetNameDraft()
 		let startup=card(NSLocalizedString("StartupSettings", value: "Startup", comment: ""), symbol: "power", in: general)
