@@ -16,6 +16,7 @@
     "SelectedItemOpenFailed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This item could not be opened with its default app." } } } },
     "GeneralSettings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "General" } } } },
     "AboutSettings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "About" } } } },
+    "AboutQuickShareMac" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "About QuickShareMac" } } } },
     "SettingsSections" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings sections" } } } },
     "DeviceNameExplanation" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Shown to nearby devices. Your Mac’s system name is unchanged." } } } },
     "AboutDescription" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Share files between your Mac and Android devices over your local network." } } } },

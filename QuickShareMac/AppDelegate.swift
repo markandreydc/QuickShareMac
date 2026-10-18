@@ -16,8 +16,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private let statusMenu=StatusBarMenu()
 	private var mainWindow:NSWindow?
 	private var settingsWindow:NSWindow?
+	private var aboutWindow:NSWindow?
 	private let windowController=MainWindowViewController()
 	private let settingsController=SettingsViewController()
+	private let aboutController=AboutViewController()
 	private let availability=ReceivingAvailability()
 	private let updates=UpdateChecker()
 	private var checkUpdatesMenuItem:NSMenuItem?
@@ -47,6 +49,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		// AppKit uses the padded AppIcon for the Dock. The full-bleed brand
 		// image is only for in-window UI, not an applicationIconImage override.
 		let appMenu=NSMenu(title: "QuickShareMac")
+		let aboutItem=appMenu.addItem(withTitle: NSLocalizedString("AboutQuickShareMac", value: "About QuickShareMac", comment: ""), action: #selector(showAbout(_:)), keyEquivalent: "")
+		aboutItem.target=self
+		appMenu.addItem(.separator())
 		let settingsItem=appMenu.addItem(withTitle: NSLocalizedString("Settings", value: "Settings…", comment: ""), action: #selector(showSettings(_:)), keyEquivalent: ",")
 		settingsItem.target=self
 		checkUpdatesMenuItem=appMenu.addItem(withTitle: NSLocalizedString("CheckForUpdates", value: "Check for Updates…", comment: ""), action: #selector(checkForUpdates(_:)), keyEquivalent: "")
@@ -329,6 +334,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		return true
 	}
 
+	@objc private func showAbout(_ sender:Any?){
+		if aboutWindow==nil{
+			let window=NSWindow(contentRect: NSRect(origin: .zero, size: AboutViewController.defaultSize), styleMask: AboutViewController.windowStyle, backing: .buffered, defer: false)
+			window.title=NSLocalizedString("AboutQuickShareMac", value: "About QuickShareMac", comment: "")
+			window.titleVisibility = .hidden
+			window.titlebarAppearsTransparent=true
+			window.contentViewController=aboutController
+			window.isReleasedWhenClosed=false
+			window.center()
+			aboutWindow=window
+		}
+		aboutController.update(version: updates.currentVersion)
+		aboutWindow?.makeKeyAndOrderFront(sender)
+		NSApplication.shared.activate(ignoringOtherApps: true)
+	}
+
 	@objc private func showSettings(_ sender:Any?){
 		if settingsWindow==nil{
 			let window=NSWindow(contentRect: NSRect(origin: .zero, size: SettingsViewController.defaultSize), styleMask: SettingsViewController.windowStyle, backing: .buffered, defer: false)
@@ -546,7 +567,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			return (activeIncomingTransfers[$0.id]?.createdAt ?? .distantPast) < (activeIncomingTransfers[$1.id]?.createdAt ?? .distantPast)
 		}
 		windowController.update(receiving: isReceiving,
-								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]}, deviceName: LocalDeviceIdentity.shared.deviceName, duration: availability.duration, expiresAt: availability.expiresAt)
+								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]}, deviceName: LocalDeviceIdentity.shared.deviceName, duration: availability.duration, expiresAt: availability.expiresAt, version: updates.currentVersion)
 		if settingsWindow != nil{
 			settingsController.update(startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey), launchAtLogin: launchAtLogin, requiresLoginApproval: requiresLoginApproval, rememberedDeviceCount: rememberedDevices.count, customDeviceName: LocalDeviceIdentity.shared.customName, receivedFilesFolderName: ReceivedFilesFolder.displayName, receivedFilesFolderIsCustom: ReceivedFilesFolder.isCustom, compressFolders: SendPreferences.compressFolders())
 			settingsController.updateUpdates(frequency: updates.frequency, checking: updates.isChecking, currentVersion: updates.currentVersion, availableRelease: updates.availableRelease, status: updates.statusText)

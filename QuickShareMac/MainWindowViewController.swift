@@ -321,6 +321,7 @@ final class MainWindowViewController:NSViewController{
 	var onClearRecentTransfers:(()->Void)?
 	private let receivingSwitch=NSSwitch()
 	private let deviceNameLabel=WindowUI.label("", size: 11, secondary: true)
+	private let versionLabel=WindowUI.label("", size: 11, secondary: true)
 	private let durationPopup=NSPopUpButton(frame: .zero, pullsDown: false)
 	private let expiryLabel=WindowUI.label("", size: 11, secondary: true)
 	private let statusLabel=WindowUI.label("", size: 15, weight: .semibold)
@@ -421,12 +422,20 @@ final class MainWindowViewController:NSViewController{
 		WindowUI.fill(sendController.view, in: tabHost)
 		sendController.view.isHidden=true
 
+		let footer=WindowUI.stack(spacing: 4)
+		footer.setContentHuggingPriority(.required, for: .vertical)
+		footer.setContentCompressionResistancePriority(.required, for: .vertical)
+		versionLabel.identifier=NSUserInterfaceItemIdentifier("MainAppVersion")
+		versionLabel.alignment = .center
+		versionLabel.isHidden=true
+		WindowUI.fill(versionLabel, in: footer)
 		let developerCredit=WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true)
 		developerCredit.identifier=NSUserInterfaceItemIdentifier("MainDeveloperCreditFooter")
 		developerCredit.alignment = .center
 		developerCredit.setContentHuggingPriority(.required, for: .vertical)
 		developerCredit.setContentCompressionResistancePriority(.required, for: .vertical)
-		WindowUI.fill(developerCredit, in: content)
+		WindowUI.fill(developerCredit, in: footer)
+		WindowUI.fill(footer, in: content)
 
 		let receiveCard=CardView()
 		receiveCard.wantsLayer=true
@@ -575,9 +584,11 @@ final class MainWindowViewController:NSViewController{
 	}
 	@objc private func tabChanged(_ sender:NSSegmentedControl){updateTab()}
 
-	func update(receiving:Bool, transfers:[IncomingTransferDisplay], deviceName:String = LocalDeviceIdentity.shared.deviceName, duration:ReceivingDuration = .indefinitely, expiresAt:Date?=nil){
+	func update(receiving:Bool, transfers:[IncomingTransferDisplay], deviceName:String = LocalDeviceIdentity.shared.deviceName, duration:ReceivingDuration = .indefinitely, expiresAt:Date?=nil, version:String = ""){
 		_ = view
 		self.receiving=receiving
+		versionLabel.stringValue=String(format: NSLocalizedString("InstalledVersion", value: "Version %@", comment: ""), version)
+		versionLabel.isHidden=version.isEmpty
 		deviceNameLabel.stringValue=deviceName
 		deviceNameLabel.toolTip=deviceName
 		durationPopup.selectItem(withTag: duration.rawValue)
@@ -647,6 +658,49 @@ final class MainWindowViewController:NSViewController{
 	@objc private func openSettings(_ sender:NSButton){onOpenSettings?()}
 	@objc private func clearRecent(_ sender:NSButton){onClearRecentTransfers?()}
 	@objc private func openReceivedFiles(_ sender:NSButton){onOpenReceivedFiles?()}
+}
+
+final class AboutViewController:NSViewController{
+	static let defaultSize=NSSize(width: 440, height: 300)
+	static let windowStyle:NSWindow.StyleMask = [.titled,.closable]
+	private let versionLabel=WindowUI.label("", size: 12, secondary: true)
+
+	override func loadView(){
+		let background=WindowBackgroundView(frame: NSRect(origin: .zero, size: Self.defaultSize))
+		background.wantsLayer=true
+		background.backgroundStyle = .soft
+		view=background
+		let content=WindowUI.stack(spacing: 12)
+		content.alignment = .centerX
+		WindowUI.pin(content, to: view, inset: 20)
+		let icon=NSImageView(image: NSImage(named: "QuickShareMacBrandIcon") ?? NSApp.applicationIconImage)
+		icon.imageScaling = .scaleProportionallyUpOrDown
+		NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 64),icon.heightAnchor.constraint(equalToConstant: 64)])
+		content.addArrangedSubview(icon)
+		content.addArrangedSubview(WindowUI.label("QuickShareMac", size: 22, weight: .semibold))
+		versionLabel.identifier=NSUserInterfaceItemIdentifier("AboutAppVersion")
+		versionLabel.isHidden=true
+		content.addArrangedSubview(versionLabel)
+		let description=WindowUI.label(NSLocalizedString("AboutDescription", value: "Share files between your Mac and Android devices over your local network.", comment: ""), size: 12, secondary: true)
+		description.alignment = .center
+		WindowUI.fill(description, in: content)
+		let credits=CardView()
+		credits.wantsLayer=true
+		credits.usesSoftAppearance=true
+		let upstream=WindowUI.label(NSLocalizedString("UpstreamCredit", value: "Based on NearDrop by grishka · github.com/grishka/NearDrop", comment: ""), size: 11, secondary: true)
+		upstream.alignment = .center
+		WindowUI.pin(upstream, to: credits, inset: 12)
+		WindowUI.fill(credits, in: content)
+		let developerCredit=WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true)
+		developerCredit.alignment = .center
+		WindowUI.fill(developerCredit, in: content)
+	}
+
+	func update(version:String){
+		_ = view
+		versionLabel.stringValue=String(format: NSLocalizedString("InstalledVersion", value: "Version %@", comment: ""), version)
+		versionLabel.isHidden=version.isEmpty
+	}
 }
 
 final class SettingsViewController:NSViewController, NSTextFieldDelegate{

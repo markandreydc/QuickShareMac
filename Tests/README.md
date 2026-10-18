@@ -64,6 +64,10 @@ appearances are checked, including long folder-name truncation, visible folder
 actions, scrollable General content, and header/footer stability during scrolling.
 The developer credit footer is checked on both the Receive and Send tabs for
 centering, bottom placement, resizing, and staying outside cards/scrolling content.
+The installed version is checked above that footer on both tabs at compact/default
+sizes in light/dark appearances. The dedicated About window is checked for its
+fixed size, app name, version, description, credits, and unclipped text in both
+appearances, including version refresh and missing-version handling.
 Auto-fit checks cover compact initial size, tab and selection changes, keeping the
 title bar anchored, bounded filename-list height, screen limits with scrolling
 fallback, incoming approval controls, shrinking after history clears, and stable

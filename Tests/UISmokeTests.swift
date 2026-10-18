@@ -578,7 +578,59 @@ struct UISmokeTests{
 		testMainWindowAppearance()
 		testCompactReceiveInstructions()
 		testSettingsAppearance()
+		testAppVersionAndAbout()
 		print("Passed \(checks) UI smoke checks")
+	}
+
+	static func testAppVersionAndAbout(){
+		let main=MainWindowViewController()
+		main.sendController.sender.service=FakeSendingService()
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: MainWindowViewController.windowStyle, backing: .buffered, defer: false)
+		window.contentViewController=main
+		let version=descendants(main.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="MainAppVersion"})!
+		let credit=descendants(main.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="MainDeveloperCreditFooter"})!
+		expect(version.isHidden, "The main footer must hide a missing bundle version")
+		for appearance in [NSAppearance.Name.aqua,.darkAqua]{
+			main.view.appearance=NSAppearance(named: appearance)
+			for send in [false,true]{
+				if send{main.showSend()}else{main.showReceive()}
+				for size in [MainWindowViewController.minimumSize,MainWindowViewController.defaultSize]{
+					window.setContentSize(size)
+					main.update(receiving: true, transfers: [], version: "1.0.0")
+					layout(window)
+					let versionFrame=version.convert(version.bounds, to: main.view)
+					let creditFrame=credit.convert(credit.bounds, to: main.view)
+					expect(!version.isHidden && version.stringValue=="Version 1.0.0", "Both main tabs must show the installed app version")
+					expect(version.alignment == .center && abs(versionFrame.midX-main.view.bounds.midX)<1 && versionFrame.minY>creditFrame.maxY, "The version must be centered above the developer credit")
+					expect(main.view.bounds.contains(versionFrame) && abs(creditFrame.minY-20)<1, "The version must fit without moving the bottom credit inset")
+				}
+			}
+			snapshot(window, appearance == .aqua ? "main-version" : "main-version-dark")
+		}
+		main.update(receiving: true, transfers: [])
+		expect(version.isHidden, "Refreshing without version metadata must hide the version rather than show an empty version number")
+		let about=AboutViewController()
+		let aboutWindow=NSWindow(contentRect: NSRect(origin: .zero, size: AboutViewController.defaultSize), styleMask: AboutViewController.windowStyle, backing: .buffered, defer: false)
+		aboutWindow.contentViewController=about
+		expect(!aboutWindow.styleMask.contains(.resizable) && aboutWindow.styleMask.contains(.closable), "About must use a small, fixed-size, closable window")
+		about.update(version: "1.0.0")
+		for appearance in [NSAppearance.Name.aqua,.darkAqua]{
+			about.view.appearance=NSAppearance(named: appearance)
+			layout(aboutWindow)
+			let labels=visible(about.view).compactMap {$0 as? NSTextField}
+			for text in ["QuickShareMac","Version 1.0.0","Share files between your Mac and Android devices over your local network.","Based on NearDrop by grishka · github.com/grishka/NearDrop","Developed by Mark Andrey · github.com/markandreydc"]{
+				let label=labels.first(where: {$0.stringValue==text})
+				expect(label != nil, "The standalone About window must include \(text)")
+				if let label=label{
+					expect(about.view.bounds.contains(label.convert(label.bounds, to: about.view)) && label.bounds.height>=label.fittingSize.height-1, "About text must fit inside the compact window without clipping")
+				}
+			}
+			snapshot(aboutWindow, appearance == .aqua ? "about" : "about-dark")
+		}
+		about.update(version: "1.1.3")
+		expect(visible(about.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Version 1.1.3"}), "Reusing About must refresh the installed version")
+		about.update(version: "")
+		expect(!visible(about.view).contains(where: {$0.identifier?.rawValue=="AboutAppVersion"}), "About must hide missing version metadata")
 	}
 
 	static func testMainWindowAppearance(){
