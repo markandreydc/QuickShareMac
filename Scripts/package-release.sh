@@ -44,11 +44,11 @@ PY
 # the individual signatures produced by Xcode; never use --deep when signing.
 codesign --force --sign - --timestamp=none --preserve-metadata=identifier,entitlements "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
+# The handoff-only Share extension no longer links or embeds NearbyShare.
 for binary in \
   "$APP/Contents/MacOS/QuickShareMac" \
   "$APP/Contents/Frameworks/libNearbyShare.dylib" \
-  "$APP/Contents/PlugIns/ShareExtension.appex/Contents/MacOS/ShareExtension" \
-  "$APP/Contents/PlugIns/ShareExtension.appex/Contents/Frameworks/libNearbyShare.dylib"; do
+  "$APP/Contents/PlugIns/ShareExtension.appex/Contents/MacOS/ShareExtension"; do
   lipo "$binary" -verify_arch arm64
   lipo "$binary" -verify_arch x86_64
 done
