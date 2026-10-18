@@ -44,10 +44,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
     func applicationDidFinishLaunching(_ aNotification: Notification) {
 		UserDefaults.standard.register(defaults: [startReceivingKey:true])
 		rememberedDevices=Set(UserDefaults.standard.stringArray(forKey: rememberedDevicesKey) ?? [])
-		if let appIcon=NSImage(named: "QuickShareMacBrandIcon"){
-			appIcon.isTemplate=false
-			NSApplication.shared.applicationIconImage=appIcon
-		}
+		// AppKit uses the padded AppIcon for the Dock. The full-bleed brand
+		// image is only for in-window UI, not an applicationIconImage override.
 		let appMenu=NSMenu(title: "QuickShareMac")
 		let settingsItem=appMenu.addItem(withTitle: NSLocalizedString("Settings", value: "Settings…", comment: ""), action: #selector(showSettings(_:)), keyEquivalent: ",")
 		settingsItem.target=self

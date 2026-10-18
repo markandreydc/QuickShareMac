@@ -381,7 +381,7 @@ final class SendViewController:NSViewController{
 	private func updateSelectionList(){
 		// Keep original names in a list capped at five rows. Extra items scroll
 		// independently instead of pushing the recipient controls down the tab.
-		let files=(sender.hasItems || sender.isPreparing) && (selectedFiles.count>1 || !sender.parentFolders.isEmpty) ? selectedFiles : []
+		let files=(sender.hasItems || sender.isPreparing) ? (selectedFiles.isEmpty ? sender.preparedItems : selectedFiles) : []
 		guard files != listedFiles else {return}
 		listedFiles=files
 		for row in selectionList.arrangedSubviews{selectionList.removeArrangedSubview(row); row.removeFromSuperview()}
@@ -391,17 +391,17 @@ final class SendViewController:NSViewController{
 			let row=WindowUI.stack(.horizontal, spacing: 8)
 			row.heightAnchor.constraint(equalToConstant: 20).isActive=true
 			let icon=NSImageView()
-			icon.image=NSWorkspace.shared.icon(forFile: file.path)
+			icon.image=file.isFileURL ? NSWorkspace.shared.icon(forFile: file.path) : NSImage(named: NSImage.networkName)
 			icon.imageScaling = .scaleProportionallyUpOrDown
 			NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 20), icon.heightAnchor.constraint(equalToConstant: 20)])
 			row.addArrangedSubview(icon)
-			let name=WindowUI.label(file.lastPathComponent)
+			let name=WindowUI.label(file.isFileURL ? file.lastPathComponent : file.absoluteString)
 			name.identifier=NSUserInterfaceItemIdentifier("SendSelectionItem")
 			name.maximumNumberOfLines=1
 			name.lineBreakMode = .byTruncatingMiddle
 			name.isSelectable=true
-			name.toolTip=file.path
-			name.setAccessibilityHelp(file.path)
+			name.toolTip=file.isFileURL ? file.path : file.absoluteString
+			name.setAccessibilityHelp(name.toolTip)
 			row.addArrangedSubview(name)
 			WindowUI.fill(row, in: selectionList)
 		}
@@ -430,7 +430,9 @@ final class SendViewController:NSViewController{
 				: NSLocalizedString("CompressingFolderHelp", value: "Folders are compressed into ZIP files before sending. Large folders can take a moment.", comment: "")
 		}else if sender.state == .choosingDevice && !displayItems.isEmpty{
 			if displayItems.count==1{
-				selectionTitle.stringValue=displayItems[0].isFileURL ? displayItems[0].lastPathComponent : displayItems[0].absoluteString
+				selectionTitle.stringValue=displayItems[0].isFileURL
+					? NSLocalizedString("OneFileReadyToSend", value: "1 file ready to send", comment: "")
+					: NSLocalizedString("LinkReadyToSend", value: "Link ready to send", comment: "")
 			}else{
 				selectionTitle.stringValue=String.localizedStringWithFormat(NSLocalizedString("FilesReadyToSend", value: "%d files ready to send", comment: ""), displayItems.count)
 			}

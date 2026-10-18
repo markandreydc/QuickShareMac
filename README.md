@@ -47,7 +47,7 @@ Both devices must be on the **same Wi-Fi/local network**. Keep your Android devi
 4. Select the device in QuickShareMac, or choose **Connect with QR code…** and scan the code with your phone’s camera.
 5. Check that the PIN matches on both devices, then accept on Android.
 
-Multiple selections show each selected filename and icon in a compact list. The list displays up to five rows at once; scroll inside it to see the remaining items without enlarging the window.
+Selections always use a compact list, even for one file, folder, or shared link. Each row shows its name and icon. The list displays up to five rows at once; scroll inside it to see the remaining items without enlarging the window.
 
 Folder compression is **off by default**. You can enable **Settings → General → Sending → Compress folders into ZIP files before sending**. When enabled, each folder becomes its own ZIP—named after the folder, matching Finder’s **Compress** result—and files chosen alongside folders are sent as they are. The Send tab shows **Compressing “FolderName”…** while preparing ZIPs.
 

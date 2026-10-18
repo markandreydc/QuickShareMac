@@ -8,6 +8,7 @@ Tests/run-ui-smoke-tests.sh
 Tests/run-sending-integration-tests.sh
 Tests/run-shared-identity-tests.sh
 Tests/run-update-checker-tests.sh
+swift Scripts/generate-app-icon.swift --check
 ```
 
 The UI suite uses a fake sending service: it does not discover or contact devices.
@@ -17,11 +18,11 @@ events LaunchServices can send for one handoff, approval,
 progress, cancellation, retry isolation, background completion, history, and native
 menu bar behavior (menu attachment, appearance defaults, actions, live transfer rows,
 pending-request review, icon progress, cancellation, and live state).
-Multi-item selections list every original filename with an icon and full-path
+All selections, including a single file, folder, or shared link, list every item with an icon and full-path/URL
 tooltip in a dedicated scroll area capped at five rows; checks cover reaching the
 last filename, keeping the card/tab/window height fixed as more items are added,
 shrinking and resetting short replacement lists, file/folder compression, replacement,
-rejected selections, and clearing the list for single files, links, or shutdown.
+rejected selections, one-row sizing for single items, replacing files with links, and clearing on shutdown.
 The folder-compression setting is checked for default-off behavior, persistence,
 Settings callbacks, live overlay changes, and applying only to new selections.
 Uncompressed folders are checked for nested paths, hidden and zero-byte files,
@@ -97,6 +98,11 @@ responses, offline/server errors, rate-limit backoff, and shutdown cancellation.
 
 Set `UI_SNAPSHOT_DIR` to an existing directory to save optional UI snapshots.
 Real Android-device discovery and QR handshakes still require device testing.
+
+The icon check verifies all ten AppIcon resolutions have the expected dimensions,
+centered artwork, and transparent margins matching the macOS Dock footprint.
+Regenerate them from the unchanged full-bleed brand image with
+`swift Scripts/generate-app-icon.swift`.
 
 ## Signing and local-network permission
 
