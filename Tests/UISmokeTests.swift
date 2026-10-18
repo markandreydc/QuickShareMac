@@ -986,11 +986,19 @@ struct UISmokeTests{
 		let files=(0..<30).map {directory.appendingPathComponent("Selected item \($0).\(["txt","png","docx"][$0 % 3])")}
 		for file in files{try! Data().write(to: file)}
 		func names()->[NSTextField]{visible(controller.view).compactMap {$0 as? NSTextField}.filter {$0.identifier?.rawValue=="SendSelectionItem"}}
+		expect(controller.selectItems(Array(files.prefix(5))), "A five-item selection must be accepted")
+		layout(window)
+		let outer=controller.view.subviews.compactMap {$0 as? NSScrollView}.first!
+		let fiveItemHeight=outer.documentView!.bounds.height
+		let originalFrame=window.frame
 		expect(controller.selectItems(files), "A large mixed-type selection must be accepted")
 		layout(window)
 		expect(names().map(\.stringValue)==files.map(\.lastPathComponent), "The item list must show all items without a preview limit")
-		let scroll=controller.view.subviews.compactMap {$0 as? NSScrollView}.first!
-		expect(scroll.documentView!.bounds.height>scroll.contentView.bounds.height, "Long item lists must scroll instead of enlarging the window")
+		let scroll=visible(controller.view).compactMap {$0 as? NSScrollView}.first {$0.identifier?.rawValue=="SendSelectionScroll"}!
+		expect(scroll !== outer && scroll.bounds.height==124 && scroll.hasVerticalScroller, "The filename list must have its own scroll area capped at five rows")
+		expect(scroll.documentView!.bounds.height>scroll.contentView.bounds.height, "Long item lists must scroll inside their own bounded area")
+		expect(outer.documentView!.bounds.height==fiveItemHeight && window.frame==originalFrame, "Adding more than five filenames must not enlarge the card, tab, or window")
+		expect(scroll.documentView!.bounds.width==scroll.contentView.bounds.width, "The filename list must fit horizontally without scrolling sideways")
 		let last=names().last!
 		last.scrollToVisible(last.bounds)
 		layout(window)
@@ -999,7 +1007,10 @@ struct UISmokeTests{
 		expect(names().count==files.count, "A rejected selection must preserve the existing item list")
 		expect(controller.selectItems([files[1],files[0]]), "A replacement multi-selection must be accepted")
 		expect(names().map(\.stringValue)==[files[1].lastPathComponent,files[0].lastPathComponent], "Replacing items must remove old rows and reflect the new order")
+		layout(window)
+		expect(scroll.bounds.height==46 && scroll.documentVisibleRect.minY==0, "Short replacement lists must shrink to their rows and reset scrolling")
 		expect(controller.selectItems([files[0]]) && names().isEmpty, "A single file must keep the compact filename display without a duplicate list")
+		expect(scroll.isHidden, "A single-file selection must hide the list's entire scroll area")
 		_ = controller.selectItems(files)
 		expect(controller.selectLink(URL(string: "https://example.com")!) && names().isEmpty, "A shared link must clear the old file list")
 		_ = controller.selectItems(files)

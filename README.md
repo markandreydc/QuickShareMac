@@ -47,6 +47,8 @@ Both devices must be on the **same Wi-Fi/local network**. Keep your Android devi
 4. Select the device in QuickShareMac, or choose **Connect with QR code…** and scan the code with your phone’s camera.
 5. Check that the PIN matches on both devices, then accept on Android.
 
+Multiple selections show each selected filename and icon in a compact list. The list displays up to five rows at once; scroll inside it to see the remaining items without enlarging the window.
+
 Folder compression is on by default. Each folder becomes its own ZIP—named after the folder, matching Finder’s **Compress** result—and files chosen alongside folders are sent as they are. The Send tab shows **Compressing “FolderName”…** while preparing ZIPs.
 
 To send folders without ZIPs, turn off **Settings → General → Sending → Compress folders into ZIP files before sending**. The app shows **Gathering files from “FolderName”…**, then sends the original files with relative folder-path metadata. Folder layout depends on the receiver: receivers that ignore the paths save loose files instead. Android folder reconstruction still requires device verification. Hidden files are included, symbolic links are skipped, and empty subfolders cannot be represented; entirely empty folders show an explanation to use ZIP mode. Large folders can take a moment before discovery begins. The setting is saved, applies to the next selection, and covers the picker, drops, and **Share → QuickShareMac**; the Share extension remains a handoff adapter.

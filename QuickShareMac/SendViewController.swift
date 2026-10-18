@@ -215,6 +215,8 @@ final class SendViewController:NSViewController{
 	private let selectionTitle=WindowUI.label("", size: 16, weight: .semibold)
 	private let selectionHelp=WindowUI.label("", size: 12, secondary: true)
 	private let selectionList=WindowUI.stack(spacing: 6)
+	private let selectionScroll=NSScrollView()
+	private var selectionListHeight:NSLayoutConstraint!
 	private var listedFiles:[URL]=[]
 	private var selectedFiles:[URL]=[]
 	private let chooseButton=NSButton(title: NSLocalizedString("SendFiles", value: "Send files…", comment: ""), target: nil, action: nil)
@@ -246,8 +248,21 @@ final class SendViewController:NSViewController{
 		selectionTitle.lineBreakMode = .byTruncatingMiddle
 		WindowUI.fill(selectionTitle, in: selectionContent)
 		selectionList.identifier=NSUserInterfaceItemIdentifier("SendSelectionList")
-		selectionList.isHidden=true
-		WindowUI.fill(selectionList, in: selectionContent)
+		selectionScroll.identifier=NSUserInterfaceItemIdentifier("SendSelectionScroll")
+		selectionScroll.setAccessibilityLabel(NSLocalizedString("SelectedFilesAndFolders", value: "Selected files and folders", comment: ""))
+		selectionScroll.hasVerticalScroller=true
+		selectionScroll.autohidesScrollers=true
+		selectionScroll.borderType = .noBorder
+		selectionScroll.drawsBackground=false
+		let listDocument=FlippedDocumentView()
+		listDocument.translatesAutoresizingMaskIntoConstraints=false
+		selectionScroll.documentView=listDocument
+		WindowUI.pin(selectionList, to: listDocument, inset: 0)
+		listDocument.widthAnchor.constraint(equalTo: selectionScroll.contentView.widthAnchor).isActive=true
+		selectionListHeight=selectionScroll.heightAnchor.constraint(equalToConstant: 0)
+		selectionListHeight.isActive=true
+		selectionScroll.isHidden=true
+		WindowUI.fill(selectionScroll, in: selectionContent)
 		WindowUI.fill(selectionHelp, in: selectionContent)
 		chooseButton.bezelStyle = .rounded
 		chooseButton.target=self
@@ -361,15 +376,17 @@ final class SendViewController:NSViewController{
 		updateControls()
 	}
 	private func updateSelectionList(){
-		// Keep the original names, including folders while their ZIPs are
-		// prepared. The tab's existing scroll view makes every row reachable.
+		// Keep original names in a list capped at five rows. Extra items scroll
+		// independently instead of pushing the recipient controls down the tab.
 		let files=(sender.hasItems || sender.isPreparing) && (selectedFiles.count>1 || !sender.parentFolders.isEmpty) ? selectedFiles : []
 		guard files != listedFiles else {return}
 		listedFiles=files
 		for row in selectionList.arrangedSubviews{selectionList.removeArrangedSubview(row); row.removeFromSuperview()}
-		selectionList.isHidden=files.isEmpty
+		selectionScroll.isHidden=files.isEmpty
+		selectionListHeight.constant=CGFloat(max(0,min(files.count,5)*26-6))
 		for file in files{
 			let row=WindowUI.stack(.horizontal, spacing: 8)
+			row.heightAnchor.constraint(equalToConstant: 20).isActive=true
 			let icon=NSImageView()
 			icon.image=NSWorkspace.shared.icon(forFile: file.path)
 			icon.imageScaling = .scaleProportionallyUpOrDown
@@ -385,6 +402,8 @@ final class SendViewController:NSViewController{
 			row.addArrangedSubview(name)
 			WindowUI.fill(row, in: selectionList)
 		}
+		selectionScroll.contentView.scroll(to: .zero)
+		selectionScroll.reflectScrolledClipView(selectionScroll.contentView)
 	}
 	private func updateControls(){
 		updateSelectionList()

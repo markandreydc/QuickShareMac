@@ -18,7 +18,9 @@ progress, cancellation, retry isolation, background completion, history, and nat
 menu bar behavior (menu attachment, appearance defaults, actions, live transfer rows,
 pending-request review, icon progress, cancellation, and live state).
 Multi-item selections list every original filename with an icon and full-path
-tooltip; checks cover scrolling long lists, file/folder compression, replacement,
+tooltip in a dedicated scroll area capped at five rows; checks cover reaching the
+last filename, keeping the card/tab/window height fixed as more items are added,
+shrinking and resetting short replacement lists, file/folder compression, replacement,
 rejected selections, and clearing the list for single files, links, or shutdown.
 The folder-compression setting is checked for default-on behavior, persistence,
 Settings callbacks, live overlay changes, and applying only to new selections.
