@@ -560,6 +560,20 @@ struct UISmokeTests{
 			expect(choose.bezelColor == .systemBlue, "The primary send action must stay blue in both appearances")
 			if #available(macOS 26.0, *){expect(choose.borderShape == .roundedRectangle, "The primary send action must use the reduced-rounding native shape")}
 			expect((main.sendController.view as? WindowBackgroundView)?.backgroundStyle == .transparent, "The embedded Send surface must not cover the soft window background")
+			let title=visible(main.view).compactMap {$0 as? NSTextField}.first {$0.identifier?.rawValue=="SendSelectionTitle"}!
+			let icon=visible(main.view).first {$0.identifier?.rawValue=="SendDropIcon"}!
+			for width in [MainWindowViewController.minimumSize.width,MainWindowViewController.defaultSize.width,760]{
+				window.setContentSize(NSSize(width: width, height: 500))
+				main.fitWindowToContent()
+				layout(window)
+				let center=main.view.bounds.midX
+				let buttonFrame=choose.convert(choose.bounds, to: main.view)
+				expect(abs(buttonFrame.midX-center)<1 && abs(icon.convert(icon.bounds, to: main.view).midX-center)<1, "The empty drop icon and Send files button must stay centered as the window resizes")
+				expect(title.alignment == .center && abs(title.convert(title.bounds, to: main.view).midX-center)<1, "The empty drop heading must be centered across the card")
+				expect(main.view.hitTest(NSPoint(x: buttonFrame.midX, y: buttonFrame.midY)) === choose, "The dashed drop outline must not intercept clicks on Send files")
+			}
+			window.setContentSize(MainWindowViewController.defaultSize)
+			main.fitWindowToContent()
 			snapshot(window, "window-send-\(name)")
 		}
 		expect(colors[0] != colors[1], "Card colors must resolve separately for light and dark appearances")
@@ -1180,6 +1194,8 @@ struct UISmokeTests{
 		func names()->[NSTextField]{itemNames(in: controller.view)}
 		expect(controller.selectItems(Array(files.prefix(5))), "A five-item selection must be accepted")
 		layout(window)
+		let selectionTitle=visible(controller.view).compactMap {$0 as? NSTextField}.first {$0.identifier?.rawValue=="SendSelectionTitle"}!
+		expect(selectionTitle.alignment == .left && !visible(controller.view).contains {$0.identifier?.rawValue=="SendDropIcon"}, "Selecting items must restore the left-aligned list heading and hide the empty drop illustration")
 		let outer=controller.view.subviews.compactMap {$0 as? NSScrollView}.first!
 		let fiveItemHeight=outer.documentView!.bounds.height
 		let originalFrame=window.frame

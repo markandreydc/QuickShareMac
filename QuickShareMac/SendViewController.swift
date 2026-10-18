@@ -7,6 +7,7 @@ enum FileDropFeedback:Equatable{
 
 private final class DropOutlineView:NSView{
 	var color:NSColor = .controlAccentColor{didSet{needsDisplay=true}}
+	override func hitTest(_ point:NSPoint)->NSView?{nil}
 	override func draw(_ dirtyRect:NSRect){
 		color.withAlphaComponent(0.7).setStroke()
 		let outline=NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 6, yRadius: 6)
@@ -261,6 +262,11 @@ final class SendViewController:NSViewController, NSTableViewDataSource, NSTableV
 	private(set) var recentTransfers:[OutgoingTransferResult]=[]
 	private let content=WindowUI.stack(spacing: 16)
 	private let senderCard=CardView()
+	private let selectionContent=WindowUI.stack(spacing: 10)
+	private let dropIcon=WindowUI.symbol("doc.on.doc", description: NSLocalizedString("DropFilesToSend", value: "Drop files here to send", comment: ""))
+	private let dropOutline=DropOutlineView()
+	private let selectionHeadingSpacer=WindowUI.spacer()
+	private var emptyTitleWidth:NSLayoutConstraint!
 	private let errorLabel=WindowUI.label("", size: 12, secondary: true)
 	private let selectionTitle=WindowUI.label("", size: 16, weight: .semibold)
 	private let removeAllButton=NSButton(title: NSLocalizedString("RemoveAllSelectedItems", value: "Remove All", comment: ""), target: nil, action: nil)
@@ -292,16 +298,24 @@ final class SendViewController:NSViewController, NSTableViewDataSource, NSTableV
 		WindowUI.pin(content, to: document, inset: 0)
 		document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor).isActive=true
 		let selection=CardView()
+		selection.identifier=NSUserInterfaceItemIdentifier("SendSelectionCard")
 		selection.wantsLayer=true
 		selection.usesSoftAppearance=true
-		let selectionContent=WindowUI.stack(spacing: 10)
+		selectionContent.alignment = .centerX
 		WindowUI.pin(selectionContent, to: selection, inset: 16)
+		dropOutline.color = .systemBlue
+		WindowUI.pin(dropOutline, to: selection, inset: 8)
+		dropIcon.identifier=NSUserInterfaceItemIdentifier("SendDropIcon")
+		dropIcon.contentTintColor = .systemBlue
+		NSLayoutConstraint.activate([dropIcon.widthAnchor.constraint(equalToConstant: 44),dropIcon.heightAnchor.constraint(equalToConstant: 44)])
+		selectionContent.addArrangedSubview(dropIcon)
 		selectionTitle.identifier=NSUserInterfaceItemIdentifier("SendSelectionTitle")
 		selectionTitle.maximumNumberOfLines=2
 		selectionTitle.lineBreakMode = .byTruncatingMiddle
 		let selectionHeading=WindowUI.stack(.horizontal)
 		selectionHeading.addArrangedSubview(selectionTitle)
-		selectionHeading.addArrangedSubview(WindowUI.spacer())
+		selectionHeading.addArrangedSubview(selectionHeadingSpacer)
+		emptyTitleWidth=selectionTitle.widthAnchor.constraint(equalTo: selectionHeading.widthAnchor)
 		removeAllButton.identifier=NSUserInterfaceItemIdentifier("SendSelectionRemoveAll")
 		removeAllButton.bezelStyle = .regularSquare
 		if #available(macOS 26.0, *){removeAllButton.borderShape = .roundedRectangle}
@@ -359,10 +373,14 @@ final class SendViewController:NSViewController, NSTableViewDataSource, NSTableV
 		preparingSpinner.isIndeterminate=true
 		preparingSpinner.isHidden=true
 		let chooseRow=WindowUI.stack(.horizontal)
+		let leading=WindowUI.spacer()
+		let trailing=WindowUI.spacer()
+		chooseRow.addArrangedSubview(leading)
 		chooseRow.addArrangedSubview(preparingSpinner)
 		chooseRow.addArrangedSubview(chooseButton)
-		chooseRow.addArrangedSubview(WindowUI.spacer())
-		selectionContent.addArrangedSubview(chooseRow)
+		chooseRow.addArrangedSubview(trailing)
+		leading.widthAnchor.constraint(equalTo: trailing.widthAnchor).isActive=true
+		WindowUI.fill(chooseRow, in: selectionContent)
 		errorLabel.textColor = .systemRed
 		WindowUI.fill(errorLabel, in: selectionContent)
 		errorLabel.isHidden=true
@@ -579,9 +597,19 @@ final class SendViewController:NSViewController, NSTableViewDataSource, NSTableV
 		updateSelectionList()
 		let enabled = !sender.isTransferring
 		let preparing=sender.isPreparing
+		let empty=sender.originalItems.isEmpty
 		chooseButton.isEnabled=enabled && !preparing
-		removeAllButton.isHidden=sender.originalItems.isEmpty
-		removeAllButton.isEnabled=enabled && !sender.originalItems.isEmpty
+		removeAllButton.isHidden=empty
+		removeAllButton.isEnabled=enabled && !empty
+		selectionHeadingSpacer.isHidden=empty
+		emptyTitleWidth.isActive=empty
+		selectionTitle.alignment=empty ? .center : .left
+		selectionTitle.font=NSFont.systemFont(ofSize: empty ? 20 : 16, weight: .semibold)
+		selectionHelp.alignment=empty ? .center : .left
+		errorLabel.alignment=empty ? .center : .left
+		dropIcon.isHidden = !empty
+		dropOutline.isHidden = !empty
+		selectionContent.edgeInsets=NSEdgeInsets(top: empty ? 16 : 0, left: 0, bottom: empty ? 16 : 0, right: 0)
 		if preparing{
 			preparingSpinner.startAnimation(nil)
 		}else{
