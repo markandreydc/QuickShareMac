@@ -3,7 +3,6 @@
   "strings" : {
     "SettingsHeading" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } } } },
     "EditDeviceName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit name…" } } } },
-    "FinishEditingDeviceName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Done" } } } },
     "CancelIncomingTransferTip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop receiving this transfer" } } } },
     "ResetDeviceName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset to Mac’s name" } } } },
     "RemoveAllSelectedItems" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove All" } } } },

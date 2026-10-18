@@ -663,7 +663,6 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	private let resetNameButton=NSButton(title: "", target: nil, action: nil)
 	private let nameMessage=WindowUI.label("", size: 11, secondary: true)
 	private let saveNameButton=NSButton(title: NSLocalizedString("SaveDeviceNameChanges", value: "Save changes", comment: ""), target: nil, action: nil)
-	private let cancelNameButton=NSButton(title: NSLocalizedString("Cancel", value: "Cancel", comment: ""), target: nil, action: nil)
 	private let currentNameLabel=WindowUI.label("", size: 13, weight: .semibold)
 	private let editNameButton=NSButton(title: NSLocalizedString("EditDeviceName", value: "Edit name…", comment: ""), target: nil, action: nil)
 	private let nameEditor=WindowUI.stack(spacing: 8)
@@ -772,10 +771,6 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		nameField.font=NSFont.systemFont(ofSize: 13)
 		nameField.delegate=self
 		WindowUI.fill(nameField, in: nameEditor)
-		cancelNameButton.target=self
-		cancelNameButton.action=#selector(cancelNameChanges(_:))
-		styleButton(cancelNameButton)
-		nameEditor.addArrangedSubview(cancelNameButton)
 		WindowUI.fill(nameEditor, in: device)
 		resetNameDraft()
 		let startup=card(NSLocalizedString("StartupSettings", value: "Startup", comment: ""), symbol: "power", in: general)
@@ -1018,18 +1013,13 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		resetNameButton.isEnabled=savedCustomName != nil
 		nameField.isHidden = !editingName
 		let validated=try? LocalDeviceIdentity.validate(nameField.stringValue)
-		let dirty=hasNameDraftChanges
-		// Save stays disabled for blank, invalid, or redundant names. Typing the
-		// Mac's system name is redundant too; Reset is the way back to it.
-		saveNameButton.isEnabled=validated != nil && validated != savedCustomName && validated != systemDeviceName
-		cancelNameButton.isEnabled=dirty
 		nameEditor.isHidden = !editingName
-		// Once something changed, Save changes takes the Done button's place
-		// in the current-name row and Cancel appears beneath the field.
-		saveNameButton.isHidden = !editingName || !dirty
-		cancelNameButton.isHidden = !editingName || !dirty
-		editNameButton.title=editingName ? NSLocalizedString("FinishEditingDeviceName", value: "Done", comment: "") : NSLocalizedString("EditDeviceName", value: "Edit name…", comment: "")
-		editNameButton.isHidden = editingName && dirty
+		// Save changes replaces the old Done button: it stays visible while
+		// editing, is disabled for blank or invalid names, and saves only when
+		// there is a real change—otherwise it just closes the editor.
+		saveNameButton.isHidden = !editingName
+		saveNameButton.isEnabled=validated != nil
+		editNameButton.isHidden = editingName
 		nameMessage.textColor = .secondaryLabelColor
 		if let error=nameSaveError{
 			nameMessage.stringValue=error
@@ -1048,16 +1038,12 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		}else{nameMessage.isHidden=true}
 	}
 	@objc private func toggleNameEditing(_ sender:NSButton){
-		if editingName{
-			view.window?.makeFirstResponder(nil)
-			resetNameDraft()
-		}else{
-			clearNameFeedback()
-			editingName=true
-			updateNameControls()
-			view.window?.makeFirstResponder(nameField)
-			nameField.currentEditor()?.selectAll(nil)
-		}
+		guard !editingName else {return}
+		clearNameFeedback()
+		editingName=true
+		updateNameControls()
+		view.window?.makeFirstResponder(nameField)
+		nameField.currentEditor()?.selectAll(nil)
 	}
 	func controlTextDidChange(_ notification:Notification){
 		guard notification.object as? NSTextField === nameField, !savingName else {return}
@@ -1069,12 +1055,6 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		showNameValidation=true
 		updateNameControls()
 	}
-	@objc private func cancelNameChanges(_ sender:Any?){
-		savingName=true
-		defer{savingName=false}
-		view.window?.makeFirstResponder(nil)
-		resetNameDraft()
-	}
 	@objc private func saveName(_ sender:Any?){
 		guard !savingName else {return}
 		savingName=true
@@ -1082,12 +1062,14 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		clearNameFeedback()
 		do{
 			let name=try LocalDeviceIdentity.validate(nameField.stringValue)
-			guard name != savedCustomName, name != systemDeviceName else {return}
-			try onDeviceNameChange?(name)
-			savedCustomName=name
+			let changed=name != savedCustomName && name != systemDeviceName
+			if changed{
+				try onDeviceNameChange?(name)
+				savedCustomName=name
+			}
 			view.window?.makeFirstResponder(nil)
 			resetNameDraft()
-			scheduleNameConfirmation()
+			if changed{scheduleNameConfirmation()}
 		}catch{nameSaveError=error.localizedDescription}
 		updateNameControls()
 	}
