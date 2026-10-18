@@ -20,6 +20,12 @@ pending-request review, icon progress, cancellation, and live state).
 Multi-item selections list every original filename with an icon and full-path
 tooltip; checks cover scrolling long lists, file/folder compression, replacement,
 rejected selections, and clearing the list for single files, links, or shutdown.
+The folder-compression setting is checked for default-on behavior, persistence,
+Settings callbacks, live overlay changes, and applying only to new selections.
+Uncompressed folders are checked for nested paths, hidden and zero-byte files,
+mixed selections, same-named roots and sanitized directory collisions, unreadable
+children, skipped symbolic links, empty-folder errors, retries that gather files
+again, and replacement/shutdown isolation from late enumeration callbacks.
 Scroll checks verify that approval controls remain reachable by scrolling
 without expanding the window, and that a new approval request scrolls back to the
 top. The upper-right pin is tested for normal/floating window levels, on/off state,
@@ -64,6 +70,10 @@ The integration suite exercises the real encrypted file-transfer protocol on
 never Downloads. It checks multi-chunk transfers, empty files, filename collisions,
 rejection, cancellation, and unexpected disconnection.
 It verifies that outgoing handshakes carry the configured local device name.
+Recorded decrypted introductions and file payload headers verify consistent
+relative folder paths, including zero-byte EOF payloads. Absolute/traversal paths
+are rejected and path components are sanitized. The loopback receiver saves loose
+files; actual Android folder reconstruction must be checked on a phone.
 
 The shared-identity suite creates disposable sandboxed, ad-hoc-signed host and
 extension probes. It uses an isolated preference domain to verify that the host

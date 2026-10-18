@@ -18,6 +18,7 @@ import BigInt
 class OutboundNearbyConnection:NearbyConnection{
 	private var currentState:State = .initial
 	private let urlsToSend:[URL]
+	private let parentFolders:[URL:String]
 	private let localDeviceName:String
 	private var ukeyClientFinishMsgData:Data?
 	private var queue:[OutgoingFileTransfer]=[]
@@ -35,8 +36,9 @@ class OutboundNearbyConnection:NearbyConnection{
 		case initial, sentUkeyClientInit, sentUkeyClientFinish, sentPairedKeyEncryption, sentPairedKeyResult, sentIntroduction, sendingFiles
 	}
 	
-	init(connection: NWConnection, id: String, urlsToSend:[URL], localDeviceName:String = LocalDeviceIdentity.shared.deviceName){
+	init(connection: NWConnection, id: String, urlsToSend:[URL], localDeviceName:String = LocalDeviceIdentity.shared.deviceName, parentFolders:[URL:String] = [:]){
 		self.urlsToSend=urlsToSend
+		self.parentFolders=parentFolders
 		self.localDeviceName=localDeviceName
 		super.init(connection: connection, id: id)
 		if urlsToSend.count==1 && !urlsToSend[0].isFileURL{
@@ -302,6 +304,8 @@ class OutboundNearbyConnection:NearbyConnection{
 				guard url.isFileURL else {continue}
 				var meta=Sharing_Nearby_FileMetadata()
 				meta.name=OutboundNearbyConnection.sanitizeFileName(name: url.lastPathComponent)
+				let parent=try Self.safeParentFolder(parentFolders[url] ?? "")
+				if !parent.isEmpty{meta.parentFolder=parent}
 				let attrs=try FileManager.default.attributesOfItem(atPath: url.path)
 				meta.size=(attrs[FileAttributeKey.size] as! NSNumber).int64Value
 				let typeID=try? url.resourceValues(forKeys: [.typeIdentifierKey]).typeIdentifier
@@ -330,7 +334,7 @@ class OutboundNearbyConnection:NearbyConnection{
 					meta.type = .unknown
 				}
 				meta.payloadID=Int64.random(in: Int64.min...Int64.max)
-				queue.append(OutgoingFileTransfer(url: url, payloadID: meta.payloadID, handle: try FileHandle(forReadingFrom: url), totalBytes: meta.size, currentOffset: 0))
+				queue.append(OutgoingFileTransfer(url: url, parentFolder: parent, payloadID: meta.payloadID, handle: try FileHandle(forReadingFrom: url), totalBytes: meta.size, currentOffset: 0))
 				introduction.v1.introduction.fileMetadata.append(meta)
 				let (total, overflow)=totalBytesToSend.addingReportingOverflow(meta.size)
 				guard meta.size>=0, !overflow else {throw NearbyError.inputOutput}
@@ -422,6 +426,10 @@ class OutboundNearbyConnection:NearbyConnection{
 		transfer.payloadHeader.type = .file
 		transfer.payloadHeader.totalSize=Int64(currentTransfer!.totalBytes)
 		transfer.payloadHeader.isSensitive=false
+		if !currentTransfer!.parentFolder.isEmpty{
+			transfer.payloadHeader.fileName=Self.sanitizeFileName(name: currentTransfer!.url.lastPathComponent)
+			transfer.payloadHeader.parentFolder=currentTransfer!.parentFolder
+		}
 		currentTransfer!.currentOffset+=Int64(fileBuffer.count)
 		
 		var wrapper=Location_Nearby_Connections_OfflineFrame()
@@ -456,6 +464,10 @@ class OutboundNearbyConnection:NearbyConnection{
 		eof.v1.payloadTransfer.payloadHeader.id=file.payloadID
 		eof.v1.payloadTransfer.payloadHeader.type = .file
 		eof.v1.payloadTransfer.payloadHeader.totalSize=file.totalBytes
+		if !file.parentFolder.isEmpty{
+			eof.v1.payloadTransfer.payloadHeader.fileName=Self.sanitizeFileName(name: file.url.lastPathComponent)
+			eof.v1.payloadTransfer.payloadHeader.parentFolder=file.parentFolder
+		}
 		eof.v1.payloadTransfer.payloadChunk.offset=file.currentOffset
 		eof.v1.payloadTransfer.payloadChunk.flags=1
 		try encryptAndSendOfflineFrame(eof) { [weak self] in
@@ -464,13 +476,18 @@ class OutboundNearbyConnection:NearbyConnection{
 		}
 	}
 	
+	/// Only relative, component-sanitized paths are allowed on the wire.
+	static func safeParentFolder(_ path:String) throws -> String{
+		try OutgoingFolderPath.relative(path)
+	}
 	private static func sanitizeFileName(name:String)->String{
-		return name.replacingOccurrences(of: "[\\/\\\\?%\\*:\\|\"<>=]", with: "_", options: .regularExpression)
+		OutgoingFolderPath.component(name)
 	}
 }
 
 fileprivate struct OutgoingFileTransfer{
 	let url:URL
+	let parentFolder:String
 	let payloadID:Int64
 	let handle:FileHandle?
 	let totalBytes:Int64

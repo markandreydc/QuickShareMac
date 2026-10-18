@@ -109,6 +109,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		window.setFrameAutosaveName("QuickShareMacMainWindow")
 		if !window.setFrameUsingName("QuickShareMacMainWindow"){window.center()}
 		windowController.setAlwaysOnTop(UserDefaults.standard.bool(forKey: "AlwaysOnTop"))
+		windowController.setCompressFolders(SendPreferences.compressFolders())
 		windowController.onAlwaysOnTopChange={enabled in UserDefaults.standard.set(enabled, forKey: "AlwaysOnTop")}
 		mainWindow=window
 		windowController.sendController.sender.onStateUpdate={ [weak self] in self?.scheduleMenuRefresh() }
@@ -130,6 +131,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			self.refreshWindow()
 		}
 		settingsController.onLaunchAtLoginChange={ [weak self] enabled in self?.setLaunchAtLogin(enabled) }
+		settingsController.onCompressFoldersChange={ [weak self] enabled in
+			UserDefaults.standard.set(enabled, forKey: SendPreferences.compressFoldersKey)
+			self?.windowController.setCompressFolders(enabled)
+			self?.refreshWindow()
+		}
 		settingsController.onOpenLoginItems={ [weak self] in self?.openLoginItems(nil) }
 		settingsController.onCheckForUpdates={ [weak self] in self?.checkForUpdates(nil) }
 		settingsController.onViewRelease={ [weak self] in self?.viewUpdateRelease() }
@@ -510,7 +516,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		windowController.update(receiving: isReceiving,
 								 transfers: orderedActive+recentTransferOrder.compactMap {recentlyFinishedTransfers[$0]}, deviceName: LocalDeviceIdentity.shared.deviceName, duration: availability.duration, expiresAt: availability.expiresAt)
 		if settingsWindow != nil{
-			settingsController.update(startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey), launchAtLogin: launchAtLogin, requiresLoginApproval: requiresLoginApproval, rememberedDeviceCount: rememberedDevices.count, customDeviceName: LocalDeviceIdentity.shared.customName, receivedFilesFolderName: ReceivedFilesFolder.displayName, receivedFilesFolderIsCustom: ReceivedFilesFolder.isCustom)
+			settingsController.update(startReceivingOnLaunch: UserDefaults.standard.bool(forKey: startReceivingKey), launchAtLogin: launchAtLogin, requiresLoginApproval: requiresLoginApproval, rememberedDeviceCount: rememberedDevices.count, customDeviceName: LocalDeviceIdentity.shared.customName, receivedFilesFolderName: ReceivedFilesFolder.displayName, receivedFilesFolderIsCustom: ReceivedFilesFolder.isCustom, compressFolders: SendPreferences.compressFolders())
 			settingsController.updateUpdates(frequency: updates.frequency, checking: updates.isChecking, currentVersion: updates.currentVersion, availableRelease: updates.availableRelease, status: updates.statusText)
 		}
 	}

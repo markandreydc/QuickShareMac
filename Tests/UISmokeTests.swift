@@ -196,7 +196,15 @@ struct UISmokeTests{
 		layout(settingsWindow)
 		expect(settings.selectedSection == .general, "Settings must open on General by default")
 		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Check for Updates…"}), "Update controls must not clutter General settings")
-		expect(visible(settings.view).compactMap({$0 as? CardView}).count==4, "General settings must group device name, startup, remembered names, and received files")
+		expect(visible(settings.view).compactMap({$0 as? CardView}).count==5, "General settings must group device name, startup, remembered names, received files, and sending")
+		let compress=button("Compress folders into ZIP files before sending", in: settings.view)
+		expect(compress.state == .on, "Folder compression must default to on")
+		var compressionChanges:[Bool]=[]
+		settings.onCompressFoldersChange={compressionChanges.append($0)}
+		compress.performClick(nil)
+		expect(compressionChanges==[false], "The compression checkbox must forward changes")
+		settings.update(startReceivingOnLaunch: true, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 0, compressFolders: false)
+		expect(compress.state == .off, "Settings must display the saved compression choice")
 		let folderLabel=visible(settings.view).compactMap({$0 as? NSTextField}).first(where: {$0.identifier?.rawValue=="ReceivedFilesFolder"})!
 		expect(folderLabel.stringValue=="Downloads" && visible(settings.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Save received files to:"}), "Settings must show the received-files folder with Downloads as the default")
 		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Use Downloads"}), "Use Downloads must stay hidden while the default folder is active")
@@ -456,6 +464,7 @@ struct UISmokeTests{
 		testShareHandoff()
 		testSelectedItemList()
 		testFolderCompression()
+		testFolderSendingWithoutCompression()
 		testFileDropExperience()
 		testTransferRateEstimator()
 		testIncomingRequestPresentation()
@@ -725,6 +734,7 @@ struct UISmokeTests{
 	static func testMainWindowSending(){
 		let service=FakeSendingService()
 		let main=MainWindowViewController()
+		main.setCompressFolders(true)
 		main.sendController.sender.service=service
 		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
 		window.contentViewController=main
@@ -848,6 +858,7 @@ struct UISmokeTests{
 	static func testFileDropExperience(){
 		let service=FakeSendingService()
 		let main=MainWindowViewController()
+		main.setCompressFolders(true)
 		main.sendController.sender.service=service
 		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
 		window.contentViewController=main
@@ -964,6 +975,7 @@ struct UISmokeTests{
 
 	static func testSelectedItemList(){
 		let controller=SendViewController()
+		controller.compressFolders=true
 		let service=FakeSendingService()
 		controller.sender.service=service
 		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.minimumSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
@@ -1050,6 +1062,138 @@ struct UISmokeTests{
 		}
 	}
 
+	static func testFolderSendingWithoutCompression(){
+		let suite="QuickShareMac-folder-settings-tests-\(UUID().uuidString)"
+		let defaults=UserDefaults(suiteName: suite)!
+		defer{defaults.removePersistentDomain(forName: suite)}
+		expect(SendPreferences.compressFolders(in: defaults), "New installs must retain ZIP compression by default")
+		defaults.set(false, forKey: SendPreferences.compressFoldersKey)
+		expect(!SendPreferences.compressFolders(in: UserDefaults(suiteName: suite)!), "Turning compression off must persist across preference instances")
+		defaults.set(true, forKey: SendPreferences.compressFoldersKey)
+		expect(SendPreferences.compressFolders(in: defaults), "Compression must be re-enableable")
+
+		let root=FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("quickshare-direct-folder-\(UUID().uuidString)")
+		let folder=root.appendingPathComponent("Album")
+		let nested=folder.appendingPathComponent("2023")
+		let empty=folder.appendingPathComponent("Empty")
+		try! FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+		try! FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+		defer{try? FileManager.default.removeItem(at: root)}
+		let first=folder.appendingPathComponent("one.txt")
+		let second=nested.appendingPathComponent("one.txt")
+		let hidden=folder.appendingPathComponent(".notes")
+		let zero=folder.appendingPathComponent("zero.txt")
+		let loose=root.appendingPathComponent("loose.txt")
+		for file in [first,second,hidden,loose]{try! Data("contents".utf8).write(to: file)}
+		try! Data().write(to: zero)
+		try! FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("loop"), withDestinationURL: folder)
+		try! FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("outside"), withDestinationURL: loose)
+		let main=MainWindowViewController()
+		let service=FakeSendingService()
+		main.sendController.sender.service=service
+		main.setCompressFolders(false)
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.minimumSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		window.contentViewController=main
+		main.showSend()
+		defer{main.sendController.sender.shutdown()}
+		let sender=main.sendController.sender
+		let drop=main.view as! SendDropView
+		func normalized(_ urls:[URL])->Set<URL>{Set(urls.map {$0.resolvingSymlinksInPath()})}
+		func parent(_ url:URL, in parents:[URL:String])->String?{
+			parents.first {$0.key.resolvingSymlinksInPath()==url.resolvingSymlinksInPath()}?.value
+		}
+		expect(sender.folderHandling == .sendContents && !drop.compressFolders, "Live settings must update both sending and drag preview")
+		let choose=button("Send files…", in: main.view)
+		expect(choose.toolTip=="Choose files or folders to send", "The single chooser must explain that it accepts files and folders")
+		expect(!visible(main.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Send folder…"}), "Sending files and folders must use one picker, not a second button")
+		expect(main.sendController.selectItems([folder,loose]), "Mixed folders and files must be accepted without compression")
+		expect(sender.state == .preparing && service.discoveryStarts==0 && !choose.isEnabled, "Folder gathering must be asynchronous and finish before discovery")
+		expect(visible(main.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Gathering files from “Album”…"}), "The Send tab must show folder preparation rather than ZIP compression")
+		main.setCompressFolders(true)
+		expect(sender.state == .preparing, "Changing settings must not restart the current preparation")
+		expect(waitUntil{sender.state == .choosingDevice}, "Folder gathering must finish")
+		expect(normalized(sender.preparedItems)==normalized([first,second,hidden,zero,loose]), "Gathering must include nested, hidden, and zero-byte files without following symbolic links")
+		expect(parent(first, in: sender.parentFolders)=="Album" && parent(second, in: sender.parentFolders)=="Album/2023", "Attachments must retain their root folder and relative subfolder paths")
+		expect(parent(loose, in: sender.parentFolders)==nil, "Loose files must remain outside the selected folders")
+		expect(choose.isEnabled && service.discoveryStarts==1 && service.attempts.isEmpty, "Gathering must discover recipients without automatically sending")
+		let listed=visible(main.view).compactMap {$0 as? NSTextField}.filter {$0.identifier?.rawValue=="SendSelectionItem"}
+		expect(listed.map(\.stringValue)==["Album","loose.txt"], "The selected-item list must retain the user's original folder and file names")
+		let device=RemoteDeviceInfo(name: "Test phone", type: .phone, id: "direct-folder-device")
+		sender.selectDevice(device)
+		expect(normalized(service.attemptURLs.last!)==normalized([first,second,hidden,zero,loose]), "Uncompressed folder transfers must send original files, not folders or ZIPs")
+		expect(service.attemptParentFolders.last==sender.parentFolders, "Relative folder paths must reach the sending service")
+		main.setCompressFolders(false)
+		expect(sender.state == .connecting, "Changing compression must not interrupt an active transfer")
+		sender.cancel(nil)
+		let added=nested.appendingPathComponent("new.txt")
+		try! Data("new".utf8).write(to: added)
+		sender.retry(nil)
+		expect(sender.state == .preparing, "Retry must gather the original folders again")
+		expect(waitUntil{sender.state == .choosingDevice} && normalized(sender.preparedItems).contains(added.resolvingSymlinksInPath()), "Retry must include changes made to the original folder")
+		expect(service.attempts.count==1, "Retry must require selecting a recipient again")
+
+		let pasteboard=NSPasteboard.withUniqueName()
+		defer{pasteboard.releaseGlobally()}
+		pasteboard.writeObjects([folder as NSURL])
+		_ = drop.previewDrop(from: pasteboard)
+		expect(visible(drop).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Send folder"}), "Folder previews must not promise compression when disabled")
+		main.setCompressFolders(true)
+		expect(visible(drop).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Compress & send"}), "Changing the setting must refresh an already-visible folder preview")
+		drop.endDropPreview()
+		expect(main.sendController.selectItems([folder]), "The same folder must be selectable after re-enabling compression")
+		expect(sender.state == .compressing && waitUntil{sender.state == .choosingDevice}, "Re-enabling compression must prepare a ZIP")
+		expect(sender.preparedItems.first?.pathExtension=="zip" && sender.parentFolders.isEmpty, "ZIP selections must clear old folder metadata")
+		main.setCompressFolders(false)
+		expect(main.sendController.selectItems([folder]) && sender.state == .preparing, "Selecting the same folder after changing modes must not reuse its ZIP")
+		expect(waitUntil{sender.state == .choosingDevice} && normalized(sender.preparedItems).contains(first.resolvingSymlinksInPath()), "The next selection must honor disabled compression")
+		expect(main.sendController.selectItems([loose]) && sender.parentFolders.isEmpty, "Replacing a folder with a file must remove folder metadata")
+		expect(!main.sendController.selectItems([root.appendingPathComponent("missing")]) && sender.preparedItems==[loose], "An invalid replacement must preserve the existing selection")
+		_ = main.sendController.selectItems([folder])
+		_ = main.sendController.selectItems([loose])
+		RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+		expect(sender.preparedItems==[loose] && sender.parentFolders.isEmpty, "A late gathering callback must not overwrite a replacement")
+		_ = main.sendController.selectItems([folder])
+		sender.shutdown()
+		RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+		expect(sender.state == .idle && sender.preparedItems.isEmpty && sender.parentFolders.isEmpty, "Shutdown must cancel pending gathering and discard late callbacks")
+		expect(main.sendController.selectItems([empty]), "Empty folders must be validated during background gathering")
+		expect(waitUntil{sender.state == .idle}, "An empty folder must fail preparation, not start an empty transfer")
+		expect(visible(main.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue.contains("doesn’t contain files to send")}), "Empty folders must explain how to use ZIP mode instead")
+
+		func expand(_ items:[URL])->Result<FolderExpansionTask.Selection,Error>{
+			var result:Result<FolderExpansionTask.Selection,Error>?
+			FolderExpansionTask().start(items: items){result=$0}
+			expect(waitUntil{result != nil}, "Background folder enumeration must always finish")
+			return result!
+		}
+		let other=root.appendingPathComponent("other/Album")
+		try! FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+		let otherFile=other.appendingPathComponent("one.txt")
+		try! Data().write(to: otherFile)
+		let duplicate=try! expand([folder,other]).get()
+		expect(parent(first, in: duplicate.parentFolders)=="Album" && parent(otherFile, in: duplicate.parentFolders)=="Album (2)", "Same-named root folders must get distinct receiver paths")
+		for name in ["a?","a:"]{
+			let subfolder=other.appendingPathComponent(name)
+			try! FileManager.default.createDirectory(at: subfolder, withIntermediateDirectories: true)
+			try! Data().write(to: subfolder.appendingPathComponent("file.txt"))
+		}
+		let sanitized=try! expand([other]).get()
+		expect(Set(sanitized.parentFolders.values).count==3, "Folder names that sanitize identically must not merge receiver directories")
+		let restricted=other.appendingPathComponent("restricted.txt")
+		try! Data().write(to: restricted)
+		try! FileManager.default.setAttributes([.posixPermissions:0], ofItemAtPath: restricted.path)
+		if case .failure=expand([other]){expect(true, "Unreadable child rejected")}
+		else{expect(false, "An unreadable child must fail preparation rather than silently disappear")}
+		try! FileManager.default.setAttributes([.posixPermissions:0o600], ofItemAtPath: restricted.path)
+		let task=FolderExpansionTask()
+		task.cancel()
+		var cancellation:Result<FolderExpansionTask.Selection,Error>?
+		task.start(items: [folder]){cancellation=$0}
+		expect(waitUntil{cancellation != nil}, "Canceled enumeration must finish")
+		if case .failure(let error)=cancellation!{expect((error as NSError).code==NSUserCancelledError, "Canceled enumeration must report cancellation")}
+		else{expect(false, "Canceled enumeration must not produce a selection")}
+	}
+
 	static func testTransferRateEstimator(){
 		let estimator=TransferRateEstimator()
 		expect(estimator.rate==nil, "No rate must be reported before samples arrive")
@@ -1116,12 +1260,13 @@ private final class FakeSendingService:SendingService{
 	weak var discoveryDelegate:ShareExtensionDelegate?
 	var attempts:[ShareExtensionDelegate]=[]
 	var attemptURLs:[[URL]]=[]
+	var attemptParentFolders:[[URL:String]]=[]
 	func startDeviceDiscovery(){discoveryStarts+=1}
 	func stopDeviceDiscovery(){discoveryStops+=1}
 	func addShareExtensionDelegate(_ delegate:ShareExtensionDelegate){discoveryDelegate=delegate}
 	func removeShareExtensionDelegate(_ delegate:ShareExtensionDelegate){discoveryDelegate=nil}
-	func startOutgoingTransfer(deviceID:String, delegate:ShareExtensionDelegate, urls:[URL]) -> Bool{
-		if canStart{attempts.append(delegate); attemptURLs.append(urls)}
+	func startOutgoingTransfer(deviceID:String, delegate:ShareExtensionDelegate, urls:[URL], parentFolders:[URL:String]) -> Bool{
+		if canStart{attempts.append(delegate); attemptURLs.append(urls); attemptParentFolders.append(parentFolders)}
 		return canStart
 	}
 	func cancelOutgoingTransfer(id:String){cancellations+=1}

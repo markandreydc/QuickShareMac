@@ -11,6 +11,20 @@ import System
 import CryptoKit
 import SwiftECC
 
+/// Safe relative folder names shared by attachment preparation and the wire
+/// encoder. Never put an absolute local filesystem path in transfer metadata.
+public enum OutgoingFolderPath{
+	public static func component(_ name:String)->String{
+		name.replacingOccurrences(of: "[\\/\\\\?%\\*:\\|\"<>=\\x00]", with: "_", options: .regularExpression)
+	}
+	public static func relative(_ path:String) throws -> String{
+		guard !path.isEmpty else{return ""}
+		let parts=path.components(separatedBy: "/")
+		guard parts.allSatisfy({!$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("\0")}) else {throw NearbyError.inputOutput}
+		return parts.map(component).joined(separator: "/")
+	}
+}
+
 public struct RemoteDeviceInfo{
 	public let name:String
 	public let type:DeviceType
@@ -487,12 +501,12 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 		qrCodeData=nil
 	}
 	
-	@discardableResult public func startOutgoingTransfer(deviceID:String, delegate:ShareExtensionDelegate, urls:[URL]) -> Bool{
+	@discardableResult public func startOutgoingTransfer(deviceID:String, delegate:ShareExtensionDelegate, urls:[URL], parentFolders:[URL:String] = [:]) -> Bool{
 		guard let info=foundServices[deviceID], let device=info.device, outgoingTransfers[deviceID]==nil, !urls.isEmpty else {return false}
 		let tcp=NWProtocolTCP.Options.init()
 		tcp.noDelay=true
 		let nwconn=NWConnection(to: info.service.endpoint, using: NWParameters(tls: .none, tcp: tcp))
-		let conn=OutboundNearbyConnection(connection: nwconn, id: deviceID, urlsToSend: urls)
+		let conn=OutboundNearbyConnection(connection: nwconn, id: deviceID, urlsToSend: urls, parentFolders: parentFolders)
 		conn.delegate=self
 		conn.qrCodePrivateKey=qrCodePrivateKey
 		let transfer=OutgoingTransferInfo(service: info.service, device: device, connection: conn, delegate: delegate)

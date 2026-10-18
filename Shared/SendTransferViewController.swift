@@ -54,7 +54,7 @@ protocol SendingService:AnyObject{
 	func stopDeviceDiscovery()
 	func addShareExtensionDelegate(_ delegate:ShareExtensionDelegate)
 	func removeShareExtensionDelegate(_ delegate:ShareExtensionDelegate)
-	func startOutgoingTransfer(deviceID:String, delegate:ShareExtensionDelegate, urls:[URL]) -> Bool
+	func startOutgoingTransfer(deviceID:String, delegate:ShareExtensionDelegate, urls:[URL], parentFolders:[URL:String]) -> Bool
 	func cancelOutgoingTransfer(id:String)
 	func generateQrCodeKey() -> String
 	func clearQrCodeKey()
@@ -70,7 +70,114 @@ protocol FolderCompressing:AnyObject{
 	func cancel()
 }
 
-enum OutgoingState{case idle, choosingDevice, compressing, connecting, awaitingApproval, sending, completed, failed, canceled}
+enum SendPreferences{
+	static let compressFoldersKey="CompressFoldersBeforeSending"
+	static func compressFolders(in defaults:UserDefaults = .standard)->Bool{
+		defaults.object(forKey: compressFoldersKey) as? Bool ?? true
+	}
+}
+
+enum FolderHandling{case compress, sendContents}
+enum OutgoingState{case idle, choosingDevice, compressing, preparing, connecting, awaitingApproval, sending, completed, failed, canceled}
+
+/// Owns an extra set of security scopes until background enumeration actually
+/// stops, even if the selection has been replaced or the controller shuts down.
+final class FolderExpansionTask{
+	struct Selection{
+		var files:[URL]=[]
+		var parentFolders:[URL:String]=[:]
+		var totalBytes:Int64=0
+	}
+	private let lock=NSLock()
+	private var canceled=false
+	func cancel(){lock.lock(); canceled=true; lock.unlock()}
+	private func checkCancellation() throws{
+		lock.lock(); let stopped=canceled; lock.unlock()
+		if stopped{throw CocoaError(.userCancelled)}
+	}
+	func start(items:[URL], completion:@escaping (Result<Selection,Error>)->Void){
+		let scopes=items.filter {$0.startAccessingSecurityScopedResource()}
+		DispatchQueue.global(qos: .userInitiated).async{
+			defer{for url in scopes{url.stopAccessingSecurityScopedResource()}}
+			let result=Result{try self.expand(items)}
+			DispatchQueue.main.async{completion(result)}
+		}
+	}
+	private func expand(_ items:[URL]) throws -> Selection{
+		let manager=FileManager.default
+		let keys:Set<URLResourceKey>=[.isDirectoryKey,.isRegularFileKey,.isSymbolicLinkKey,.fileSizeKey]
+		var selection=Selection()
+		var seen=Set<URL>()
+		var rootNames=Set<String>()
+		// Reserve loose filenames before assigning folder names to avoid a file
+		// colliding with a directory on the receiving device.
+		for item in items{
+			try checkCancellation()
+			if try item.resourceValues(forKeys: [.isDirectoryKey]).isDirectory != true{
+				rootNames.insert(OutgoingFolderPath.component(item.lastPathComponent).lowercased())
+			}
+		}
+		func uniqueFolderName(_ name:String, used:inout Set<String>)->String{
+			let base=OutgoingFolderPath.component(name)
+			var candidate=base
+			var suffix=2
+			while !used.insert(candidate.lowercased()).inserted{candidate=base+" (\(suffix))"; suffix+=1}
+			return candidate
+		}
+		func unreadable(_ url:URL)->Error{
+			NSError(domain: "QuickShareMac.Send", code: 1, userInfo: [NSLocalizedDescriptionKey:String(format: NSLocalizedString("UnreadableFolderItem", value: "“%@” could not be read. Choose a readable folder and try again.", comment: ""), url.lastPathComponent)])
+		}
+		func append(_ url:URL, parent:String, size:Int) throws{
+			guard manager.isReadableFile(atPath: url.path) else {throw unreadable(url)}
+			guard seen.insert(url.resolvingSymlinksInPath()).inserted else {return}
+			let (sum, overflow)=selection.totalBytes.addingReportingOverflow(Int64(size))
+			guard !overflow else {throw CocoaError(.fileReadTooLarge)}
+			selection.totalBytes=sum
+			selection.files.append(url)
+			if !parent.isEmpty{selection.parentFolders[url]=parent}
+		}
+		for item in items{
+			try checkCancellation()
+			let values=try item.resourceValues(forKeys: keys)
+			guard values.isSymbolicLink != true else {throw unreadable(item)}
+			if values.isDirectory != true{
+				guard values.isRegularFile==true else {throw unreadable(item)}
+				try append(item, parent: "", size: values.fileSize ?? 0)
+				continue
+			}
+			let name=uniqueFolderName(item.lastPathComponent, used: &rootNames)
+			var pending:[(URL,String)]=[(item,name)]
+			var foundFile=false
+			while let (directory,parent)=pending.popLast(){
+				try checkCancellation()
+				guard manager.isReadableFile(atPath: directory.path) else {throw unreadable(directory)}
+				// No skipsHiddenFiles: hidden files are part of the chosen folder.
+				let children=try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: Array(keys)).sorted {$0.lastPathComponent<$1.lastPathComponent}
+				var siblingNames=Set<String>()
+				for child in children{
+					try checkCancellation()
+					if try child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory != true{siblingNames.insert(OutgoingFolderPath.component(child.lastPathComponent).lowercased())}
+				}
+				for child in children{
+					try checkCancellation()
+					let info=try child.resourceValues(forKeys: keys)
+					if info.isSymbolicLink==true{continue} // Never follow links out of the chosen tree.
+					if info.isDirectory==true{
+						pending.append((child,parent+"/"+uniqueFolderName(child.lastPathComponent, used: &siblingNames)))
+					}else{
+						guard info.isRegularFile==true else {throw unreadable(child)}
+						foundFile=true
+						try append(child, parent: parent, size: info.fileSize ?? 0)
+					}
+				}
+			}
+			guard foundFile else{
+				throw NSError(domain: "QuickShareMac.Send", code: 1, userInfo: [NSLocalizedDescriptionKey:String(format: NSLocalizedString("EmptyFolderToSend", value: "The folder “%@” doesn’t contain files to send. Turn on folder compression to send empty folders.", comment: ""), item.lastPathComponent)])
+			}
+		}
+		return selection
+	}
+}
 
 struct FolderCompressionStatus:Equatable{
 	let name:String
@@ -90,6 +197,12 @@ struct OutgoingTransferResult{
 class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 	var service:SendingService=NearbyConnectionManager.shared
 	var folderCompressor:FolderCompressing?
+	var folderHandling:FolderHandling = .compress
+	private var selectionFolderHandling:FolderHandling = .compress
+	private var expansionTask:FolderExpansionTask?
+	private(set) var gatheringFolderName:String?
+	private(set) var parentFolders:[URL:String]=[:]
+	var isPreparing:Bool{state == .compressing || state == .preparing}
 	var continuesInBackground=false
 	var embeddedInMainWindow=false
 	private var discoveryVisible=true
@@ -279,7 +392,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		}
 		// A text field may also submit when hiding its row ends editing. Preserve
 		// the current discovery session if the same selection arrives twice.
-		if sourceSelection==items && (state == .choosingDevice || state == .compressing){return}
+		if sourceSelection==items && selectionFolderHandling==folderHandling && (state == .choosingDevice || isPreparing){return}
 		var scopes:[URL]=[]
 		var files:[URL]=[]
 		var folders:[URL]=[]
@@ -289,7 +402,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 				if url.startAccessingSecurityScopedResource(){scopes.append(url)}
 				let values=try url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey])
 				if values.isDirectory==true{
-					guard folderCompressor != nil else {throw selectionError(NSLocalizedString("FolderNotSupported", value: "Folders cannot be sent. Compress the folder in Finder, then share the ZIP file.", comment: ""))}
+					guard folderHandling == .sendContents || folderCompressor != nil else {throw selectionError(NSLocalizedString("FolderNotSupported", value: "Folders cannot be sent. Compress the folder in Finder, then share the ZIP file.", comment: ""))}
 					guard FileManager.default.isReadableFile(atPath: url.path) else {throw selectionError(NSLocalizedString("UnreadableSelection", value: "One of the selected files is not readable. Choose it again in Finder.", comment: ""))}
 					folders.append(url)
 				}else{
@@ -311,10 +424,35 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		releaseCompressedItems()
 		scopedURLs=scopes
 		sourceSelection=items
+		selectionFolderHandling=folderHandling
 		if folders.isEmpty{
 			applySelection(items: items, totalBytes: bytes)
+		}else if folderHandling == .sendContents{
+			beginExpansion(items: items, folderName: folders[0].lastPathComponent)
 		}else{
 			beginCompression(folders: folders, files: files, fileBytes: bytes)
+		}
+	}
+
+	private func beginExpansion(items:[URL], folderName:String){
+		urls=[]
+		discoveryView.isHidden=true
+		progressView.isHidden=true
+		let generation=compressionGeneration
+		let task=FolderExpansionTask()
+		expansionTask=task
+		gatheringFolderName=folderName
+		setState(.preparing)
+		task.start(items: items){ [weak self] result in
+			guard let self=self, generation==self.compressionGeneration else{return}
+			self.expansionTask=nil
+			self.gatheringFolderName=nil
+			switch result{
+			case .success(let selection):
+				self.parentFolders=selection.parentFolders
+				self.applySelection(items: selection.files, totalBytes: selection.totalBytes)
+			case .failure(let error): self.failCompression(error, generation: generation)
+			}
 		}
 	}
 
@@ -384,6 +522,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		sourceSelection=[]
 		urls.removeAll()
 		setState(.idle)
+		releaseScopes()
 		onPreparationError?(error)
 	}
 
@@ -392,6 +531,10 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 	/// are never reused; retries recompress from the original folders.
 	private func releaseCompressedItems(){
 		compressionGeneration=UUID()
+		expansionTask?.cancel()
+		expansionTask=nil
+		gatheringFolderName=nil
+		parentFolders=[:]
 		compressionProgress=nil
 		compressionFiles=[]
 		compressionFileBytes=0
@@ -448,6 +591,10 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 
 	@objc func retry(_ sender:Any?){
 		guard terminal, !urls.isEmpty else {return}
+		if selectionFolderHandling == .sendContents && !parentFolders.isEmpty{
+			do{try configureItems(sourceSelection)}catch{showFailure(error)}
+			return
+		}
 		// Rediscover and explicitly choose a recipient again; never automatically resend.
 		resetForDiscovery()
 		if discoveryVisible{beginDiscovery()}
@@ -478,6 +625,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 
 	deinit{
 		timeout?.cancel()
+		expansionTask?.cancel()
 		for url in scopedURLs{url.stopAccessingSecurityScopedResource()}
 		folderCompressor?.cancel()
 	}
@@ -682,7 +830,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		setState(.connecting)
 		armTimeout(seconds: 30)
 		// Start before stopping discovery, which owns the service browser.
-		let started=service.startOutgoingTransfer(deviceID: id, delegate: attempt, urls: urls)
+		let started=service.startOutgoingTransfer(deviceID: id, delegate: attempt, urls: urls, parentFolders: parentFolders)
 		stopDiscovery()
 		if !started{showFailure(selectionError(NSLocalizedString("RecipientUnavailable", value: "This device is no longer available, or already has a transfer in progress. Retry to find it again.", comment: "")))}
 	}

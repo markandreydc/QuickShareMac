@@ -270,6 +270,7 @@ final class MainWindowViewController:NSViewController{
 
 	override func loadView(){
 		let drop=SendDropView(frame: NSRect(origin: .zero, size: Self.defaultSize))
+		drop.compressFolders=sendController.compressFolders
 		drop.onURLs={ [weak self] urls in
 			guard let self=self else {return false}
 			self.showSend()
@@ -497,6 +498,11 @@ final class MainWindowViewController:NSViewController{
 	}
 
 	@objc private func receivingChanged(_ sender:NSSwitch){onReceivingChange?(sender.state == .on)}
+	func setCompressFolders(_ enabled:Bool){
+		_ = view
+		sendController.compressFolders=enabled
+		(view as? SendDropView)?.compressFolders=enabled
+	}
 	@objc private func durationChanged(_ sender:NSPopUpButton){if let tag=sender.selectedItem?.tag, let duration=ReceivingDuration(rawValue: tag){onDurationChange?(duration)}}
 	@objc private func enableReceiving(_ sender:NSButton){onReceivingChange?(true)}
 	@objc private func openSettings(_ sender:NSButton){onOpenSettings?()}
@@ -512,6 +518,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	private let pages=NSTabView()
 	private let aboutVersionLabel=WindowUI.label("", size: 12, secondary: true)
 	var onStartReceivingOnLaunchChange:((Bool)->Void)?
+	var onCompressFoldersChange:((Bool)->Void)?
 	var onLaunchAtLoginChange:((Bool)->Void)?
 	var onOpenLoginItems:(()->Void)?
 	var onForgetRememberedDevices:(()->Void)?
@@ -541,6 +548,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	private var nameConfirmation:DispatchWorkItem?
 	private var savingName=false
 	private let startReceivingButton=NSButton(checkboxWithTitle: NSLocalizedString("StartReceivingOnLaunch", value: "Start receiving when app opens", comment: ""), target: nil, action: nil)
+	private let compressFoldersButton=NSButton(checkboxWithTitle: NSLocalizedString("CompressFoldersBeforeSending", value: "Compress folders into ZIP files before sending", comment: ""), target: nil, action: nil)
 	private let loginButton=NSButton(checkboxWithTitle: NSLocalizedString("LaunchAtLogin", value: "Launch at login", comment: ""), target: nil, action: nil)
 	private let loginHelpButton=NSButton(title: NSLocalizedString("SetUpLoginItem", value: "Set up login item in System Settings…", comment: ""), target: nil, action: nil)
 	private let rememberedCountLabel=WindowUI.label("", secondary: true)
@@ -640,6 +648,14 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		folderRow.addArrangedSubview(useDownloadsButton)
 		WindowUI.fill(folderRow, in: receivedFiles)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("ReceivedFilesFolderExplanation", value: "Incoming files are saved to this folder. The default is Downloads.", comment: ""), size: 11, secondary: true), in: receivedFiles)
+
+		let sending=card(NSLocalizedString("SendingSettings", value: "Sending", comment: ""), in: general)
+		compressFoldersButton.identifier=NSUserInterfaceItemIdentifier("CompressFoldersBeforeSending")
+		compressFoldersButton.state=SendPreferences.compressFolders() ? .on : .off
+		compressFoldersButton.target=self
+		compressFoldersButton.action=#selector(compressFoldersChanged(_:))
+		sending.addArrangedSubview(compressFoldersButton)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("CompressFoldersExplanation", value: "Applies to folders chosen, dropped, or shared from Finder. When off, files are sent directly with folder paths; folder layout depends on the receiver, and empty subfolders are omitted. Changes apply to your next selection.", comment: ""), size: 11, secondary: true), in: sending)
 
 		let updatePage=page(.updates)
 		let updates=card(NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""), in: updatePage)
@@ -746,7 +762,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		if let section=Section(rawValue: sender.selectedSegment){show(section)}
 	}
 
-	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int, customDeviceName:String?=nil, systemDeviceName:String = LocalDeviceIdentity.shared.systemDeviceName, receivedFilesFolderName:String = "Downloads", receivedFilesFolderIsCustom:Bool = false){
+	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int, customDeviceName:String?=nil, systemDeviceName:String = LocalDeviceIdentity.shared.systemDeviceName, receivedFilesFolderName:String = "Downloads", receivedFilesFolderIsCustom:Bool = false, compressFolders:Bool = true){
 		_ = view
 		let hadNameDraft=hasNameDraftChanges
 		let savedNameChanged=savedCustomName != customDeviceName
@@ -759,6 +775,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 			updateNameControls()
 		}
 		startReceivingButton.state=startReceivingOnLaunch ? .on : .off
+		compressFoldersButton.state=compressFolders ? .on : .off
 		loginButton.state=launchAtLogin ? .on : .off
 		if #available(macOS 13.0, *){loginHelpButton.isHidden = !requiresLoginApproval}
 		rememberedCountLabel.stringValue=String.localizedStringWithFormat(NSLocalizedString("RememberedDevicesCount", value: "%d remembered device names", comment: ""), rememberedDeviceCount)
@@ -768,6 +785,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	}
 
 	@objc private func startReceivingChanged(_ sender:NSButton){onStartReceivingOnLaunchChange?(sender.state == .on)}
+	@objc private func compressFoldersChanged(_ sender:NSButton){onCompressFoldersChange?(sender.state == .on)}
 	func updateUpdates(frequency:UpdateCheckFrequency, checking:Bool, currentVersion:String, availableRelease:UpdateRelease?, status:String){
 		_ = view
 		updateFrequency.selectItem(withTitle: frequency.title)

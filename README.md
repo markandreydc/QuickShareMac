@@ -14,7 +14,7 @@ Developed by Mark Andrey · github.com/markandreydc
 
 ## Features
 
-- **Send files and folders** from the main window, by drag-and-drop, or through Finder’s Share menu. Folders are compressed into ZIP files automatically.
+- **Send files and folders** from the main window, by drag-and-drop, or through Finder’s Share menu. Choose in Settings whether folders become ZIPs or their files are sent directly with folder paths.
 - **Share-menu handoff:** choosing **Share → QuickShareMac** in Finder hands the selection to the main window’s Send tab instead of transferring inside the Finder sheet.
 - **Receive files** with explicit approval and a PIN check for each transfer.
 - **Connect with a QR code** to help your Android device become discoverable.
@@ -42,12 +42,14 @@ Both devices must be on the **same Wi-Fi/local network**. Keep your Android devi
 ### Send files to Android
 
 1. Open QuickShareMac and select **Send**.
-2. Click **Send files…** or drag files or folders onto either the Receive or Send tab. A window-wide **Drop to send** overlay previews the filename or file count and explains that you choose a nearby device next; dragging a folder shows **Compress & send** instead. Drop to open Send and begin device discovery—nothing is sent automatically. You can also use **File → Send files…** (`⌘O`).
+2. Click **Send files…** (the single picker accepts both files and folders) or drag files or folders onto either the Receive or Send tab. A window-wide **Drop to send** overlay previews the filename or file count and explains that you choose a nearby device next; dragging a folder shows **Compress & send**, or **Send folder** when compression is disabled. Drop to open Send and prepare items before device discovery—nothing is sent automatically. You can also use **File → Send files…** (`⌘O`).
 3. Open Quick Share on your Android device and choose its receiving mode, if available.
 4. Select the device in QuickShareMac, or choose **Connect with QR code…** and scan the code with your phone’s camera.
 5. Check that the PIN matches on both devices, then accept on Android.
 
-Folders are compressed into ZIP files automatically. Each dropped or chosen folder becomes its own ZIP—named after the folder, matching Finder’s **Compress** result—and files chosen alongside folders are sent as they are. The Send tab shows a spinner with **Compressing “FolderName”…** while this happens; large folders can take a moment before device discovery begins. To send a folder without compression, compress it in Finder yourself and select the ZIP. The Share menu handles folders the same way: choosing **Share → QuickShareMac** hands the folder to the app, which compresses it before discovery.
+Folder compression is on by default. Each folder becomes its own ZIP—named after the folder, matching Finder’s **Compress** result—and files chosen alongside folders are sent as they are. The Send tab shows **Compressing “FolderName”…** while preparing ZIPs.
+
+To send folders without ZIPs, turn off **Settings → General → Sending → Compress folders into ZIP files before sending**. The app shows **Gathering files from “FolderName”…**, then sends the original files with relative folder-path metadata. Folder layout depends on the receiver: receivers that ignore the paths save loose files instead. Android folder reconstruction still requires device verification. Hidden files are included, symbolic links are skipped, and empty subfolders cannot be represented; entirely empty folders show an explanation to use ZIP mode. Large folders can take a moment before discovery begins. The setting is saved, applies to the next selection, and covers the picker, drops, and **Share → QuickShareMac**; the Share extension remains a handoff adapter.
 
 During dragging, unreadable files and unsupported content show a specific explanation instead of an accepted-drop highlight. While an outgoing transfer is active, drops are blocked until you finish or cancel it. Leaving the window or canceling the drag dismisses the overlay without changing your selection.
 
@@ -87,6 +89,8 @@ In **General**, choose whether receiving starts when the app opens. On macOS 13 
 Under **Device name** in Settings, choose **Use Mac’s name** or **Use a custom name**. The system option shows the name nearby devices will see; choosing Custom reveals an input prefilled with the current name. Click **Save changes** to apply your choice, or **Cancel** to restore the saved setting. Empty custom input shows guidance instead of a technical error, and Save stays disabled until the name is valid and changed. This changes only QuickShareMac’s identity, not your computer’s name. Discovery, receiving instructions, and outgoing handshakes use the chosen name. The Share menu extension only hands items to the app, so the app applies the name itself.
 
 Under **Received files** in Settings, choose **Choose…** to pick any folder for incoming files—for example Desktop, Documents, or a folder of your own—or **Use Downloads** to restore the default. The Receive footer always shows the current folder, and **Open Received Files** next to the Receive/Send tabs opens it. If the chosen folder disappears, QuickShareMac falls back to Downloads.
+
+Under **Sending**, choose whether to compress folders into ZIP files (on by default) or send their files directly with folder paths. Changes apply to your next selection, not to a preparation or transfer already running.
 
 Recent transfer results last for the current app session, until you dismiss or clear them. They are not a permanent transfer log.
 
@@ -204,7 +208,7 @@ This is intentional: receiving and active transfers continue in the background. 
 - **Transfers are local network only.** Wi-Fi Direct, Bluetooth transfers, and internet relay are not implemented. Update checks optionally contact GitHub, as described above.
 - **Visible on your network while receiving is enabled.** Contact-only visibility is not supported.
 - **Approval is always required.** Remembered device names are not persistent, verified sender identities.
-- **Folders are compressed with `ditto` before sending.** Each folder becomes its own ZIP file; the original folder is never modified. This applies to folders shared from Finder too, since the app performs the transfer.
+- **Folder handling is chosen in Settings.** By default `ditto` creates a ZIP per folder without modifying the original. With compression off, background enumeration sends regular files directly, carrying relative paths in both the introduction’s `parent_folder` and file payload headers. Paths are component-sanitized, same-named folder roots are disambiguated, and symbolic links are not followed. Receiver folder reconstruction is not guaranteed; the Mac receiver currently saves loose files. The same preparation applies to Finder shares, picker selections, and drops.
 - **Notifications describe requests but never accept them.** The PIN check always happens in the main window.
 - **Not AirDrop.** This app implements part of the Quick Share/Nearby Share protocol, not Apple’s AirDrop protocol.
 

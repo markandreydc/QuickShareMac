@@ -38,7 +38,12 @@ struct SendingIntegrationTests{
 		let existing=destination.appendingPathComponent("payload.bin")
 		try Data("Keep this existing file".utf8).write(to: existing)
 
-		let accepted=try LoopbackTransfer(urls: [file,empty,sameNameFile], directory: destination, decision: .accept)
+		for path in ["/absolute","../escape","Album/../escape","Album//sub","Album/./sub","Album/","Album/\0"]{
+			do{_ = try OutboundNearbyConnection.safeParentFolder(path); expect(false, "Unsafe folder paths must be rejected: \(path)")}
+			catch{expect(true, "Unsafe folder path rejected")}
+		}
+		expect(try OutboundNearbyConnection.safeParentFolder("Al?bum/2023")=="Al_bum/2023", "Each folder-path component must be sanitized without flattening the hierarchy")
+		let accepted=try LoopbackTransfer(urls: [file,empty,sameNameFile], directory: destination, decision: .accept, parentFolders: [file:"Al?bum/2023",empty:"Al?bum",sameNameFile:"Album (2)"])
 		accepted.run()
 		expect(accepted.clientSucceeded && accepted.clientError==nil, "Sender must complete a multi-file transfer")
 		expect(accepted.receiverDone && accepted.receiverError==nil, "Receiver must complete a multi-file transfer")
@@ -52,6 +57,11 @@ struct SendingIntegrationTests{
 		expect(receivedPayloads.contains(otherPayload), "Same-named attachments must not overwrite each other")
 		expect(try Data(contentsOf: urls.first(where: {$0.pathExtension=="txt"})!).isEmpty, "Zero-byte files must arrive successfully")
 		expect(try String(contentsOf: existing, encoding: .utf8)=="Keep this existing file", "Existing destination files must not be overwritten")
+		let wireFiles=accepted.receiver!.introducedFiles
+		expect(wireFiles.map(\.parentFolder)==["Al_bum/2023","Al_bum","Album (2)"], "The encrypted introduction must carry relative folder paths for every attachment")
+		let headers=accepted.receiver!.fileHeaders
+		expect(!headers.isEmpty && headers.allSatisfy {header in wireFiles.contains {$0.payloadID==header.id && $0.name==header.fileName && $0.parentFolder==header.parentFolder}}, "File chunks and zero-byte EOF headers must carry the same folder and filename as their introduction")
+		expect(Set(headers.map(\.id))==Set(wireFiles.map(\.payloadID)), "Even zero-byte files must transmit folder metadata in their payload header")
 		accepted.stop()
 
 		let rejected=try LoopbackTransfer(urls: [file], directory: destination, decision: .reject)
@@ -126,6 +136,19 @@ private final class ConnectionFailureObserver:OutboundNearbyConnectionDelegate{
 	func outboundConnectionTransferFinished(connection:OutboundNearbyConnection){preconditionFailure("A blocked connection cannot succeed")}
 }
 
+private final class RecordingInboundConnection:InboundNearbyConnection{
+	var introducedFiles:[Sharing_Nearby_FileMetadata]=[]
+	var fileHeaders:[Location_Nearby_Connections_PayloadTransferFrame.PayloadHeader]=[]
+	override func processTransferSetupFrame(_ frame:Sharing_Nearby_Frame) throws{
+		if frame.v1.type == .introduction{introducedFiles=frame.v1.introduction.fileMetadata}
+		try super.processTransferSetupFrame(frame)
+	}
+	override func processFileChunk(frame:Location_Nearby_Connections_PayloadTransferFrame) throws{
+		fileHeaders.append(frame.payloadHeader)
+		try super.processFileChunk(frame: frame)
+	}
+}
+
 private final class LoopbackTransfer:InboundNearbyConnectionDelegate, OutboundNearbyConnectionDelegate{
 	enum Decision{case accept, reject, cancel, disconnect}
 	let listener:NWListener
@@ -133,7 +156,7 @@ private final class LoopbackTransfer:InboundNearbyConnectionDelegate, OutboundNe
 	let directory:URL
 	let decision:Decision
 	var sender:OutboundNearbyConnection?
-	var receiver:InboundNearbyConnection?
+	var receiver:RecordingInboundConnection?
 	var clientSucceeded=false
 	var clientDone=false
 	var receiverDone=false
@@ -143,7 +166,7 @@ private final class LoopbackTransfer:InboundNearbyConnectionDelegate, OutboundNe
 	var clientPIN:String?
 	var receivedSenderName:String?
 
-	init(urls:[URL], directory:URL, decision:Decision) throws{
+	init(urls:[URL], directory:URL, decision:Decision, parentFolders:[URL:String] = [:]) throws{
 		self.urls=urls
 		self.directory=directory
 		self.decision=decision
@@ -152,7 +175,7 @@ private final class LoopbackTransfer:InboundNearbyConnectionDelegate, OutboundNe
 		listener=try NWListener(using: parameters)
 		listener.newConnectionHandler={ [weak self] connection in
 			guard let self=self else {connection.cancel(); return}
-			let receiver=InboundNearbyConnection(connection: connection, id: UUID().uuidString, downloadDirectory: directory)
+			let receiver=RecordingInboundConnection(connection: connection, id: UUID().uuidString, downloadDirectory: directory)
 			receiver.delegate=self
 			self.receiver=receiver
 			receiver.start()
@@ -161,7 +184,7 @@ private final class LoopbackTransfer:InboundNearbyConnectionDelegate, OutboundNe
 			guard let self=self else {return}
 			if case .ready=state, let port=self.listener.port{
 				let connection=NWConnection(host: "127.0.0.1", port: port, using: .tcp)
-				let sender=OutboundNearbyConnection(connection: connection, id: UUID().uuidString, urlsToSend: urls, localDeviceName: "Protocol Test Mac")
+				let sender=OutboundNearbyConnection(connection: connection, id: UUID().uuidString, urlsToSend: urls, localDeviceName: "Protocol Test Mac", parentFolders: parentFolders)
 				sender.delegate=self
 				self.sender=sender
 				sender.start()
