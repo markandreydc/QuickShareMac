@@ -57,7 +57,7 @@ Folder compression is **off by default**. You can enable **Settings → General 
 
 With compression off, the app shows **Gathering files from “FolderName”…**, then sends the original files with relative folder-path metadata. Folder layout depends on the receiver: receivers that ignore the paths save loose files instead. Android folder reconstruction still requires device verification. Hidden files are included, symbolic links are skipped, and empty subfolders cannot be represented; entirely empty folders show an explanation to use ZIP mode. Large folders can take a moment before discovery begins. The setting is saved, applies to the next selection, and covers the picker, drops, and **Share → QuickShareMac**; the Share extension remains a handoff adapter. An explicitly saved compression preference is kept until you change it or reset settings.
 
-The main window starts compact and automatically adjusts its height when switching tabs, selecting items, or showing transfer requests. It stays within the screen’s usable area; longer history and overflow remain scrollable, and the filename list stays capped at five rows.
+The main and Settings windows have a fixed width of 620 points and cannot be resized manually. Their height grows or shrinks automatically to fit the current content, up to 800 points or the screen’s usable height. Width also reduces on smaller screens. Longer history and overflow remain scrollable, and the filename list stays capped at five rows.
 
 During dragging, unreadable files and unsupported content show a specific explanation instead of an accepted-drop highlight. While an outgoing transfer is active, drops are blocked until you finish or cancel it. Leaving the window or canceling the drag dismisses the overlay without changing your selection.
 
@@ -90,7 +90,7 @@ Use **Available for** in the Receive tab or menu to choose **10 minutes**, **30 
 
 Turning receiving off stops new incoming connections; transfers already in progress can finish. Outgoing transfers do not require receiving to be enabled.
 
-**Settings…** is organized into **General**, **Updates**, and **About**. It matches the Send/Receive window with the unchanged logo in a compact header, icon tabs, soft backgrounds and cards, subtle borders, blue primary actions, and light/dark appearances. The header, tabs, and developer-credit footer stay fixed while longer pages scroll; the window can be resized. General contains device naming, startup options, and remembered names; Updates contains version checks and daily-check preferences; About shows the app version and upstream credits.
+**Settings…** is organized into **General**, **Updates**, and **About**. It matches the Send/Receive window with the unchanged logo in a compact header, icon tabs, soft backgrounds and cards, subtle borders, blue primary actions, and light/dark appearances. The window automatically fits the selected page and expands for editing or status messages, within its height limit. The header, tabs, and developer-credit footer stay fixed while longer pages scroll. General contains device naming, startup options, and remembered names; Updates contains version checks and daily-check preferences; About shows the app version and upstream credits.
 
 In **General**, choose whether receiving starts when the app opens. On macOS 13 or later, you can also enable **Launch at login**. On older systems, add the app to Login Items in System Settings.
 
@@ -100,7 +100,7 @@ Under **Received files** in Settings, choose **Choose…** to pick any folder fo
 
 Under **Sending**, choose whether to compress folders into ZIP files (off by default) or send their files directly with folder paths. Changes apply to your next selection, not to a preparation or transfer already running.
 
-**Reset to defaults…** on the General page asks for confirmation before restoring the Mac’s name, Downloads destination, receiving on launch, indefinite availability, launch at login off, compression off, automatic update checks off, and default window preferences. Received files, history, remembered devices, and active transfers are kept. macOS privacy permissions are not changed.
+**Reset to defaults…** at the upper right of the Settings window is available on every tab. It asks for confirmation before restoring the Mac’s name, Downloads destination, receiving on launch, indefinite availability, launch at login off, compression off, automatic update checks off, and default window preferences. Received files, history, remembered devices, and active transfers are kept. macOS privacy permissions are not changed.
 
 Recent transfer results last for the current app session, until you dismiss or clear them. They are not a permanent transfer log.
 

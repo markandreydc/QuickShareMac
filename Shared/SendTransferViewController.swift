@@ -356,6 +356,10 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		ShareUI.fill(progressHelp, in: progressView)
 		ShareUI.fill(guidance, in: content)
 		let actions=ShareUI.stack(.horizontal)
+		// Keep the buttons at the bottom edge; spare height belongs to the
+		// discovery/progress area, not a stretched action row below the QR button.
+		actions.setContentHuggingPriority(.required, for: .vertical)
+		actions.setContentCompressionResistancePriority(.required, for: .vertical)
 		qrCodeButton.bezelStyle = .regularSquare
 		if #available(macOS 26.0, *){qrCodeButton.borderShape = .roundedRectangle}
 		qrCodeButton.target=self

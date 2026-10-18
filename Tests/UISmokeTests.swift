@@ -573,6 +573,8 @@ struct UISmokeTests{
 		testReceivedFilesFolder()
 		testSettingsDefaults()
 		testDynamicWindowHeight()
+		testWindowSizeLimits()
+		testSettingsContentSizing()
 		testMainWindowAppearance()
 		testCompactReceiveInstructions()
 		testSettingsAppearance()
@@ -660,6 +662,8 @@ struct UISmokeTests{
 		settings.update(startReceivingOnLaunch: true, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 2, customDeviceName: "Studio Mac", receivedFilesFolderName: "A very long custom received-files folder name that must truncate instead of pushing its controls outside the window", receivedFilesFolderIsCustom: true)
 		settings.updateUpdates(frequency: .weekly, checking: false, currentVersion: "1.0.0", availableRelease: nil, status: "")
 		let brand=descendants(settings.view).compactMap {$0 as? NSImageView}.first {$0.identifier?.rawValue=="SettingsBrandIcon"}!
+		let resetDefaults=button("Reset to defaults…", in: settings.view)
+		expect(resetDefaults.superview === brand.superview, "Reset to defaults must live in the persistent Settings header rather than a scrollable page")
 		let navigation=descendants(settings.view).compactMap {$0 as? NSSegmentedControl}.first!
 		let footer=descendants(settings.view).first {$0.identifier?.rawValue=="DeveloperCreditFooter"}!
 		expect((settings.view as? WindowBackgroundView)?.backgroundStyle == .soft, "Settings must reuse the main window's soft background")
@@ -676,6 +680,8 @@ struct UISmokeTests{
 					let brandFrame=brand.convert(brand.bounds, to: settings.view)
 					let navigationFrame=navigation.convert(navigation.bounds, to: settings.view)
 					let footerFrame=footer.convert(footer.bounds, to: settings.view)
+					let resetFrame=resetDefaults.convert(resetDefaults.bounds, to: settings.view)
+					expect(!resetDefaults.isHiddenOrHasHiddenAncestor && abs(resetFrame.maxX-(settings.view.bounds.maxX-20))<1 && resetFrame.midY>navigationFrame.maxY, "Reset to defaults must stay at the upper right on every Settings tab")
 					expect(brand.bounds.size==NSSize(width: 32, height: 32) && abs(brandFrame.minX-20)<1 && brandFrame.minY>navigationFrame.maxY, "Settings must use a compact upper-left brand header above navigation")
 					expect(abs(navigationFrame.minX-20)<1 && settings.view.bounds.contains(navigationFrame), "Icon tabs must align with the main window's 20-point content inset")
 					expect(!footer.isHiddenOrHasHiddenAncestor && abs(footerFrame.minY-20)<1 && abs(footerFrame.midX-settings.view.bounds.midX)<1, "The developer footer must stay fixed on every Settings page")
@@ -762,16 +768,75 @@ struct UISmokeTests{
 		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Use Downloads"}), "Reset must restore the Downloads destination display")
 	}
 
+	static func testWindowSizeLimits(){
+		expect(!MainWindowViewController.windowStyle.contains(.resizable) && !SettingsViewController.windowStyle.contains(.resizable), "Both app windows must disable manual resizing")
+		let screen=NSRect(x: 0, y: 0, width: 1600, height: 1200)
+		for (minimum,maximum) in [(MainWindowViewController.minimumSize,MainWindowViewController.maximumSize),(SettingsViewController.minimumSize,SettingsViewController.maximumSize)]{
+			let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 1000), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+			WindowUI.constrainWindow(window, minimum: minimum, maximum: maximum, visibleFrame: screen)
+			expect(window.contentMaxSize==NSSize(width: 800, height: 800), "Both windows must cap manual resizing at 800 × 800 content points")
+			expect(window.contentMinSize==minimum, "Size limits must preserve the existing minimum on a roomy screen")
+			let contentSize=window.contentRect(forFrameRect: window.frame).size
+			expect(contentSize.width<=maximum.width && contentSize.height<=maximum.height, "Oversized restored windows must immediately shrink to the maximum")
+			let compact=NSRect(x: 0, y: 0, width: 480, height: 450)
+			WindowUI.constrainWindow(window, minimum: minimum, maximum: maximum, visibleFrame: compact)
+			expect(compact.contains(window.frame), "Window limits must also keep the title bar inside small screens")
+			expect(window.contentMinSize.width<=window.contentMaxSize.width && window.contentMinSize.height<=window.contentMaxSize.height, "Small screens must not produce conflicting resize limits")
+		}
+	}
+
+	static func testSettingsContentSizing(){
+		let settings=SettingsViewController()
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: SettingsViewController.defaultSize), styleMask: SettingsViewController.windowStyle, backing: .buffered, defer: false)
+		window.contentViewController=settings
+		let screen=NSScreen.main!.visibleFrame
+		window.setFrameTopLeftPoint(NSPoint(x: screen.minX+20, y: screen.maxY-20))
+		settings.update(startReceivingOnLaunch: false, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 0, systemDeviceName: "System Mac")
+		settings.show(.about)
+		settings.fitWindowToContent()
+		let compact=window.contentView!.bounds.height
+		let top=window.frame.maxY
+		expect(window.contentView!.bounds.width==SettingsViewController.defaultSize.width, "Settings must use a fixed content width")
+		settings.show(.general)
+		settings.fitWindowToContent()
+		let generalHeight=window.contentView!.bounds.height
+		expect(generalHeight>compact && generalHeight<=SettingsViewController.maximumSize.height, "Settings must grow for the selected page without exceeding the maximum height")
+		expect(abs(window.frame.maxY-top)<1, "Settings auto-sizing must keep its title bar in place")
+		button("Edit name…", in: settings.view).performClick(nil)
+		settings.fitWindowToContent()
+		expect(window.contentView!.bounds.height>=generalHeight && window.contentView!.bounds.height<=SettingsViewController.maximumSize.height, "Opening the name editor must fit new content or scroll at the height limit")
+		button("Save changes", in: settings.view).performClick(nil)
+		settings.automaticallyFitsContent=true
+		settings.show(.about)
+		expect(waitUntil{abs(window.contentView!.bounds.height-compact)<1}, "Switching to a smaller Settings page must automatically shrink the window")
+		settings.show(.general)
+		expect(waitUntil{window.contentView!.bounds.height>compact}, "Switching to a larger Settings page must automatically grow the window")
+		let stable=window.frame
+		settings.fitWindowToContent()
+		expect(window.frame==stable, "Repeated Settings layout must not make the window jump")
+		settings.automaticallyFitsContent=false
+		settings.show(.updates)
+		settings.updateUpdates(frequency: .weekly, checking: false, currentVersion: "1.1.2", availableRelease: nil, status: "")
+		settings.fitWindowToContent()
+		let scroll=visible(settings.view).compactMap {$0 as? NSScrollView}.first!
+		let gap=scroll.contentView.bounds.height-scroll.documentView!.fittingSize.height
+		expect(gap>=(-1) && gap<=1, "Updates must fit its card without blank space below it: \(gap)")
+		expect(window.contentView!.bounds.height<500, "Updates must not retain the old 500-point minimum height")
+		snapshot(window, "settings-updates-fitted")
+	}
+
 	static func testDynamicWindowHeight(){
 		let main=MainWindowViewController()
 		let service=FakeSendingService()
 		main.sendController.sender.service=service
 		let screen=NSScreen.main!.visibleFrame
-		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: MainWindowViewController.windowStyle, backing: .buffered, defer: false)
 		window.contentViewController=main
 		window.setFrameTopLeftPoint(NSPoint(x: screen.minX+20, y: screen.maxY-20))
 		main.update(receiving: true, transfers: [])
+		window.setContentSize(NSSize(width: 760, height: MainWindowViewController.defaultSize.height))
 		main.fitWindowToContent(visibleFrame: screen)
+		expect(window.contentView!.bounds.width==MainWindowViewController.defaultSize.width, "Main window auto-sizing must restore a fixed width even after an old wider frame is restored")
 		let readyHeight=window.contentView!.bounds.height
 		expect(readyHeight<600 && readyHeight>=MainWindowViewController.minimumSize.height, "Receive must start compact, not at the old fixed 680-point height: \(readyHeight)")
 		let top=window.frame.maxY
@@ -789,6 +854,10 @@ struct UISmokeTests{
 		expect(window.contentView!.bounds.height>emptySendHeight, "Selecting a file must grow the window to fit recipient controls")
 		let qr=button("Connect with QR code…", in: main.view)
 		expect(main.view.bounds.contains(qr.convert(qr.bounds, to: main.view)), "The send actions must fit without scrolling on a screen with enough room")
+		let senderView=main.sendController.sender.view
+		let qrFrame=qr.convert(qr.bounds, to: senderView)
+		let bottomGap=senderView.isFlipped ? senderView.bounds.maxY-qrFrame.maxY : qrFrame.minY-senderView.bounds.minY
+		expect(bottomGap<=2, "The QR action must sit at the bottom of its content, without extra blank space below it: \(bottomGap)")
 		let sendScroll=main.sendController.view.subviews.compactMap {$0 as? NSScrollView}.first!
 		expect(sendScroll.documentView!.bounds.height<=sendScroll.contentView.bounds.height+1, "Auto-fit must show the full Send content when the screen has room")
 		_ = main.sendController.selectItems(Array(files.prefix(5)))
@@ -808,6 +877,8 @@ struct UISmokeTests{
 		expect(main.view.bounds.contains(accept.convert(accept.bounds, to: main.view)), "Auto-fitting must expose incoming approval controls")
 		let history=(0..<20).map {transfer("fit-\($0)", .completed)}
 		main.update(receiving: true, transfers: history)
+		main.fitWindowToContent(visibleFrame: screen)
+		expect(window.contentView!.bounds.height<=MainWindowViewController.maximumSize.height && window.contentView!.bounds.width<=MainWindowViewController.maximumSize.width, "Auto-fitting long history must respect both maximum window dimensions")
 		main.fitWindowToContent(visibleFrame: compactScreen)
 		expect(compactScreen.contains(window.frame), "Long history must not grow the window past the screen")
 		main.update(receiving: true, transfers: [])
@@ -1269,6 +1340,11 @@ struct UISmokeTests{
 		expect(descendants(list).compactMap {$0 as? NSImageView}.count==2, "Each listed item must have a file icon")
 		layout(window)
 		expect(listedNames().allSatisfy {$0.bounds.width>0 && $0.bounds.height>0}, "Every selected-item row must have a usable layout")
+		let senderView=main.sendController.sender.view
+		let qr=button("Connect with QR code…", in: senderView)
+		let qrFrame=qr.convert(qr.bounds, to: senderView)
+		let bottomGap=senderView.isFlipped ? senderView.bounds.maxY-qrFrame.maxY : qrFrame.minY-senderView.bounds.minY
+		expect(bottomGap<=2, "Even with extra window height, the QR button must not have a blank area below it: \(bottomGap)")
 		snapshot(window, "send-selected-items")
 		expect(descendants(main.view).compactMap({$0 as? SendDropView}).count==1, "Send must not introduce a nested drag target that limits the overlay to its card")
 		main.showReceive()

@@ -64,6 +64,19 @@ enum WindowUI{
 		return spacer
 	}
 
+	static func constrainWindow(_ window:NSWindow, minimum:NSSize, maximum:NSSize, visibleFrame:NSRect?=nil, preferredWidth:CGFloat?=nil){
+		let screen=visibleFrame ?? window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
+		let available=window.contentRect(forFrameRect: screen).size
+		window.contentMaxSize=NSSize(width: min(maximum.width,available.width), height: min(maximum.height,available.height))
+		window.contentMinSize=NSSize(width: min(minimum.width,window.contentMaxSize.width), height: min(minimum.height,window.contentMaxSize.height))
+		let size=window.contentRect(forFrameRect: window.frame).size
+		let clamped=NSSize(width: min(window.contentMaxSize.width,max(window.contentMinSize.width,preferredWidth ?? size.width)), height: min(window.contentMaxSize.height,max(window.contentMinSize.height,size.height)))
+		var frame=window.frameRect(forContentRect: NSRect(origin: .zero, size: clamped))
+		frame.origin.x=max(screen.minX,min(window.frame.minX,screen.maxX-frame.width))
+		frame.origin.y=max(screen.minY,min(window.frame.maxY,screen.maxY)-frame.height)
+		if window.frame != frame{window.setFrame(frame, display: window.isVisible)}
+	}
+
 	static func symbol(_ name:String, description:String) -> NSImageView{
 		let image:NSImage?
 		if #available(macOS 11.0, *){
@@ -282,8 +295,10 @@ private final class TransferRowView:CardView{
 
 final class MainWindowViewController:NSViewController{
 	private enum Tab:Int{case send, receive}
+	static let windowStyle:NSWindow.StyleMask = [.titled,.closable,.miniaturizable]
 	static let defaultSize=NSSize(width: 620, height: 420)
 	static let minimumSize=NSSize(width: 520, height: 380)
+	static let maximumSize=NSSize(width: 800, height: 800)
 	let sendController=SendViewController()
 	var automaticallyFitsContent=false{didSet{scheduleWindowFit()}}
 	private let content=WindowUI.stack(spacing: 16)
@@ -499,11 +514,12 @@ final class MainWindowViewController:NSViewController{
 		}
 	}
 	/// Measure wrapped content at the current width. History and long lists can
-	/// scroll once the screen limit is reached; the title bar stays in place.
+	/// scroll once the window or screen limit is reached; the title bar stays in place.
 	func fitWindowToContent(visibleFrame:NSRect?=nil){
 		guard let window=view.window, !window.inLiveResize, !window.styleMask.contains(.fullScreen), window.attachedSheet==nil, !fittingWindow else{return}
 		fittingWindow=true
 		defer{fittingWindow=false}
+		WindowUI.constrainWindow(window, minimum: Self.minimumSize, maximum: Self.maximumSize, visibleFrame: visibleFrame, preferredWidth: Self.defaultSize.width)
 		view.layoutSubtreeIfNeeded()
 		let chrome=content.arrangedSubviews.filter {$0 !== tabHost}.reduce(CGFloat(40)+CGFloat(content.arrangedSubviews.count-1)*content.spacing) {$0+$1.fittingSize.height}
 		let tabHeight:CGFloat
@@ -513,10 +529,9 @@ final class MainWindowViewController:NSViewController{
 			tabHeight=(receiveContent.arrangedSubviews.first?.fittingSize.height ?? 0)+receiveContent.spacing+max(64,rows.fittingSize.height)
 		}
 		let screen=visibleFrame ?? window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
-		let maxHeight=window.contentRect(forFrameRect: screen).height
-		window.contentMinSize=NSSize(width: min(Self.minimumSize.width,screen.width), height: min(Self.minimumSize.height,maxHeight))
+		let maxHeight=window.contentMaxSize.height
 		let height=min(maxHeight,max(window.contentMinSize.height,ceil(chrome+tabHeight)))
-		var frame=window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: min(view.bounds.width,screen.width), height: height))
+		var frame=window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: min(view.bounds.width,window.contentMaxSize.width), height: height))
 		frame.origin.x=max(screen.minX,min(window.frame.minX,screen.maxX-frame.width))
 		frame.origin.y=max(screen.minY,min(window.frame.maxY,screen.maxY)-frame.height)
 		if abs(frame.height-window.frame.height)>0.5 || abs(frame.width-window.frame.width)>0.5 || frame.origin != window.frame.origin{
@@ -636,8 +651,14 @@ final class MainWindowViewController:NSViewController{
 
 final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	enum Section:Int{case general, updates, about}
+	static let windowStyle:NSWindow.StyleMask = [.titled,.closable]
 	static let defaultSize=NSSize(width: 620, height: 600)
-	static let minimumSize=NSSize(width: 520, height: 500)
+	static let minimumSize=NSSize(width: 520, height: 280)
+	static let maximumSize=NSSize(width: 800, height: 800)
+	var automaticallyFitsContent=false{didSet{scheduleWindowFit()}}
+	private let content=WindowUI.stack(spacing: 16)
+	private var windowFitScheduled=false
+	private var fittingWindow=false
 	private(set) var selectedSection:Section = .general
 	private let sections=NSSegmentedControl(labels: [NSLocalizedString("GeneralSettings", value: "General", comment: ""),NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""),NSLocalizedString("AboutSettings", value: "About", comment: "")], trackingMode: .selectOne, target: nil, action: nil)
 	private let pages=NSTabView()
@@ -687,7 +708,6 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		view=WindowBackgroundView(frame: NSRect(origin: .zero, size: Self.defaultSize))
 		view.wantsLayer=true
 		(view as? WindowBackgroundView)?.backgroundStyle = .soft
-		let content=WindowUI.stack(spacing: 16)
 		WindowUI.pin(content, to: view, inset: 20)
 		let header=WindowUI.stack(.horizontal, spacing: 10)
 		let brand=NSImageView(image: NSImage(named: "QuickShareMacBrandIcon") ?? NSApp.applicationIconImage)
@@ -702,6 +722,12 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		titles.addArrangedSubview(WindowUI.label(NSLocalizedString("SettingsHeading", value: "Settings", comment: ""), size: 11, secondary: true))
 		header.addArrangedSubview(titles)
 		header.addArrangedSubview(WindowUI.spacer())
+		let reset=NSButton(title: NSLocalizedString("ResetToDefaults", value: "Reset to defaults…", comment: ""), target: self, action: #selector(resetToDefaults(_:)))
+		reset.identifier=NSUserInterfaceItemIdentifier("ResetSettingsDefaults")
+		styleButton(reset)
+		reset.image=NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: nil)
+		reset.imagePosition = .imageLeading
+		header.addArrangedSubview(reset)
 		WindowUI.fill(header, in: content)
 		sections.identifier=NSUserInterfaceItemIdentifier("SettingsSections")
 		sections.segmentStyle = .smallSquare
@@ -723,7 +749,6 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		pages.tabViewType = .noTabsNoBorder
 		pages.drawsBackground=false
 		pages.setContentHuggingPriority(.defaultLow, for: .vertical)
-		pages.heightAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive=true
 		WindowUI.fill(pages, in: content)
 		let developerCredit=WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true)
 		developerCredit.identifier=NSUserInterfaceItemIdentifier("DeveloperCreditFooter")
@@ -826,12 +851,6 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		compressFoldersButton.action=#selector(compressFoldersChanged(_:))
 		sending.addArrangedSubview(compressFoldersButton)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("CompressFoldersExplanation", value: "Applies to folders chosen, dropped, or shared from Finder. When off, files are sent directly with folder paths; folder layout depends on the receiver, and empty subfolders are omitted. Changes apply to your next selection.", comment: ""), size: 11, secondary: true), in: sending)
-		let reset=NSButton(title: NSLocalizedString("ResetToDefaults", value: "Reset to defaults…", comment: ""), target: self, action: #selector(resetToDefaults(_:)))
-		styleButton(reset)
-		reset.image=NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: nil)
-		reset.imagePosition = .imageLeading
-		general.addArrangedSubview(reset)
-
 		let updatePage=page(.updates)
 		let updates=card(NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""), symbol: "arrow.triangle.2.circlepath", in: updatePage)
 		WindowUI.fill(updateVersionLabel, in: updates)
@@ -885,6 +904,42 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		pages.selectTabViewItem(at: selectedSection.rawValue)
 	}
 
+	override func viewDidAppear(){
+		super.viewDidAppear()
+		NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeScreenNotification, object: nil)
+		NotificationCenter.default.addObserver(self, selector: #selector(windowGeometryChanged(_:)), name: NSWindow.didChangeScreenNotification, object: view.window)
+		scheduleWindowFit()
+	}
+	override func viewDidLayout(){super.viewDidLayout(); scheduleWindowFit()}
+	@objc private func windowGeometryChanged(_ notification:Notification){scheduleWindowFit()}
+	private func scheduleWindowFit(){
+		guard automaticallyFitsContent, !windowFitScheduled, !fittingWindow else{return}
+		windowFitScheduled=true
+		DispatchQueue.main.async{ [weak self] in
+			guard let self=self else{return}
+			self.windowFitScheduled=false
+			if self.automaticallyFitsContent{self.fitWindowToContent()}
+		}
+	}
+	func fitWindowToContent(visibleFrame:NSRect?=nil){
+		guard let window=view.window, window.attachedSheet==nil, !fittingWindow else{return}
+		fittingWindow=true
+		defer{fittingWindow=false}
+		WindowUI.constrainWindow(window, minimum: Self.minimumSize, maximum: Self.maximumSize, visibleFrame: visibleFrame, preferredWidth: Self.defaultSize.width)
+		view.layoutSubtreeIfNeeded()
+		guard let scroll=pages.selectedTabViewItem?.view as? NSScrollView, let document=scroll.documentView else{return}
+		let chrome=content.arrangedSubviews.filter {$0 !== pages}.reduce(CGFloat(40)+CGFloat(content.arrangedSubviews.count-1)*content.spacing) {$0+$1.fittingSize.height}
+		let height=min(window.contentMaxSize.height,max(window.contentMinSize.height,ceil(chrome+document.fittingSize.height)))
+		let screen=visibleFrame ?? window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
+		var frame=window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: view.bounds.width, height: height))
+		frame.origin.x=max(screen.minX,min(window.frame.minX,screen.maxX-frame.width))
+		frame.origin.y=max(screen.minY,min(window.frame.maxY,screen.maxY)-frame.height)
+		if abs(frame.height-window.frame.height)>0.5 || frame.origin != window.frame.origin{
+			window.setFrame(frame, display: window.isVisible)
+			view.layoutSubtreeIfNeeded()
+		}
+	}
+
 	private func page(_ section:Section)->NSStackView{
 		let scroll=NSScrollView()
 		scroll.drawsBackground=false
@@ -929,6 +984,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		selectedSection=section
 		sections.selectedSegment=section.rawValue
 		pages.selectTabViewItem(at: section.rawValue)
+		scheduleWindowFit()
 	}
 	@objc private func sectionChanged(_ sender:NSSegmentedControl){
 		if let section=Section(rawValue: sender.selectedSegment){show(section)}
@@ -954,6 +1010,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		receivedFilesFolderLabel.stringValue=receivedFilesFolderName
 		receivedFilesFolderLabel.toolTip=receivedFilesFolderName
 		useDownloadsButton.isHidden = !receivedFilesFolderIsCustom
+		scheduleWindowFit()
 	}
 
 	@objc private func startReceivingChanged(_ sender:NSButton){onStartReceivingOnLaunchChange?(sender.state == .on)}
@@ -981,6 +1038,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		viewReleaseButton.isHidden=availableRelease==nil
 		updateStatusLabel.stringValue=status
 		updateStatusLabel.isHidden=status.isEmpty
+		scheduleWindowFit()
 	}
 	@objc private func updateFrequencyChanged(_ sender:NSPopUpButton){
 		if let value=sender.selectedItem?.representedObject as? String, let frequency=UpdateCheckFrequency(rawValue: value){onUpdateCheckFrequencyChange?(frequency)}
@@ -1008,6 +1066,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		updateNameControls()
 	}
 	private func updateNameControls(){
+		defer{scheduleWindowFit()}
 		currentNameLabel.stringValue=savedCustomName ?? systemDeviceName
 		currentNameLabel.toolTip=currentNameLabel.stringValue
 		resetNameButton.isEnabled=savedCustomName != nil

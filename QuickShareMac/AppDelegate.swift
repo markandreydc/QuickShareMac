@@ -99,7 +99,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		if let statusItem=statusItem{statusMenu.attach(to: statusItem)}
 		statusItem?.behavior = .removalAllowed
 		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize),
-							styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+							styleMask: MainWindowViewController.windowStyle, backing: .buffered, defer: false)
 		window.title="QuickShareMac"
 		window.titleVisibility = .hidden
 		window.titlebarAppearsTransparent=true
@@ -108,6 +108,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		window.contentMinSize=MainWindowViewController.minimumSize
 		window.setFrameAutosaveName("QuickShareMacMainWindow")
 		if !window.setFrameUsingName("QuickShareMacMainWindow"){window.center()}
+		WindowUI.constrainWindow(window, minimum: MainWindowViewController.minimumSize, maximum: MainWindowViewController.maximumSize, preferredWidth: MainWindowViewController.defaultSize.width)
 		windowController.automaticallyFitsContent=true
 		windowController.setAlwaysOnTop(UserDefaults.standard.bool(forKey: "AlwaysOnTop"))
 		windowController.setCompressFolders(SendPreferences.compressFolders())
@@ -330,7 +331,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 
 	@objc private func showSettings(_ sender:Any?){
 		if settingsWindow==nil{
-			let window=NSWindow(contentRect: NSRect(origin: .zero, size: SettingsViewController.defaultSize), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+			let window=NSWindow(contentRect: NSRect(origin: .zero, size: SettingsViewController.defaultSize), styleMask: SettingsViewController.windowStyle, backing: .buffered, defer: false)
 			window.contentMinSize=SettingsViewController.minimumSize
 			window.title=NSLocalizedString("SettingsTitle", value: "QuickShareMac Settings", comment: "")
 			window.titleVisibility = .hidden
@@ -338,9 +339,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			window.contentViewController=settingsController
 			window.isReleasedWhenClosed=false
 			window.center()
+			WindowUI.constrainWindow(window, minimum: SettingsViewController.minimumSize, maximum: SettingsViewController.maximumSize)
 			settingsWindow=window
+			settingsController.automaticallyFitsContent=true
 		}
 		refreshWindow()
+		settingsController.fitWindowToContent()
 		settingsWindow?.makeKeyAndOrderFront(sender)
 		NSApplication.shared.activate(ignoringOtherApps: true)
 	}
