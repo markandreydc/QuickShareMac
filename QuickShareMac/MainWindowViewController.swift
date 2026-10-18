@@ -265,8 +265,8 @@ private final class TransferRowView:CardView{
 
 final class MainWindowViewController:NSViewController{
 	private enum Tab:Int{case send, receive}
-	static let defaultSize=NSSize(width: 620, height: 500)
-	static let minimumSize=NSSize(width: 520, height: 460)
+	static let defaultSize=NSSize(width: 620, height: 420)
+	static let minimumSize=NSSize(width: 520, height: 380)
 	let sendController=SendViewController()
 	var automaticallyFitsContent=false{didSet{scheduleWindowFit()}}
 	private let content=WindowUI.stack(spacing: 16)
@@ -297,9 +297,8 @@ final class MainWindowViewController:NSViewController{
 	private let approvalStack=WindowUI.stack(spacing: 8)
 	private let scrollView=NSScrollView()
 	private let rows=WindowUI.stack(spacing: 12)
-	private let empty=WindowUI.stack(spacing: 10)
-	private let emptyTitle=WindowUI.label("", size: 16, weight: .semibold)
-	private let emptyDetail=WindowUI.label("", secondary: true)
+	private let empty=WindowUI.stack(.horizontal, spacing: 10)
+	private let emptyDetail=WindowUI.label("", size: 12, secondary: true)
 	private let enableButton=NSButton(title: NSLocalizedString("EnableReceiving", value: "Enable receiving", comment: ""), target: nil, action: nil)
 	private var transferRows:[String:TransferRowView]=[:]
 	private var listKeys:[String]=[]
@@ -436,24 +435,23 @@ final class MainWindowViewController:NSViewController{
 		WindowUI.pin(rows, to: document, inset: 0)
 		document.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor).isActive=true
 		WindowUI.fill(scrollView, in: receiveContent)
-		scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive=true
+		scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 64).isActive=true
 
-		empty.alignment = .centerX
+		empty.identifier=NSUserInterfaceItemIdentifier("ReceiveIdleInstructions")
 		let symbol=WindowUI.symbol("tray.and.arrow.down", description: NSLocalizedString("IncomingTransfers", value: "Incoming transfers", comment: ""))
-		symbol.contentTintColor = .secondaryLabelColor
-		NSLayoutConstraint.activate([symbol.widthAnchor.constraint(equalToConstant: 40), symbol.heightAnchor.constraint(equalToConstant: 40)])
+		symbol.contentTintColor = .systemBlue
+		NSLayoutConstraint.activate([symbol.widthAnchor.constraint(equalToConstant: 24), symbol.heightAnchor.constraint(equalToConstant: 24)])
 		empty.addArrangedSubview(symbol)
-		emptyTitle.alignment = .center
-		emptyDetail.alignment = .center
-		WindowUI.fill(emptyTitle, in: empty)
-		WindowUI.fill(emptyDetail, in: empty)
+		emptyDetail.identifier=NSUserInterfaceItemIdentifier("ReceiveInstructions")
+		emptyDetail.alignment = .left
+		empty.addArrangedSubview(emptyDetail)
 		enableButton.bezelStyle = .regularSquare
 		if #available(macOS 26.0, *){enableButton.borderShape = .roundedRectangle}
 		enableButton.bezelColor = .systemBlue
 		enableButton.target=self
 		enableButton.action=#selector(enableReceiving(_:))
 		empty.addArrangedSubview(enableButton)
-		empty.edgeInsets=NSEdgeInsets(top: 24, left: 12, bottom: 24, right: 12)
+		empty.edgeInsets=NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
 		recentHeading.addArrangedSubview(WindowUI.label(NSLocalizedString("RecentTransfers", value: "Recent transfers · this session", comment: ""), size: 13, weight: .semibold))
 		recentHeading.addArrangedSubview(WindowUI.spacer())
 		let clear=NSButton(title: NSLocalizedString("ClearRecent", value: "Clear", comment: ""), target: self, action: #selector(clearRecent(_:)))
@@ -494,7 +492,7 @@ final class MainWindowViewController:NSViewController{
 		if tabs.selectedSegment==Tab.send.rawValue{
 			tabHeight=sendController.contentHeight
 		}else{
-			tabHeight=(receiveContent.arrangedSubviews.first?.fittingSize.height ?? 0)+receiveContent.spacing+max(80,rows.fittingSize.height)
+			tabHeight=(receiveContent.arrangedSubviews.first?.fittingSize.height ?? 0)+receiveContent.spacing+max(64,rows.fittingSize.height)
 		}
 		let screen=visibleFrame ?? window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
 		let maxHeight=window.contentRect(forFrameRect: screen).height
@@ -578,7 +576,6 @@ final class MainWindowViewController:NSViewController{
 			row.update(transfer)
 			transferRows[transfer.id]=row
 		}
-		emptyTitle.stringValue=receiving ? NSLocalizedString("ReadyToReceive", value: "Ready to receive", comment: "") : NSLocalizedString("ReceivingOff", value: "Receiving off", comment: "")
 		emptyDetail.stringValue=receiving ? String(format: NSLocalizedString("ReceiveInstructions", value: "Open Quick Share on your Android device and choose “%@”.\nBoth devices must be on the same Wi-Fi network.", comment: ""), deviceName) : NSLocalizedString("EnableReceivingHint", value: "Enable receiving to let nearby devices send files to this Mac.", comment: "")
 		enableButton.isHidden=receiving
 		var desired:[(String,NSView)]=[]

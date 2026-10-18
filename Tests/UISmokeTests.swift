@@ -534,6 +534,7 @@ struct UISmokeTests{
 		testSettingsDefaults()
 		testDynamicWindowHeight()
 		testMainWindowAppearance()
+		testCompactReceiveInstructions()
 		print("Passed \(checks) UI smoke checks")
 	}
 
@@ -577,6 +578,38 @@ struct UISmokeTests{
 			snapshot(window, "window-send-\(name)")
 		}
 		expect(colors[0] != colors[1], "Card colors must resolve separately for light and dark appearances")
+	}
+
+	static func testCompactReceiveInstructions(){
+		let main=MainWindowViewController()
+		main.sendController.sender.service=FakeSendingService()
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		window.contentViewController=main
+		for appearance in [NSAppearance.Name.aqua,.darkAqua]{
+			main.view.appearance=NSAppearance(named: appearance)
+			for width in [MainWindowViewController.minimumSize.width,MainWindowViewController.defaultSize.width]{
+				window.setContentSize(NSSize(width: width, height: 500))
+				main.update(receiving: true, transfers: [], deviceName: "Studio Mac")
+				main.fitWindowToContent()
+				layout(window)
+				let labels=visible(main.view).compactMap {$0 as? NSTextField}
+				let row=visible(main.view).first {$0.identifier?.rawValue=="ReceiveIdleInstructions"}!
+				let instructions=labels.first {$0.identifier?.rawValue=="ReceiveInstructions"}!
+				expect(labels.filter {$0.stringValue=="Ready to receive"}.count==1, "The Receive tab must show Ready to receive only once")
+				expect(labels.filter {$0.stringValue.contains("choose “Studio Mac”")}.count==1 && instructions.font?.pointSize==12, "Receive instructions must appear once with compact, readable typography")
+				expect(row.bounds.height<=64 && instructions.alignment == .left, "Receive guidance must use a compact horizontal row rather than a large centered empty state")
+				expect(window.contentView!.bounds.height<=400 && main.view.bounds.contains(row.convert(row.bounds, to: main.view)), "The idle Receive window must fit its compact instructions without clipping")
+			}
+		}
+		main.update(receiving: false, transfers: [])
+		main.fitWindowToContent()
+		var enabled=false
+		main.onReceivingChange={enabled=$0}
+		button("Enable receiving", in: main.view).performClick(nil)
+		expect(enabled, "Compacting the paused state must preserve the Enable receiving action")
+		main.update(receiving: true, transfers: [transfer("compact-request", .awaitingApproval)])
+		main.fitWindowToContent()
+		expect(!visible(main.view).contains {$0.identifier?.rawValue=="ReceiveIdleInstructions"} && button("Accept", in: main.view).isEnabled, "Incoming requests must replace the compact idle guidance with approval controls")
 	}
 
 	static func testSettingsDefaults(){
@@ -636,7 +669,7 @@ struct UISmokeTests{
 		main.showSend()
 		main.fitWindowToContent(visibleFrame: screen)
 		let emptySendHeight=window.contentView!.bounds.height
-		expect(emptySendHeight<=readyHeight && abs(window.frame.maxY-top)<1, "An empty Send tab must shrink while preserving the title-bar position")
+		expect(emptySendHeight<500 && emptySendHeight>=MainWindowViewController.minimumSize.height && abs(window.frame.maxY-top)<1, "An empty Send tab must stay compact while preserving the title-bar position")
 		let directory=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-fit-tests-\(UUID().uuidString)")
 		try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 		defer{main.sendController.sender.shutdown(); try? FileManager.default.removeItem(at: directory)}

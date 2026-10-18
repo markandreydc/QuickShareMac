@@ -43,7 +43,10 @@ children, skipped symbolic links, empty-folder errors, retries that gather files
 again, and replacement/shutdown isolation from late enumeration callbacks.
 Scroll checks verify that approval controls remain reachable in a constrained
 window, and that a new approval request scrolls back to the
-top. The upper-right pin button is tested for direct one-click Always on top control,
+top. Compact Receive checks ensure the status heading and device-specific
+instructions appear only once, the instruction row fits at narrow widths in both
+appearances, and enabling receiving and reviewing incoming requests remain usable.
+The upper-right pin button is tested for direct one-click Always on top control,
 normal/floating window levels, toggle state, blue highlighting, tooltips, tab-switch
 persistence, restored state, and leaving other windows unaffected. Header checks cover Settings
 wiring, the unchanged brand artwork in a compact upper-left header, smaller title
