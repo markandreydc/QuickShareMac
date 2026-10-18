@@ -660,9 +660,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	private let updateVersionLabel=WindowUI.label("", size: 12, secondary: true)
 	private let updateStatusLabel=WindowUI.label("", size: 11, secondary: true)
 	private let nameField=NSTextField(string: "")
-	private let systemNameButton=NSButton(radioButtonWithTitle: NSLocalizedString("UseMacName", value: "Use Mac’s name", comment: ""), target: nil, action: nil)
-	private let customNameButton=NSButton(radioButtonWithTitle: NSLocalizedString("UseCustomDeviceName", value: "Use a custom name", comment: ""), target: nil, action: nil)
-	private let systemNameLabel=WindowUI.label("", size: 12, secondary: true)
+	private let resetNameButton=NSButton(title: "", target: nil, action: nil)
 	private let nameMessage=WindowUI.label("", size: 11, secondary: true)
 	private let saveNameButton=NSButton(title: NSLocalizedString("SaveDeviceNameChanges", value: "Save changes", comment: ""), target: nil, action: nil)
 	private let cancelNameButton=NSButton(title: NSLocalizedString("Cancel", value: "Cancel", comment: ""), target: nil, action: nil)
@@ -671,7 +669,6 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	private let nameEditor=WindowUI.stack(spacing: 8)
 	private var savedCustomName:String?
 	private var systemDeviceName=LocalDeviceIdentity.shared.systemDeviceName
-	private var usesCustomName=false
 	private var editingName=false
 	private var showNameValidation=false
 	private var nameSaveError:String?
@@ -736,7 +733,17 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		developerCredit.setContentCompressionResistancePriority(.required, for: .vertical)
 		WindowUI.fill(developerCredit, in: content)
 		let general=page(.general)
-		let device=card(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""), symbol: "desktopcomputer", in: general)
+		resetNameButton.identifier=NSUserInterfaceItemIdentifier("ResetDeviceName")
+		resetNameButton.target=self
+		resetNameButton.action=#selector(resetDeviceName(_:))
+		resetNameButton.toolTip=NSLocalizedString("ResetDeviceName", value: "Reset to Mac’s name", comment: "")
+		if #available(macOS 11.0, *){
+			resetNameButton.image=NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: resetNameButton.toolTip)
+			resetNameButton.imagePosition = .imageOnly
+		}
+		styleButton(resetNameButton)
+		resetNameButton.controlSize = .small
+		let device=card(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""), symbol: "desktopcomputer", in: general, accessory: resetNameButton)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("DeviceNameExplanation", value: "Shown to nearby devices. Your Mac’s system name is unchanged.", comment: ""), size: 12, secondary: true), in: device)
 		let nameRow=WindowUI.stack(.horizontal)
 		currentNameLabel.identifier=NSUserInterfaceItemIdentifier("CurrentDeviceName")
@@ -758,14 +765,6 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		WindowUI.fill(nameRow, in: device)
 		nameMessage.identifier=NSUserInterfaceItemIdentifier("DeviceNameMessage")
 		WindowUI.fill(nameMessage, in: device)
-		for button in [systemNameButton,customNameButton]{
-			button.target=self
-			button.action=#selector(nameModeChanged(_:))
-		}
-		nameEditor.addArrangedSubview(systemNameButton)
-		systemNameLabel.identifier=NSUserInterfaceItemIdentifier("SystemDeviceName")
-		WindowUI.fill(systemNameLabel, in: nameEditor)
-		nameEditor.addArrangedSubview(customNameButton)
 		nameField.identifier=NSUserInterfaceItemIdentifier("CustomDeviceName")
 		nameField.setAccessibilityLabel(NSLocalizedString("CustomDeviceNameLabel", value: "Custom device name", comment: ""))
 		nameField.placeholderString=NSLocalizedString("EnterDeviceName", value: "Enter a device name", comment: "")
@@ -907,7 +906,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		pages.addTabViewItem(item)
 		return content
 	}
-	private func card(_ title:String, symbol:String, in parent:NSStackView)->NSStackView{
+	private func card(_ title:String, symbol:String, in parent:NSStackView, accessory:NSView? = nil)->NSStackView{
 		let card=CardView()
 		card.wantsLayer=true
 		card.usesSoftAppearance=true
@@ -920,6 +919,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		heading.addArrangedSubview(icon)
 		heading.addArrangedSubview(WindowUI.label(title, size: 14, weight: .semibold))
 		heading.addArrangedSubview(WindowUI.spacer())
+		if let accessory{heading.addArrangedSubview(accessory)}
 		WindowUI.fill(heading, in: content)
 		WindowUI.fill(card, in: parent)
 		return content
@@ -945,10 +945,9 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		let savedNameChanged=savedCustomName != customDeviceName
 		savedCustomName=customDeviceName
 		self.systemDeviceName=systemDeviceName
-		systemNameLabel.stringValue=systemDeviceName
 		if savedNameChanged && !hadNameDraft && !savingName{resetNameDraft()}
 		else{
-			if !usesCustomName && !hadNameDraft{nameField.stringValue=systemDeviceName}
+			if !hadNameDraft{nameField.stringValue=savedCustomName ?? systemDeviceName}
 			updateNameControls()
 		}
 		startReceivingButton.state=startReceivingOnLaunch ? .on : .off
@@ -999,7 +998,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	@objc private func chooseReceivedFilesFolder(_ sender:NSButton){onChooseReceivedFilesFolder?()}
 	@objc private func useDownloadsFolder(_ sender:NSButton){onUseDownloadsFolder?()}
 	private var hasNameDraftChanges:Bool{
-		usesCustomName != (savedCustomName != nil) || (usesCustomName && nameField.stringValue != savedCustomName)
+		nameField.stringValue != (savedCustomName ?? systemDeviceName)
 	}
 	private func clearNameFeedback(){
 		nameConfirmation?.cancel()
@@ -1008,24 +1007,21 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	}
 	private func resetNameDraft(){
 		clearNameFeedback()
-		usesCustomName=savedCustomName != nil
 		nameField.stringValue=savedCustomName ?? systemDeviceName
-		systemNameLabel.stringValue=systemDeviceName
 		showNameValidation=false
 		editingName=false
 		updateNameControls()
 	}
 	private func updateNameControls(){
-		systemNameButton.state=usesCustomName ? .off : .on
-		customNameButton.state=usesCustomName ? .on : .off
 		currentNameLabel.stringValue=savedCustomName ?? systemDeviceName
 		currentNameLabel.toolTip=currentNameLabel.stringValue
-		nameField.isHidden = !usesCustomName
+		resetNameButton.isEnabled=savedCustomName != nil
+		nameField.isHidden = !editingName
 		let validated=try? LocalDeviceIdentity.validate(nameField.stringValue)
-		let valid = !usesCustomName || validated != nil
-		let candidate=usesCustomName ? validated : nil
 		let dirty=hasNameDraftChanges
-		saveNameButton.isEnabled=valid && candidate != savedCustomName
+		// Save stays disabled for blank, invalid, or redundant names. Typing the
+		// Mac's system name is redundant too; Reset is the way back to it.
+		saveNameButton.isEnabled=validated != nil && validated != savedCustomName && validated != systemDeviceName
 		cancelNameButton.isEnabled=dirty
 		nameEditor.isHidden = !editingName
 		// Once something changed, Save changes takes the Done button's place
@@ -1042,10 +1038,10 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		}else if nameConfirmation != nil && !editingName{
 			nameMessage.stringValue=NSLocalizedString("DeviceNameUpdated", value: "Device name updated.", comment: "")
 			nameMessage.isHidden=false
-		}else if editingName && usesCustomName && nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty{
-			nameMessage.stringValue=NSLocalizedString("CustomDeviceNameGuidance", value: "Enter a name or select Use Mac’s name.", comment: "")
+		}else if editingName && nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty{
+			nameMessage.stringValue=NSLocalizedString("CustomDeviceNameGuidance", value: "Enter a device name.", comment: "")
 			nameMessage.isHidden=false
-		}else if editingName && usesCustomName && !valid && showNameValidation{
+		}else if editingName && validated == nil && showNameValidation{
 			nameMessage.isHidden=false
 			do{_ = try LocalDeviceIdentity.validate(nameField.stringValue)}
 			catch{nameMessage.stringValue=error.localizedDescription; nameMessage.textColor = .systemRed}
@@ -1059,22 +1055,9 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 			clearNameFeedback()
 			editingName=true
 			updateNameControls()
-			if usesCustomName{
-				view.window?.makeFirstResponder(nameField)
-				nameField.currentEditor()?.selectAll(nil)
-			}
+			view.window?.makeFirstResponder(nameField)
+			nameField.currentEditor()?.selectAll(nil)
 		}
-	}
-	@objc private func nameModeChanged(_ sender:NSButton){
-		let selectedCustom=sender === customNameButton
-		guard selectedCustom != usesCustomName else {return}
-		view.window?.makeFirstResponder(nil)
-		clearNameFeedback()
-		usesCustomName=selectedCustom
-		if usesCustomName && nameField.stringValue.isEmpty{nameField.stringValue=savedCustomName ?? systemDeviceName}
-		showNameValidation=false
-		updateNameControls()
-		if usesCustomName{view.window?.makeFirstResponder(nameField)}
 	}
 	func controlTextDidChange(_ notification:Notification){
 		guard notification.object as? NSTextField === nameField, !savingName else {return}
@@ -1098,20 +1081,37 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		defer{savingName=false}
 		clearNameFeedback()
 		do{
-			let name=usesCustomName ? try LocalDeviceIdentity.validate(nameField.stringValue) : nil
-			guard name != savedCustomName else {return}
+			let name=try LocalDeviceIdentity.validate(nameField.stringValue)
+			guard name != savedCustomName, name != systemDeviceName else {return}
 			try onDeviceNameChange?(name)
 			savedCustomName=name
 			view.window?.makeFirstResponder(nil)
 			resetNameDraft()
-			let confirmation=DispatchWorkItem { [weak self] in
-				self?.nameConfirmation=nil
-				self?.updateNameControls()
-			}
-			nameConfirmation=confirmation
-			DispatchQueue.main.asyncAfter(deadline: .now()+3, execute: confirmation)
+			scheduleNameConfirmation()
 		}catch{nameSaveError=error.localizedDescription}
 		updateNameControls()
+	}
+	@objc private func resetDeviceName(_ sender:NSButton){
+		guard !savingName, savedCustomName != nil else {return}
+		savingName=true
+		defer{savingName=false}
+		view.window?.makeFirstResponder(nil)
+		clearNameFeedback()
+		do{
+			try onDeviceNameChange?(nil)
+			savedCustomName=nil
+			resetNameDraft()
+			scheduleNameConfirmation()
+		}catch{nameSaveError=error.localizedDescription}
+		updateNameControls()
+	}
+	private func scheduleNameConfirmation(){
+		let confirmation=DispatchWorkItem { [weak self] in
+			self?.nameConfirmation=nil
+			self?.updateNameControls()
+		}
+		nameConfirmation=confirmation
+		DispatchQueue.main.asyncAfter(deadline: .now()+3, execute: confirmation)
 	}
 	deinit{nameConfirmation?.cancel()}
 }
