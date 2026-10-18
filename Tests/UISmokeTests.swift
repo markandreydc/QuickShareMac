@@ -44,6 +44,11 @@ struct UISmokeTests{
 	static func main(){
 		_ = NSApplication.shared
 		NSApp.setActivationPolicy(.prohibited)
+		// Standalone test executables do not have the app's asset catalog. Load
+		// the unchanged brand artwork so snapshots exercise the actual header.
+		let root=URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+		let brandImage=NSImage(contentsOf: root.appendingPathComponent("QuickShareMac/Assets.xcassets/QuickShareMacBrandIcon.imageset/QuickShareMacBrandIcon@2x.png"))!
+		brandImage.setName("QuickShareMacBrandIcon")
 		let controller=MainWindowViewController()
 		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.minimumSize), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
 		window.contentViewController=controller
@@ -52,24 +57,66 @@ struct UISmokeTests{
 		layout(window)
 		controller.update(receiving: true, transfers: [], deviceName: "Studio Mac")
 		let pin=visible(controller.view).compactMap {$0 as? NSButton}.first(where: {$0.identifier?.rawValue=="AlwaysOnTopPin"})!
+		func togglePin(){pin.performClick(nil)}
 		let otherWindow=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
 		var pinChanges:[Bool]=[]
 		controller.onAlwaysOnTopChange={pinChanges.append($0)}
 		expect(pin.state == .off && window.level == .normal && !controller.isAlwaysOnTop, "Always on top must be off by default")
 		let pinFrame=pin.convert(pin.bounds, to: controller.view)
-		expect(pinFrame.midX>controller.view.bounds.midX && pinFrame.midY>controller.view.bounds.maxY-72, "The pin control must sit at the upper-right of the main window")
-		pin.performClick(nil)
-		expect(pin.state == .on && controller.isAlwaysOnTop && window.level == .floating, "Clicking the pin must keep the main window above normal windows")
+		expect(pinFrame.midX>controller.view.bounds.midX && pinFrame.midY>controller.view.bounds.maxY-72, "The pin button must sit at the upper-right of the main window")
+		expect(pin.image != nil && pin.menu==nil && !visible(controller.view).contains(where: {$0.identifier?.rawValue=="MainOverflow"}), "Always on top must use a direct pin button instead of an overflow menu")
+		togglePin()
+		expect(pin.state == .on && controller.isAlwaysOnTop && window.level == .floating, "The pin button must keep the main window above normal windows")
+		expect(pin.contentTintColor == .systemBlue, "The active pin must be highlighted blue")
 		expect(pin.toolTip=="Turn off always on top" && otherWindow.level == .normal, "Pinning must explain how to turn it off and leave other windows unchanged")
 		controller.showSend()
 		controller.showReceive()
 		expect(window.level == .floating && pin.state == .on, "Switching tabs must preserve the always-on-top state")
-		pin.performClick(nil)
+		togglePin()
 		expect(pinChanges==[true,false] && window.level == .normal && pin.toolTip=="Keep window on top", "Clicking again must restore normal stacking and report each user change once")
 		controller.setAlwaysOnTop(true)
 		controller.viewDidAppear()
 		expect(window.level == .floating && pinChanges==[true,false], "Restoring a saved pin setting must apply it without writing another user change")
 		controller.setAlwaysOnTop(false)
+		let settingsButton=button("Settings…", in: controller.view)
+		let settingsFrame=settingsButton.convert(settingsButton.bounds, to: controller.view)
+		expect(abs(settingsFrame.midY-pinFrame.midY)<1 && settingsFrame.maxX<pinFrame.minX, "Settings and the pin button must share the top-right toolbar")
+		var openedSettings=false
+		controller.onOpenSettings={openedSettings=true}
+		settingsButton.performClick(nil)
+		expect(openedSettings && settingsButton.image != nil, "The labeled Settings action must retain its callback and gear icon")
+		let brand=visible(controller.view).compactMap {$0 as? NSImageView}.first(where: {$0.identifier?.rawValue=="MainBrandIcon"})!
+		expect(brand.bounds.size==NSSize(width: 32, height: 32), "The original brand image must use the compact 32-point header size")
+		expect(brand.image === brandImage, "The header must reuse the original brand artwork without replacement")
+		let brandFrame=brand.convert(brand.bounds, to: controller.view)
+		let appTitle=visible(controller.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="MainAppTitle"})!
+		let titleFrame=appTitle.convert(appTitle.bounds, to: controller.view)
+		expect(abs(brandFrame.minX-20)<1 && abs(brandFrame.midY-settingsFrame.midY)<1, "The compact brand must sit in the upper-left, on the Settings toolbar row")
+		expect(appTitle.font?.pointSize==16 && titleFrame.minX>brandFrame.maxX && titleFrame.maxX<settingsFrame.minX, "The smaller app title must fit beside the logo without overlapping Settings")
+		controller.update(receiving: true, transfers: [], deviceName: String(repeating: "Long Mac name ", count: 30))
+		layout(window)
+		let longTitleFrame=appTitle.convert(appTitle.bounds, to: controller.view)
+		expect(longTitleFrame.maxX<settingsButton.convert(settingsButton.bounds, to: controller.view).minX && controller.view.bounds.contains(pin.convert(pin.bounds, to: controller.view)), "Long device names must not push toolbar actions out of the compact window")
+		controller.update(receiving: true, transfers: [], deviceName: "Studio Mac")
+		layout(window)
+		let mode=visible(controller.view).compactMap {$0 as? NSSegmentedControl}.first!
+		expect(mode.label(forSegment: 0)=="Send" && mode.label(forSegment: 1)=="Receive", "Transfer tabs must be arranged as Send then Receive")
+		expect(mode.image(forSegment: 0) != nil && mode.image(forSegment: 1) != nil && mode.selectedSegment==1, "Both transfer tabs must have icons and keep Receive as the initial mode")
+		expect(mode.segmentStyle == .smallSquare && settingsButton.bezelStyle == .regularSquare && pin.bezelStyle == .regularSquare, "Tabs and toolbar buttons must use less-rounded native styles")
+		if #available(macOS 26.0, *){
+			expect(mode.borderShape == .roundedRectangle && settingsButton.borderShape == .roundedRectangle && pin.borderShape == .roundedRectangle, "Modern macOS controls must use rounded rectangles rather than capsules")
+		}
+		expect((controller.view as? WindowBackgroundView)?.backgroundStyle == .soft, "The main window must use the soft background without changing Settings")
+		let cards=visible(controller.view).compactMap {$0 as? CardView}
+		expect(!cards.isEmpty && cards.allSatisfy(\.usesSoftAppearance), "Main window cards must use the rounded soft appearance")
+		for appearance in [NSAppearance.Name.aqua,.darkAqua]{
+			controller.view.appearance=NSAppearance(named: appearance)
+			for card in cards{
+				card.updateLayer()
+				expect(card.layer?.cornerRadius==8 && card.layer?.borderWidth==1, "Soft cards must retain the reduced corner radius and border in both appearances")
+			}
+		}
+		controller.view.appearance=nil
 		let credit=visible(controller.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="MainDeveloperCreditFooter"})!
 		func creditFrame()->NSRect{credit.convert(credit.bounds, to: controller.view)}
 		expect(credit.stringValue=="Developed by Mark Andrey · github.com/markandreydc" && credit.alignment == .center, "The main window must show the centered developer credit")
@@ -197,6 +244,7 @@ struct UISmokeTests{
 		expect(settings.selectedSection == .general, "Settings must open on General by default")
 		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Check for Updates…"}), "Update controls must not clutter General settings")
 		expect(visible(settings.view).compactMap({$0 as? CardView}).count==5, "General settings must group device name, startup, remembered names, received files, and sending")
+		expect(visible(settings.view).compactMap({$0 as? CardView}).allSatisfy {!$0.usesSoftAppearance}, "Main-window styling must not change the Settings card appearance")
 		let compress=button("Compress folders into ZIP files before sending", in: settings.view)
 		expect(compress.state == .off, "Folder compression must default to off")
 		var compressionChanges:[Bool]=[]
@@ -474,7 +522,36 @@ struct UISmokeTests{
 		testReceivedFilesFolder()
 		testSettingsDefaults()
 		testDynamicWindowHeight()
+		testMainWindowAppearance()
 		print("Passed \(checks) UI smoke checks")
+	}
+
+	static func testMainWindowAppearance(){
+		let main=MainWindowViewController()
+		main.sendController.sender.service=FakeSendingService()
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		window.contentViewController=main
+		let background=main.view as! WindowBackgroundView
+		var colors:[CGColor]=[]
+		for (appearance,name) in [(NSAppearance.Name.aqua,"light"),(.darkAqua,"dark")]{
+			background.appearance=NSAppearance(named: appearance)
+			main.showReceive()
+			main.update(receiving: true, transfers: [], deviceName: "Studio Mac")
+			main.fitWindowToContent()
+			background.updateLayer()
+			let card=visible(main.view).compactMap {$0 as? CardView}.first!
+			card.updateLayer()
+			colors.append(card.layer!.backgroundColor!)
+			snapshot(window, "window-receive-\(name)")
+			main.showSend()
+			main.fitWindowToContent()
+			let choose=button("Send files…", in: main.view)
+			expect(choose.bezelColor == .systemBlue, "The primary send action must stay blue in both appearances")
+			if #available(macOS 26.0, *){expect(choose.borderShape == .roundedRectangle, "The primary send action must use the reduced-rounding native shape")}
+			expect((main.sendController.view as? WindowBackgroundView)?.backgroundStyle == .transparent, "The embedded Send surface must not cover the soft window background")
+			snapshot(window, "window-send-\(name)")
+		}
+		expect(colors[0] != colors[1], "Card colors must resolve separately for light and dark appearances")
 	}
 
 	static func testSettingsDefaults(){
@@ -954,7 +1031,7 @@ struct UISmokeTests{
 		expect(main.sendController.sender.state == .idle && !main.sendController.sender.hasItems, "Shutdown must release the selection")
 		main.showReceive()
 		expect((main.view as! SendDropView).onURLs?([file])==true, "Dropping files on Receive must route them to Send")
-		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==1, "Dropping files must select the Send tab")
+		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==0, "Dropping files must select the Send tab")
 		main.sendController.sender.shutdown()
 		testConnectionErrorUI()
 	}
@@ -992,7 +1069,7 @@ struct UISmokeTests{
 		expect(drop.previewDrop(from: pasteboard) == .copy, "A valid file hover must advertise a copy operation")
 		expect(drop.dropFeedback == .ready([first]) && shows("Drop to send") && shows("Choose a nearby device next") && shows("first.txt"), "The overlay must explain the next step and preview the dragged filename")
 		expect(service.discoveryStarts==0 && service.attempts.isEmpty, "Hovering must neither start discovery nor send files")
-		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==0, "Hovering must not switch away from Receive")
+		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==1, "Hovering must not switch away from Receive")
 		let overlay=visible(drop).first(where: {$0.identifier?.rawValue=="FileDropOverlay"})!
 		expect(drop.subviews.last === overlay && overlay.hitTest(.zero)==nil, "A single window-wide overlay must stay above content without intercepting events")
 		for size in [MainWindowViewController.minimumSize,MainWindowViewController.defaultSize,NSSize(width: 700, height: 800)]{
@@ -1011,7 +1088,7 @@ struct UISmokeTests{
 		_ = drop.previewDrop(from: pasteboard)
 		expect(drop.receiveDrop(from: pasteboard), "Dropping a valid file on Receive must prepare Send")
 		expect(drop.dropFeedback==nil && overlay.isHidden, "The overlay must disappear after a drop")
-		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==1, "A successful drop must switch to Send")
+		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==0, "A successful drop must switch to Send")
 		expect(selectionTitle()=="1 file ready to send" && shows("first.txt") && shows("Choose a nearby device. Nothing is sent until you choose a recipient."), "A single dropped file must show a summary, filename row, and recipient-selection instruction")
 		expect(service.discoveryStarts==1 && service.attempts.isEmpty && main.sendController.sender.state == .choosingDevice, "Dropping must discover devices but never select a recipient or send automatically")
 		write([first,second])
@@ -1034,7 +1111,7 @@ struct UISmokeTests{
 		snapshot(window, "drop-folder")
 		expect(drop.receiveDrop(from: pasteboard), "Dropping a folder must start compression and prepare Send")
 		expect(listedNames().map(\.stringValue)==[directory.lastPathComponent], "A single folder must retain its own item row during compression")
-		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==1, "A folder drop must switch to Send")
+		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==0, "A folder drop must switch to Send")
 		expect(waitUntil{main.sendController.sender.state == .choosingDevice}, "Dropping a folder must finish compressing before discovery")
 		expect(selectionTitle()=="1 file ready to send" && listedNames().map(\.stringValue)==[directory.lastPathComponent], "A compressed folder must retain its original name in a one-item list")
 		expect(service.discoveryStarts>startsBeforeFolderDrop, "The compressed folder must start discovery")

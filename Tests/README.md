@@ -31,8 +31,14 @@ children, skipped symbolic links, empty-folder errors, retries that gather files
 again, and replacement/shutdown isolation from late enumeration callbacks.
 Scroll checks verify that approval controls remain reachable in a constrained
 window, and that a new approval request scrolls back to the
-top. The upper-right pin is tested for normal/floating window levels, on/off state,
-tooltips, tab-switch persistence, restored state, and leaving other windows unaffected.
+top. The upper-right pin button is tested for direct one-click Always on top control,
+normal/floating window levels, toggle state, blue highlighting, tooltips, tab-switch
+persistence, restored state, and leaving other windows unaffected. Header checks cover Settings
+wiring, the unchanged brand artwork in a compact upper-left header, smaller title
+typography, long device-name truncation without overlapping actions, Send/Receive tab
+order and icons, soft backgrounds, blue primary actions, reduced card corner radii,
+less-rounded native buttons/tabs, and light/dark card colors. Settings retains its
+existing layout, with the same reduced corner rounding as the rest of the app.
 The developer credit footer is checked on both the Receive and Send tabs for
 centering, bottom placement, resizing, and staying outside cards/scrolling content.
 Auto-fit checks cover compact initial size, tab and selection changes, keeping the

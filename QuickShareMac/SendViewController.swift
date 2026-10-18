@@ -9,7 +9,7 @@ private final class DropOutlineView:NSView{
 	var color:NSColor = .controlAccentColor{didSet{needsDisplay=true}}
 	override func draw(_ dirtyRect:NSRect){
 		color.withAlphaComponent(0.7).setStroke()
-		let outline=NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 14, yRadius: 14)
+		let outline=NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 6, yRadius: 6)
 		outline.lineWidth=2
 		outline.setLineDash([8,6], count: 2, phase: 0)
 		outline.stroke()
@@ -31,7 +31,7 @@ private final class FileDropOverlay:NSVisualEffectView{
 		blendingMode = .withinWindow
 		state = .active
 		wantsLayer=true
-		layer?.cornerRadius=18
+		layer?.cornerRadius=8
 		layer?.masksToBounds=true
 		tint.wantsLayer=true
 		WindowUI.pin(tint, to: self, inset: 0)
@@ -230,6 +230,7 @@ final class SendViewController:NSViewController{
 	override func loadView(){
 		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 520, height: 500))
 		view.wantsLayer=true
+		(view as? WindowBackgroundView)?.backgroundStyle = .transparent
 		let scroll=NSScrollView()
 		scroll.hasVerticalScroller=true
 		scroll.autohidesScrollers=true
@@ -243,6 +244,7 @@ final class SendViewController:NSViewController{
 		document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor).isActive=true
 		let selection=CardView()
 		selection.wantsLayer=true
+		selection.usesSoftAppearance=true
 		let selectionContent=WindowUI.stack(spacing: 10)
 		WindowUI.pin(selectionContent, to: selection, inset: 16)
 		selectionTitle.identifier=NSUserInterfaceItemIdentifier("SendSelectionTitle")
@@ -266,7 +268,10 @@ final class SendViewController:NSViewController{
 		selectionScroll.isHidden=true
 		WindowUI.fill(selectionScroll, in: selectionContent)
 		WindowUI.fill(selectionHelp, in: selectionContent)
-		chooseButton.bezelStyle = .rounded
+		chooseButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){chooseButton.borderShape = .roundedRectangle}
+		chooseButton.bezelColor = .systemBlue
+		chooseButton.controlSize = .large
 		chooseButton.target=self
 		chooseButton.action=#selector(chooseFiles(_:))
 		chooseButton.toolTip=NSLocalizedString("ChooseFilesAndFolders", value: "Choose files or folders to send", comment: "")
@@ -305,6 +310,7 @@ final class SendViewController:NSViewController{
 		}
 		addChild(sender)
 		senderCard.wantsLayer=true
+		senderCard.usesSoftAppearance=true
 		WindowUI.pin(sender.view, to: senderCard, inset: 16)
 		sender.view.heightAnchor.constraint(greaterThanOrEqualToConstant: 320).isActive=true
 		WindowUI.fill(senderCard, in: content)
@@ -464,6 +470,7 @@ final class SendViewController:NSViewController{
 		for result in recentTransfers{
 			let card=CardView()
 			card.wantsLayer=true
+			card.usesSoftAppearance=true
 			let body=WindowUI.stack(spacing: 6)
 			WindowUI.pin(body, to: card, inset: 14)
 			let title=WindowUI.label(String(format: NSLocalizedString("SentToDevice", value: "To %@", comment: ""), result.deviceName), weight: .semibold)

@@ -101,6 +101,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize),
 							styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
 		window.title="QuickShareMac"
+		window.titleVisibility = .hidden
+		window.titlebarAppearsTransparent=true
 		window.contentViewController=windowController
 		window.isReleasedWhenClosed=false
 		window.contentMinSize=MainWindowViewController.minimumSize

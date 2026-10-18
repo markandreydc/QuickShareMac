@@ -1,5 +1,6 @@
 import Cocoa
 import NearbyShare
+import QuartzCore
 
 enum TransferDecision:Equatable{
 	case accept, acceptAndRemember, decline
@@ -78,12 +79,16 @@ enum WindowUI{
 }
 
 class CardView:NSView{
+	var usesSoftAppearance=false{didSet{needsDisplay=true}}
 	override var wantsUpdateLayer:Bool { true }
 	override func updateLayer(){
-		layer?.backgroundColor=NSColor.controlBackgroundColor.cgColor
-		layer?.cornerRadius=12
-		layer?.borderColor=NSColor.separatorColor.withAlphaComponent(0.35).cgColor
-		layer?.borderWidth=1
+		effectiveAppearance.performAsCurrentDrawingAppearance{
+			let dark=effectiveAppearance.bestMatch(from: [.aqua,.darkAqua]) == .darkAqua
+			layer?.backgroundColor=(usesSoftAppearance ? (dark ? NSColor(white: 0.18, alpha: 1) : NSColor(white: 1, alpha: 0.88)) : NSColor.controlBackgroundColor).cgColor
+			layer?.cornerRadius=usesSoftAppearance ? 8 : 6
+			layer?.borderColor=NSColor.separatorColor.withAlphaComponent(usesSoftAppearance ? 0.18 : 0.35).cgColor
+			layer?.borderWidth=1
+		}
 	}
 	override func viewDidChangeEffectiveAppearance(){
 		super.viewDidChangeEffectiveAppearance()
@@ -96,8 +101,34 @@ final class FlippedDocumentView:NSView{
 }
 
 class WindowBackgroundView:NSView{
+	enum Style{case standard, soft, transparent}
+	var backgroundStyle:Style = .standard{didSet{needsDisplay=true}}
+	private let gradient=CAGradientLayer()
 	override var wantsUpdateLayer:Bool {true}
-	override func updateLayer(){layer?.backgroundColor=NSColor.windowBackgroundColor.cgColor}
+	override func updateLayer(){
+		effectiveAppearance.performAsCurrentDrawingAppearance{
+			layer?.backgroundColor=(backgroundStyle == .transparent ? NSColor.clear : NSColor.windowBackgroundColor).cgColor
+			if backgroundStyle == .soft{
+				let dark=effectiveAppearance.bestMatch(from: [.aqua,.darkAqua]) == .darkAqua
+				gradient.colors=dark
+					? [NSColor(calibratedRed: 0.13, green: 0.15, blue: 0.19, alpha: 1).cgColor,NSColor(white: 0.12, alpha: 1).cgColor]
+					: [NSColor(calibratedRed: 0.96, green: 0.98, blue: 1, alpha: 1).cgColor,NSColor(calibratedRed: 0.96, green: 0.96, blue: 0.98, alpha: 1).cgColor]
+				gradient.startPoint=CGPoint(x: 0, y: 1)
+				gradient.endPoint=CGPoint(x: 1, y: 0)
+				if gradient.superlayer==nil{layer?.insertSublayer(gradient, at: 0)}
+				gradient.frame=bounds
+			}else{
+				gradient.removeFromSuperlayer()
+			}
+		}
+	}
+	override func layout(){
+		super.layout()
+		CATransaction.begin()
+		CATransaction.setDisableActions(true)
+		gradient.frame=bounds
+		CATransaction.commit()
+	}
 	override func viewDidChangeEffectiveAppearance(){
 		super.viewDidChangeEffectiveAppearance()
 		needsDisplay=true
@@ -120,6 +151,7 @@ private final class TransferRowView:CardView{
 	init(){
 		super.init(frame: .zero)
 		wantsLayer=true
+		usesSoftAppearance=true
 		name.maximumNumberOfLines=2
 		details.maximumNumberOfLines=3
 		WindowUI.pin(content, to: self, inset: 16)
@@ -184,11 +216,13 @@ private final class TransferRowView:CardView{
 			let actions=WindowUI.stack(.horizontal)
 			actions.addArrangedSubview(WindowUI.spacer())
 			let decline=NSButton(title: NSLocalizedString("Decline", value: "Decline", comment: ""), target: self, action: #selector(decline(_:)))
-			decline.bezelStyle = .rounded
+			decline.bezelStyle = .regularSquare
+			if #available(macOS 26.0, *){decline.borderShape = .roundedRectangle}
 			actions.addArrangedSubview(decline)
 			let accept=NSButton(title: NSLocalizedString("Accept", value: "Accept", comment: ""), target: self, action: #selector(accept(_:)))
-			accept.bezelStyle = .rounded
-			accept.bezelColor = .controlAccentColor
+			accept.bezelStyle = .regularSquare
+			if #available(macOS 26.0, *){accept.borderShape = .roundedRectangle}
+			accept.bezelColor = .systemBlue
 			// Deliberately no Return shortcut: an incoming request must not capture a stray keystroke.
 			actions.addArrangedSubview(accept)
 			WindowUI.fill(actions, in: content)
@@ -230,15 +264,16 @@ private final class TransferRowView:CardView{
 }
 
 final class MainWindowViewController:NSViewController{
-	static let defaultSize=NSSize(width: 560, height: 420)
-	static let minimumSize=NSSize(width: 520, height: 380)
+	private enum Tab:Int{case send, receive}
+	static let defaultSize=NSSize(width: 620, height: 500)
+	static let minimumSize=NSSize(width: 520, height: 460)
 	let sendController=SendViewController()
 	var automaticallyFitsContent=false{didSet{scheduleWindowFit()}}
 	private let content=WindowUI.stack(spacing: 16)
 	private let tabHost=WindowUI.stack(spacing: 0)
 	private var windowFitScheduled=false
 	private var fittingWindow=false
-	private let tabs=NSSegmentedControl(labels: [NSLocalizedString("ReceiveTab", value: "Receive", comment: ""), NSLocalizedString("SendTab", value: "Send", comment: "")], trackingMode: .selectOne, target: nil, action: nil)
+	private let tabs=NSSegmentedControl(labels: [NSLocalizedString("SendTab", value: "Send", comment: ""), NSLocalizedString("ReceiveTab", value: "Receive", comment: "")], trackingMode: .selectOne, target: nil, action: nil)
 	private let receiveContent=WindowUI.stack(spacing: 16)
 	var onReceivingChange:((Bool)->Void)?
 	var onDurationChange:((ReceivingDuration)->Void)?
@@ -252,7 +287,7 @@ final class MainWindowViewController:NSViewController{
 	var onDismissTransfer:((String)->Void)?
 	var onClearRecentTransfers:(()->Void)?
 	private let receivingSwitch=NSSwitch()
-	private let deviceNameLabel=WindowUI.label("", size: 12, secondary: true)
+	private let deviceNameLabel=WindowUI.label("", size: 11, secondary: true)
 	private let durationPopup=NSPopUpButton(frame: .zero, pullsDown: false)
 	private let expiryLabel=WindowUI.label("", size: 11, secondary: true)
 	private let statusLabel=WindowUI.label("", size: 15, weight: .semibold)
@@ -283,35 +318,57 @@ final class MainWindowViewController:NSViewController{
 		}
 		view=drop
 		view.wantsLayer=true
+		drop.backgroundStyle = .soft
 		WindowUI.pin(content, to: view, inset: 20)
-		let header=WindowUI.stack(.horizontal, spacing: 12)
+		let tools=WindowUI.stack(.horizontal, spacing: 8)
+		let identity=WindowUI.stack(.horizontal, spacing: 10)
 		let icon=NSImageView(image: NSImage(named: "QuickShareMacBrandIcon") ?? NSImage())
+		icon.identifier=NSUserInterfaceItemIdentifier("MainBrandIcon")
 		icon.imageScaling = .scaleProportionallyUpOrDown
-		NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 36), icon.heightAnchor.constraint(equalToConstant: 36)])
-		header.addArrangedSubview(icon)
+		NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 32), icon.heightAnchor.constraint(equalToConstant: 32)])
+		identity.addArrangedSubview(icon)
 		let titles=WindowUI.stack(spacing: 2)
-		titles.addArrangedSubview(WindowUI.label("QuickShareMac", size: 19, weight: .semibold))
+		let appTitle=WindowUI.label("QuickShareMac", size: 16, weight: .semibold)
+		appTitle.identifier=NSUserInterfaceItemIdentifier("MainAppTitle")
+		appTitle.maximumNumberOfLines=1
+		titles.addArrangedSubview(appTitle)
 		deviceNameLabel.maximumNumberOfLines=1
 		deviceNameLabel.lineBreakMode = .byTruncatingMiddle
 		deviceNameLabel.stringValue=LocalDeviceIdentity.shared.deviceName
 		WindowUI.fill(deviceNameLabel, in: titles)
-		header.addArrangedSubview(titles)
-		header.addArrangedSubview(WindowUI.spacer())
+		identity.addArrangedSubview(titles)
+		tools.addArrangedSubview(identity)
+		tools.addArrangedSubview(WindowUI.spacer())
 		let settings=NSButton(title: NSLocalizedString("Settings", value: "Settings…", comment: ""), target: self, action: #selector(openSettings(_:)))
-		settings.bezelStyle = .inline
-		header.addArrangedSubview(settings)
+		settings.identifier=NSUserInterfaceItemIdentifier("MainSettings")
+		settings.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){settings.borderShape = .roundedRectangle}
+		settings.controlSize = .large
+		settings.image=NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
+		settings.imagePosition = .imageLeading
+		tools.addArrangedSubview(settings)
 		pinButton.identifier=NSUserInterfaceItemIdentifier("AlwaysOnTopPin")
+		pinButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){pinButton.borderShape = .roundedRectangle}
+		pinButton.controlSize = .large
 		pinButton.setButtonType(.pushOnPushOff)
-		pinButton.isBordered=false
 		pinButton.imagePosition = .imageOnly
 		pinButton.setAccessibilityLabel(NSLocalizedString("AlwaysOnTop", value: "Always on top", comment: ""))
 		pinButton.target=self
 		pinButton.action=#selector(toggleAlwaysOnTop(_:))
-		NSLayoutConstraint.activate([pinButton.widthAnchor.constraint(equalToConstant: 28),pinButton.heightAnchor.constraint(equalToConstant: 28)])
-		header.addArrangedSubview(pinButton)
+		NSLayoutConstraint.activate([pinButton.widthAnchor.constraint(equalToConstant: 32),pinButton.heightAnchor.constraint(equalToConstant: 32)])
+		tools.addArrangedSubview(pinButton)
 		updatePinButton()
-		WindowUI.fill(header, in: content)
-		tabs.selectedSegment=0
+		WindowUI.fill(tools, in: content)
+		tabs.selectedSegment=Tab.receive.rawValue
+		tabs.identifier=NSUserInterfaceItemIdentifier("MainTransferTabs")
+		tabs.segmentStyle = .smallSquare
+		if #available(macOS 26.0, *){tabs.borderShape = .roundedRectangle}
+		tabs.controlSize = .large
+		tabs.selectedSegmentBezelColor = .systemBlue
+		tabs.setImage(NSImage(systemSymbolName: "paperplane", accessibilityDescription: nil), forSegment: Tab.send.rawValue)
+		tabs.setImage(NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: nil), forSegment: Tab.receive.rawValue)
+		for segment in 0..<tabs.segmentCount{tabs.setWidth(120, forSegment: segment)}
 		tabs.target=self
 		tabs.action=#selector(tabChanged(_:))
 		tabs.setAccessibilityLabel(NSLocalizedString("TransferMode", value: "Transfer mode", comment: ""))
@@ -341,8 +398,9 @@ final class MainWindowViewController:NSViewController{
 
 		let receiveCard=CardView()
 		receiveCard.wantsLayer=true
-		let receiveCardContent=WindowUI.stack(spacing: 5)
-		WindowUI.pin(receiveCardContent, to: receiveCard, inset: 14)
+		receiveCard.usesSoftAppearance=true
+		let receiveCardContent=WindowUI.stack(spacing: 8)
+		WindowUI.pin(receiveCardContent, to: receiveCard, inset: 18)
 		let receiveRow=WindowUI.stack(.horizontal)
 		receiveRow.addArrangedSubview(statusLabel)
 		receiveRow.addArrangedSubview(WindowUI.spacer())
@@ -389,7 +447,9 @@ final class MainWindowViewController:NSViewController{
 		emptyDetail.alignment = .center
 		WindowUI.fill(emptyTitle, in: empty)
 		WindowUI.fill(emptyDetail, in: empty)
-		enableButton.bezelStyle = .rounded
+		enableButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){enableButton.borderShape = .roundedRectangle}
+		enableButton.bezelColor = .systemBlue
 		enableButton.target=self
 		enableButton.action=#selector(enableReceiving(_:))
 		empty.addArrangedSubview(enableButton)
@@ -404,7 +464,7 @@ final class MainWindowViewController:NSViewController{
 	override func viewDidAppear(){
 		super.viewDidAppear()
 		view.window?.level=isAlwaysOnTop ? .floating : .normal
-		sendController.setActive(tabs.selectedSegment==1)
+		sendController.setActive(tabs.selectedSegment==Tab.send.rawValue)
 		for name in [NSWindow.didEndLiveResizeNotification,NSWindow.didChangeScreenNotification]{
 			NotificationCenter.default.removeObserver(self, name: name, object: nil)
 			NotificationCenter.default.addObserver(self, selector: #selector(windowGeometryChanged(_:)), name: name, object: view.window)
@@ -429,9 +489,9 @@ final class MainWindowViewController:NSViewController{
 		fittingWindow=true
 		defer{fittingWindow=false}
 		view.layoutSubtreeIfNeeded()
-		let chrome=content.arrangedSubviews.filter {$0 !== tabHost}.reduce(CGFloat(40+3*16)) {$0+$1.fittingSize.height}
+		let chrome=content.arrangedSubviews.filter {$0 !== tabHost}.reduce(CGFloat(40)+CGFloat(content.arrangedSubviews.count-1)*content.spacing) {$0+$1.fittingSize.height}
 		let tabHeight:CGFloat
-		if tabs.selectedSegment==1{
+		if tabs.selectedSegment==Tab.send.rawValue{
 			tabHeight=sendController.contentHeight
 		}else{
 			tabHeight=(receiveContent.arrangedSubviews.first?.fittingSize.height ?? 0)+receiveContent.spacing+max(80,rows.fittingSize.height)
@@ -458,28 +518,28 @@ final class MainWindowViewController:NSViewController{
 	private func updatePinButton(){
 		pinButton.state=isAlwaysOnTop ? .on : .off
 		pinButton.image=NSImage(systemSymbolName: isAlwaysOnTop ? "pin.fill" : "pin", accessibilityDescription: nil)
-		pinButton.contentTintColor=isAlwaysOnTop ? .controlAccentColor : .secondaryLabelColor
+		pinButton.contentTintColor=isAlwaysOnTop ? .systemBlue : .secondaryLabelColor
 		pinButton.toolTip=isAlwaysOnTop ? NSLocalizedString("UnpinWindow", value: "Turn off always on top", comment: "") : NSLocalizedString("PinWindow", value: "Keep window on top", comment: "")
 	}
-	@objc private func toggleAlwaysOnTop(_ sender:NSButton){
+	@objc private func toggleAlwaysOnTop(_ sender:Any?){
 		setAlwaysOnTop(!isAlwaysOnTop)
 		onAlwaysOnTopChange?(isAlwaysOnTop)
 	}
 	func showReceive(){
 		_ = view
-		tabs.selectedSegment=0
+		tabs.selectedSegment=Tab.receive.rawValue
 		updateTab()
 	}
 	func showSend(){
 		_ = view
-		tabs.selectedSegment=1
+		tabs.selectedSegment=Tab.send.rawValue
 		updateTab()
 	}
 	private func updateTab(){
 		view.window?.makeFirstResponder(nil)
-		receiveContent.isHidden=tabs.selectedSegment != 0
-		sendController.view.isHidden=tabs.selectedSegment != 1
-		sendController.setActive(tabs.selectedSegment==1)
+		receiveContent.isHidden=tabs.selectedSegment != Tab.receive.rawValue
+		sendController.view.isHidden=tabs.selectedSegment != Tab.send.rawValue
+		sendController.setActive(tabs.selectedSegment==Tab.send.rawValue)
 		scheduleWindowFit()
 	}
 	@objc private func tabChanged(_ sender:NSSegmentedControl){updateTab()}
@@ -610,6 +670,8 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		view=WindowBackgroundView(frame: NSRect(origin: .zero, size: Self.defaultSize))
 		view.wantsLayer=true
 		sections.identifier=NSUserInterfaceItemIdentifier("SettingsSections")
+		sections.segmentStyle = .smallSquare
+		if #available(macOS 26.0, *){sections.borderShape = .roundedRectangle}
 		sections.setAccessibilityLabel(NSLocalizedString("SettingsSections", value: "Settings sections", comment: ""))
 		sections.selectedSegment=selectedSection.rawValue
 		sections.target=self
@@ -652,7 +714,8 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		saveNameButton.target=self
 		saveNameButton.action=#selector(saveName(_:))
 		for button in [cancelNameButton,saveNameButton]{
-			button.bezelStyle = .rounded
+			button.bezelStyle = .regularSquare
+			if #available(macOS 26.0, *){button.borderShape = .roundedRectangle}
 			nameActions.addArrangedSubview(button)
 		}
 		device.addArrangedSubview(nameActions)
@@ -706,7 +769,8 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		sending.addArrangedSubview(compressFoldersButton)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("CompressFoldersExplanation", value: "Applies to folders chosen, dropped, or shared from Finder. When off, files are sent directly with folder paths; folder layout depends on the receiver, and empty subfolders are omitted. Changes apply to your next selection.", comment: ""), size: 11, secondary: true), in: sending)
 		let reset=NSButton(title: NSLocalizedString("ResetToDefaults", value: "Reset to defaults…", comment: ""), target: self, action: #selector(resetToDefaults(_:)))
-		reset.bezelStyle = .rounded
+		reset.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){reset.borderShape = .roundedRectangle}
 		general.addArrangedSubview(reset)
 
 		let updatePage=page(.updates)
@@ -729,11 +793,13 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		let updateActions=WindowUI.stack(.horizontal)
 		checkUpdatesButton.target=self
 		checkUpdatesButton.action=#selector(checkForUpdates(_:))
-		checkUpdatesButton.bezelStyle = .rounded
+		checkUpdatesButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){checkUpdatesButton.borderShape = .roundedRectangle}
 		updateActions.addArrangedSubview(checkUpdatesButton)
 		viewReleaseButton.target=self
 		viewReleaseButton.action=#selector(viewRelease(_:))
-		viewReleaseButton.bezelStyle = .rounded
+		viewReleaseButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){viewReleaseButton.borderShape = .roundedRectangle}
 		viewReleaseButton.isHidden=true
 		updateActions.addArrangedSubview(viewReleaseButton)
 		updates.addArrangedSubview(updateActions)

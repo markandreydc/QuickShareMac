@@ -41,8 +41,11 @@ private enum ShareUI{
 }
 
 private final class ShareBackgroundView:NSView{
+	var isTransparent=false{didSet{needsDisplay=true}}
 	override var wantsUpdateLayer:Bool {true}
-	override func updateLayer(){layer?.backgroundColor=NSColor.windowBackgroundColor.cgColor}
+	override func updateLayer(){
+		effectiveAppearance.performAsCurrentDrawingAppearance{layer?.backgroundColor=(isTransparent ? NSColor.clear : NSColor.windowBackgroundColor).cgColor}
+	}
 	override func viewDidChangeEffectiveAppearance(){
 		super.viewDidChangeEffectiveAppearance()
 		needsDisplay=true
@@ -268,6 +271,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 	override func loadView(){
 		view=ShareBackgroundView(frame: NSRect(x: 0, y: 0, width: 480, height: 500))
 		view.wantsLayer=true
+		(view as? ShareBackgroundView)?.isTransparent=embeddedInMainWindow
 		if !embeddedInMainWindow{preferredContentSize=NSSize(width: 480, height: 500)}
 		let content=ShareUI.stack(spacing: 16)
 		ShareUI.pin(content, to: view, inset: embeddedInMainWindow ? 0 : 20)
@@ -347,22 +351,26 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		ShareUI.fill(progressHelp, in: progressView)
 		ShareUI.fill(guidance, in: content)
 		let actions=ShareUI.stack(.horizontal)
-		qrCodeButton.bezelStyle = .rounded
+		qrCodeButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){qrCodeButton.borderShape = .roundedRectangle}
 		qrCodeButton.target=self
 		qrCodeButton.action=#selector(useQrCode(_:))
 		actions.addArrangedSubview(qrCodeButton)
-		retryButton.bezelStyle = .rounded
+		retryButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){retryButton.borderShape = .roundedRectangle}
 		retryButton.target=self
 		retryButton.action=#selector(retry(_:))
 		retryButton.isHidden=true
 		actions.addArrangedSubview(retryButton)
-		networkSettingsButton.bezelStyle = .rounded
+		networkSettingsButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){networkSettingsButton.borderShape = .roundedRectangle}
 		networkSettingsButton.target=self
 		networkSettingsButton.action=#selector(openNetworkSettings(_:))
 		networkSettingsButton.isHidden=true
 		actions.addArrangedSubview(networkSettingsButton)
 		actions.addArrangedSubview(ShareUI.spacer())
-		closeButton.bezelStyle = .rounded
+		closeButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){closeButton.borderShape = .roundedRectangle}
 		closeButton.keyEquivalent="\u{1b}"
 		closeButton.target=self
 		closeButton.action=#selector(cancel(_:))
@@ -707,7 +715,8 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		help.alignment = .center
 		ShareUI.fill(help, in: content)
 		let cancel=NSButton(title: NSLocalizedString("Cancel", value: "Cancel", comment: ""), target: self, action: #selector(dismissQrCodeSheet(_:)))
-		cancel.bezelStyle = .rounded
+		cancel.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){cancel.borderShape = .roundedRectangle}
 		cancel.keyEquivalent="\u{1b}"
 		content.addArrangedSubview(cancel)
 		sheetWindow=sheet
@@ -962,7 +971,7 @@ private final class DeviceCollectionItem:NSCollectionViewItem{
 	override var isSelected:Bool{
 		didSet{
 			view.wantsLayer=true
-			view.layer?.cornerRadius=10
+			view.layer?.cornerRadius=6
 			view.layer?.backgroundColor=(isSelected ? NSColor.selectedContentBackgroundColor : NSColor.clear).cgColor
 			textField?.textColor=isSelected ? .alternateSelectedControlTextColor : .labelColor
 		}

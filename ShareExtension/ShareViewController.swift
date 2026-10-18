@@ -53,11 +53,13 @@ class ShareViewController:NSViewController{
 			label.maximumNumberOfLines=2
 			label.lineBreakMode = .byTruncatingMiddle
 		}
-		retryButton.bezelStyle = .rounded
+		retryButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){retryButton.borderShape = .roundedRectangle}
 		retryButton.target=self
 		retryButton.action=#selector(retry(_:))
 		retryButton.isHidden=true
-		cancelButton.bezelStyle = .rounded
+		cancelButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){cancelButton.borderShape = .roundedRectangle}
 		cancelButton.target=self
 		cancelButton.action=#selector(cancel(_:))
 		cancelButton.keyEquivalent="\u{1b}"
