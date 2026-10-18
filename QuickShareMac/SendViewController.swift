@@ -109,7 +109,7 @@ private final class FileDropOverlay:NSVisualEffectView{
 }
 
 final class SendDropView:WindowBackgroundView{
-	var compressFolders=true{didSet{if let feedback=dropFeedback{overlay.show(feedback, compressFolders: compressFolders)}}}
+	var compressFolders=false{didSet{if let feedback=dropFeedback{overlay.show(feedback, compressFolders: compressFolders)}}}
 	var acceptsItems=true{didSet{if oldValue != acceptsItems, let pasteboard=dragPasteboard{_ = previewDrop(from: pasteboard, sourceOperationMask: sourceOperationMask)}}}
 	var onURLs:(([URL])->Bool)?
 	private(set) var dropFeedback:FileDropFeedback?
@@ -208,6 +208,8 @@ final class SendViewController:NSViewController{
 	let sender=SendTransferViewController()
 	var compressFolders=SendPreferences.compressFolders(){didSet{sender.folderHandling=compressFolders ? .compress : .sendContents}}
 	var onTransferActivityChange:((Bool)->Void)?
+	var onContentSizeChange:(()->Void)?
+	var contentHeight:CGFloat{content.fittingSize.height}
 	private(set) var recentTransfers:[OutgoingTransferResult]=[]
 	private let content=WindowUI.stack(spacing: 16)
 	private let senderCard=CardView()
@@ -304,7 +306,7 @@ final class SendViewController:NSViewController{
 		addChild(sender)
 		senderCard.wantsLayer=true
 		WindowUI.pin(sender.view, to: senderCard, inset: 16)
-		sender.view.heightAnchor.constraint(equalToConstant: 320).isActive=true
+		sender.view.heightAnchor.constraint(greaterThanOrEqualToConstant: 320).isActive=true
 		WindowUI.fill(senderCard, in: content)
 		senderCard.isHidden=true
 		historyHeading.addArrangedSubview(WindowUI.label(NSLocalizedString("RecentOutgoingTransfers", value: "Recent outgoing transfers · this session", comment: ""), size: 13, weight: .semibold))
@@ -355,6 +357,7 @@ final class SendViewController:NSViewController{
 	private func showSelectionError(_ message:String){
 		errorLabel.stringValue=message
 		errorLabel.isHidden=false
+		onContentSizeChange?()
 	}
 
 	@objc func chooseFiles(_ sender:Any?){
@@ -443,6 +446,7 @@ final class SendViewController:NSViewController{
 		}
 		for button in historyButtons{button.isEnabled=enabled}
 		onTransferActivityChange?(!enabled)
+		onContentSizeChange?()
 	}
 	private func record(_ result:OutgoingTransferResult){
 		recentTransfers.removeAll {$0.id==result.id}
@@ -484,6 +488,7 @@ final class SendViewController:NSViewController{
 			WindowUI.fill(actions, in: body)
 			WindowUI.fill(card, in: history)
 		}
+		onContentSizeChange?()
 		updateControls()
 	}
 	@objc private func retryRecent(_ button:NSButton){

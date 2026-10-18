@@ -73,7 +73,7 @@ protocol FolderCompressing:AnyObject{
 enum SendPreferences{
 	static let compressFoldersKey="CompressFoldersBeforeSending"
 	static func compressFolders(in defaults:UserDefaults = .standard)->Bool{
-		defaults.object(forKey: compressFoldersKey) as? Bool ?? true
+		defaults.object(forKey: compressFoldersKey) as? Bool ?? false
 	}
 }
 
@@ -197,8 +197,8 @@ struct OutgoingTransferResult{
 class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 	var service:SendingService=NearbyConnectionManager.shared
 	var folderCompressor:FolderCompressing?
-	var folderHandling:FolderHandling = .compress
-	private var selectionFolderHandling:FolderHandling = .compress
+	var folderHandling:FolderHandling = .sendContents
+	private var selectionFolderHandling:FolderHandling = .sendContents
 	private var expansionTask:FolderExpansionTask?
 	private(set) var gatheringFolderName:String?
 	private(set) var parentFolders:[URL:String]=[:]

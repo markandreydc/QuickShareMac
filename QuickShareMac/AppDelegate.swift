@@ -108,6 +108,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		window.contentMinSize=MainWindowViewController.minimumSize
 		window.setFrameAutosaveName("QuickShareMacMainWindow")
 		if !window.setFrameUsingName("QuickShareMacMainWindow"){window.center()}
+		windowController.automaticallyFitsContent=true
 		windowController.setAlwaysOnTop(UserDefaults.standard.bool(forKey: "AlwaysOnTop"))
 		windowController.setCompressFolders(SendPreferences.compressFolders())
 		windowController.onAlwaysOnTopChange={enabled in UserDefaults.standard.set(enabled, forKey: "AlwaysOnTop")}
@@ -131,6 +132,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			self.refreshWindow()
 		}
 		settingsController.onLaunchAtLoginChange={ [weak self] enabled in self?.setLaunchAtLogin(enabled) }
+		settingsController.onResetToDefaults={ [weak self] in try self?.resetSettingsToDefaults() }
 		settingsController.onCompressFoldersChange={ [weak self] enabled in
 			UserDefaults.standard.set(enabled, forKey: SendPreferences.compressFoldersKey)
 			self?.windowController.setCompressFolders(enabled)
@@ -232,6 +234,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 
 	@objc private func showMainWindow(_ sender:Any?){
 		refreshWindow()
+		windowController.fitWindowToContent()
 		mainWindow?.makeKeyAndOrderFront(sender)
 		NSApplication.shared.activate(ignoringOtherApps: true)
 	}
@@ -379,6 +382,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			}catch{
 				showError(error)
 			}
+		}
+		refreshWindow()
+	}
+
+	private func resetSettingsToDefaults() throws{
+		// Fail visibly if macOS refuses to remove the login item; do not pretend
+		// this system-managed preference was restored successfully.
+		if #available(macOS 13.0, *), SMAppService.mainApp.status != .notRegistered, SMAppService.mainApp.status != .notFound{
+			try SMAppService.mainApp.unregister()
+		}
+		try LocalDeviceIdentity.shared.setCustomName(nil)
+		try ReceivedFilesFolder.set(nil)
+		AppSettingsDefaults.restore()
+		availability.select(.indefinitely)
+		updates.setFrequency(.never)
+		windowController.setAlwaysOnTop(false)
+		windowController.setCompressFolders(false)
+		NearbyConnectionManager.shared.refreshDeviceName()
+		NearbyConnectionManager.shared.incomingDownloadDirectory=ReceivedFilesFolder.currentURL
+		NSWindow.removeFrame(usingName: "QuickShareMacMainWindow")
+		if let window=mainWindow{
+			window.setContentSize(NSSize(width: MainWindowViewController.defaultSize.width, height: window.contentView?.bounds.height ?? MainWindowViewController.defaultSize.height))
+			windowController.fitWindowToContent()
 		}
 		refreshWindow()
 	}

@@ -22,18 +22,24 @@ tooltip in a dedicated scroll area capped at five rows; checks cover reaching th
 last filename, keeping the card/tab/window height fixed as more items are added,
 shrinking and resetting short replacement lists, file/folder compression, replacement,
 rejected selections, and clearing the list for single files, links, or shutdown.
-The folder-compression setting is checked for default-on behavior, persistence,
+The folder-compression setting is checked for default-off behavior, persistence,
 Settings callbacks, live overlay changes, and applying only to new selections.
 Uncompressed folders are checked for nested paths, hidden and zero-byte files,
 mixed selections, same-named roots and sanitized directory collisions, unreadable
 children, skipped symbolic links, empty-folder errors, retries that gather files
 again, and replacement/shutdown isolation from late enumeration callbacks.
-Scroll checks verify that approval controls remain reachable by scrolling
-without expanding the window, and that a new approval request scrolls back to the
+Scroll checks verify that approval controls remain reachable in a constrained
+window, and that a new approval request scrolls back to the
 top. The upper-right pin is tested for normal/floating window levels, on/off state,
 tooltips, tab-switch persistence, restored state, and leaving other windows unaffected.
 The developer credit footer is checked on both the Receive and Send tabs for
 centering, bottom placement, resizing, and staying outside cards/scrolling content.
+Auto-fit checks cover compact initial size, tab and selection changes, keeping the
+title bar anchored, bounded filename-list height, screen limits with scrolling
+fallback, incoming approval controls, shrinking after history clears, and stable
+repeated layout. Settings reset checks cover targeted preference restoration,
+preserving unrelated data and remembered devices, confirmation/cancellation, and
+refreshing the default controls without modifying real user preferences.
 Drag checks cover the window-wide overlay on both tabs, filename/count previews,
 copy-only cursor feedback, resizing/dark appearance, folder accept-with-compression,
 rejected links/missing files, drop-time revalidation, active-transfer changes during

@@ -49,9 +49,11 @@ Both devices must be on the **same Wi-Fi/local network**. Keep your Android devi
 
 Multiple selections show each selected filename and icon in a compact list. The list displays up to five rows at once; scroll inside it to see the remaining items without enlarging the window.
 
-Folder compression is on by default. Each folder becomes its own ZIP—named after the folder, matching Finder’s **Compress** result—and files chosen alongside folders are sent as they are. The Send tab shows **Compressing “FolderName”…** while preparing ZIPs.
+Folder compression is **off by default**. You can enable **Settings → General → Sending → Compress folders into ZIP files before sending**. When enabled, each folder becomes its own ZIP—named after the folder, matching Finder’s **Compress** result—and files chosen alongside folders are sent as they are. The Send tab shows **Compressing “FolderName”…** while preparing ZIPs.
 
-To send folders without ZIPs, turn off **Settings → General → Sending → Compress folders into ZIP files before sending**. The app shows **Gathering files from “FolderName”…**, then sends the original files with relative folder-path metadata. Folder layout depends on the receiver: receivers that ignore the paths save loose files instead. Android folder reconstruction still requires device verification. Hidden files are included, symbolic links are skipped, and empty subfolders cannot be represented; entirely empty folders show an explanation to use ZIP mode. Large folders can take a moment before discovery begins. The setting is saved, applies to the next selection, and covers the picker, drops, and **Share → QuickShareMac**; the Share extension remains a handoff adapter.
+With compression off, the app shows **Gathering files from “FolderName”…**, then sends the original files with relative folder-path metadata. Folder layout depends on the receiver: receivers that ignore the paths save loose files instead. Android folder reconstruction still requires device verification. Hidden files are included, symbolic links are skipped, and empty subfolders cannot be represented; entirely empty folders show an explanation to use ZIP mode. Large folders can take a moment before discovery begins. The setting is saved, applies to the next selection, and covers the picker, drops, and **Share → QuickShareMac**; the Share extension remains a handoff adapter. An explicitly saved compression preference is kept until you change it or reset settings.
+
+The main window starts compact and automatically adjusts its height when switching tabs, selecting items, or showing transfer requests. It stays within the screen’s usable area; longer history and overflow remain scrollable, and the filename list stays capped at five rows.
 
 During dragging, unreadable files and unsupported content show a specific explanation instead of an accepted-drop highlight. While an outgoing transfer is active, drops are blocked until you finish or cancel it. Leaving the window or canceling the drag dismisses the overlay without changing your selection.
 
@@ -92,7 +94,9 @@ Under **Device name** in Settings, choose **Use Mac’s name** or **Use a custom
 
 Under **Received files** in Settings, choose **Choose…** to pick any folder for incoming files—for example Desktop, Documents, or a folder of your own—or **Use Downloads** to restore the default. The Receive footer always shows the current folder, and **Open Received Files** next to the Receive/Send tabs opens it. If the chosen folder disappears, QuickShareMac falls back to Downloads.
 
-Under **Sending**, choose whether to compress folders into ZIP files (on by default) or send their files directly with folder paths. Changes apply to your next selection, not to a preparation or transfer already running.
+Under **Sending**, choose whether to compress folders into ZIP files (off by default) or send their files directly with folder paths. Changes apply to your next selection, not to a preparation or transfer already running.
+
+**Reset to defaults…** on the General page asks for confirmation before restoring the Mac’s name, Downloads destination, receiving on launch, indefinite availability, launch at login off, compression off, automatic update checks off, and default window preferences. Received files, history, remembered devices, and active transfers are kept. macOS privacy permissions are not changed.
 
 Recent transfer results last for the current app session, until you dismiss or clear them. They are not a permanent transfer log.
 
@@ -210,7 +214,7 @@ This is intentional: receiving and active transfers continue in the background. 
 - **Transfers are local network only.** Wi-Fi Direct, Bluetooth transfers, and internet relay are not implemented. Update checks optionally contact GitHub, as described above.
 - **Visible on your network while receiving is enabled.** Contact-only visibility is not supported.
 - **Approval is always required.** Remembered device names are not persistent, verified sender identities.
-- **Folder handling is chosen in Settings.** By default `ditto` creates a ZIP per folder without modifying the original. With compression off, background enumeration sends regular files directly, carrying relative paths in both the introduction’s `parent_folder` and file payload headers. Paths are component-sanitized, same-named folder roots are disambiguated, and symbolic links are not followed. Receiver folder reconstruction is not guaranteed; the Mac receiver currently saves loose files. The same preparation applies to Finder shares, picker selections, and drops.
+- **Folder handling is chosen in Settings.** Compression is off by default; enabling it uses `ditto` to create a ZIP per folder without modifying the original. With compression off, background enumeration sends regular files directly, carrying relative paths in both the introduction’s `parent_folder` and file payload headers. Paths are component-sanitized, same-named folder roots are disambiguated, and symbolic links are not followed. Receiver folder reconstruction is not guaranteed; the Mac receiver currently saves loose files. The same preparation applies to Finder shares, picker selections, and drops.
 - **Notifications describe requests but never accept them.** The PIN check always happens in the main window.
 - **Not AirDrop.** This app implements part of the Quick Share/Nearby Share protocol, not Apple’s AirDrop protocol.
 

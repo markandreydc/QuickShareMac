@@ -129,7 +129,7 @@ struct UISmokeTests{
 		layout(window)
 		expect(accept.keyEquivalent.isEmpty, "Approval must not capture Return")
 		expect(controller.view.bounds.contains(accept.convert(accept.bounds, to: controller.view)), "Approval controls must remain reachable by scrolling at the minimum window size")
-		expect(abs(window.contentView!.bounds.height-MainWindowViewController.minimumSize.height)<1, "Incoming requests must scroll instead of expanding the window")
+		expect(abs(window.contentView!.bounds.height-MainWindowViewController.minimumSize.height)<1, "Incoming requests must scroll instead of expanding the window: actual \(window.contentView!.bounds.height), minimum \(MainWindowViewController.minimumSize.height)")
 		expect(visible(controller.view).filter({$0 is NSProgressIndicator}).count==1, "Only active transfers should show progress")
 		controller.update(receiving: true, transfers: [transfer("a", .awaitingApproval), transfer("b", .receiving, progress: 0.8)])
 		expect(button("Remember this device name", in: controller.view) === remember, "Progress updates must preserve approval controls")
@@ -198,11 +198,11 @@ struct UISmokeTests{
 		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Check for Updates…"}), "Update controls must not clutter General settings")
 		expect(visible(settings.view).compactMap({$0 as? CardView}).count==5, "General settings must group device name, startup, remembered names, received files, and sending")
 		let compress=button("Compress folders into ZIP files before sending", in: settings.view)
-		expect(compress.state == .on, "Folder compression must default to on")
+		expect(compress.state == .off, "Folder compression must default to off")
 		var compressionChanges:[Bool]=[]
 		settings.onCompressFoldersChange={compressionChanges.append($0)}
 		compress.performClick(nil)
-		expect(compressionChanges==[false], "The compression checkbox must forward changes")
+		expect(compressionChanges==[true], "The compression checkbox must forward changes")
 		settings.update(startReceivingOnLaunch: true, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 0, compressFolders: false)
 		expect(compress.state == .off, "Settings must display the saved compression choice")
 		let folderLabel=visible(settings.view).compactMap({$0 as? NSTextField}).first(where: {$0.identifier?.rawValue=="ReceivedFilesFolder"})!
@@ -472,7 +472,111 @@ struct UISmokeTests{
 		testUpdateResultPresentation()
 		testIdentityAndAvailability()
 		testReceivedFilesFolder()
+		testSettingsDefaults()
+		testDynamicWindowHeight()
 		print("Passed \(checks) UI smoke checks")
+	}
+
+	static func testSettingsDefaults(){
+		let suite="QuickShareMac-reset-tests-\(UUID().uuidString)"
+		let defaults=UserDefaults(suiteName: suite)!
+		defer{defaults.removePersistentDomain(forName: suite)}
+		defaults.set(false, forKey: "StartReceivingOnLaunch")
+		defaults.set(true, forKey: "AlwaysOnTop")
+		defaults.set(true, forKey: SendPreferences.compressFoldersKey)
+		defaults.set(600, forKey: "ReceivingDuration")
+		defaults.set("daily", forKey: "UpdateCheckFrequency")
+		defaults.set(true, forKey: "AutomaticallyCheckForUpdates")
+		defaults.set(Data([1]), forKey: ReceivedFilesFolder.bookmarkDefaultsKey)
+		defaults.set(["Phone"], forKey: "RememberedDeviceNames")
+		defaults.set("keep", forKey: "CachedUpdateRelease")
+		AppSettingsDefaults.restore(in: defaults)
+		expect(defaults.bool(forKey: "StartReceivingOnLaunch") && !defaults.bool(forKey: "AlwaysOnTop") && !SendPreferences.compressFolders(in: defaults), "Reset must restore launch receiving, pinning off, and compression off")
+		expect(defaults.integer(forKey: "ReceivingDuration")==0 && defaults.string(forKey: "UpdateCheckFrequency")=="never", "Reset must restore indefinite availability and manual-only update checks")
+		expect(defaults.object(forKey: ReceivedFilesFolder.bookmarkDefaultsKey)==nil && defaults.object(forKey: "AutomaticallyCheckForUpdates")==nil, "Reset must remove custom folder and obsolete update preferences")
+		expect(defaults.stringArray(forKey: "RememberedDeviceNames")==["Phone"] && defaults.string(forKey: "CachedUpdateRelease")=="keep", "Reset must preserve remembered devices and unrelated app data")
+		let settings=SettingsViewController()
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: SettingsViewController.defaultSize), styleMask: [.titled], backing: .buffered, defer: false)
+		window.contentViewController=settings
+		settings.update(startReceivingOnLaunch: false, launchAtLogin: true, requiresLoginApproval: false, rememberedDeviceCount: 1, customDeviceName: "Custom Mac", receivedFilesFolderName: "Inbox", receivedFilesFolderIsCustom: true, compressFolders: true)
+		var resets=0
+		settings.onResetToDefaults={
+			resets+=1
+			settings.update(startReceivingOnLaunch: true, launchAtLogin: false, requiresLoginApproval: false, rememberedDeviceCount: 1)
+		}
+		button("Reset to defaults…", in: settings.view).performClick(nil)
+		expect(waitUntil{window.attachedSheet != nil} && resets==0, "Reset must ask for confirmation without changing preferences")
+		let cancelSheet=window.attachedSheet!
+		expect(button("Reset to defaults", in: cancelSheet.contentView!).keyEquivalent.isEmpty, "Return must not accidentally confirm resetting settings")
+		button("Cancel", in: cancelSheet.contentView!).performClick(nil)
+		expect(waitUntil{window.attachedSheet==nil} && resets==0, "Cancel must leave settings untouched")
+		button("Reset to defaults…", in: settings.view).performClick(nil)
+		expect(waitUntil{window.attachedSheet != nil}, "Reset confirmation must be reopenable")
+		button("Reset to defaults", in: window.attachedSheet!.contentView!).performClick(nil)
+		expect(waitUntil{resets==1}, "Confirmed reset must call the restore action exactly once")
+		expect(button("Compress folders into ZIP files before sending", in: settings.view).state == .off && button("Use Mac’s name", in: settings.view).state == .on, "Reset must immediately display default compression and device-name controls")
+		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Use Downloads"}), "Reset must restore the Downloads destination display")
+	}
+
+	static func testDynamicWindowHeight(){
+		let main=MainWindowViewController()
+		let service=FakeSendingService()
+		main.sendController.sender.service=service
+		let screen=NSScreen.main!.visibleFrame
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		window.contentViewController=main
+		window.setFrameTopLeftPoint(NSPoint(x: screen.minX+20, y: screen.maxY-20))
+		main.update(receiving: true, transfers: [])
+		main.fitWindowToContent(visibleFrame: screen)
+		let readyHeight=window.contentView!.bounds.height
+		expect(readyHeight<600 && readyHeight>=MainWindowViewController.minimumSize.height, "Receive must start compact, not at the old fixed 680-point height: \(readyHeight)")
+		let top=window.frame.maxY
+		main.showSend()
+		main.fitWindowToContent(visibleFrame: screen)
+		let emptySendHeight=window.contentView!.bounds.height
+		expect(emptySendHeight<=readyHeight && abs(window.frame.maxY-top)<1, "An empty Send tab must shrink while preserving the title-bar position")
+		let directory=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-fit-tests-\(UUID().uuidString)")
+		try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer{main.sendController.sender.shutdown(); try? FileManager.default.removeItem(at: directory)}
+		let files=(0..<30).map {directory.appendingPathComponent("File \($0).txt")}
+		for file in files{try! Data().write(to: file)}
+		_ = main.sendController.selectItems([files[0]])
+		main.fitWindowToContent(visibleFrame: screen)
+		expect(window.contentView!.bounds.height>emptySendHeight, "Selecting a file must grow the window to fit recipient controls")
+		let qr=button("Connect with QR code…", in: main.view)
+		expect(main.view.bounds.contains(qr.convert(qr.bounds, to: main.view)), "The send actions must fit without scrolling on a screen with enough room")
+		let sendScroll=main.sendController.view.subviews.compactMap {$0 as? NSScrollView}.first!
+		expect(sendScroll.documentView!.bounds.height<=sendScroll.contentView.bounds.height+1, "Auto-fit must show the full Send content when the screen has room")
+		_ = main.sendController.selectItems(Array(files.prefix(5)))
+		main.fitWindowToContent(visibleFrame: screen)
+		let fiveHeight=window.frame.height
+		_ = main.sendController.selectItems(files)
+		main.fitWindowToContent(visibleFrame: screen)
+		expect(abs(window.frame.height-fiveHeight)<1, "More than five selected filenames must not increase the auto-fitted height")
+		let compactScreen=NSRect(x: screen.minX, y: screen.minY, width: screen.width, height: min(540,screen.height))
+		main.fitWindowToContent(visibleFrame: compactScreen)
+		expect(compactScreen.contains(window.frame), "Auto-fitting must keep the entire window inside the available screen")
+		expect(sendScroll.documentView!.bounds.height>sendScroll.contentView.bounds.height, "When content exceeds the screen, the Send tab must remain scrollable")
+		main.showReceive()
+		main.update(receiving: true, transfers: [transfer("approval", .awaitingApproval)])
+		main.fitWindowToContent(visibleFrame: screen)
+		let accept=button("Accept", in: main.view)
+		expect(main.view.bounds.contains(accept.convert(accept.bounds, to: main.view)), "Auto-fitting must expose incoming approval controls")
+		let history=(0..<20).map {transfer("fit-\($0)", .completed)}
+		main.update(receiving: true, transfers: history)
+		main.fitWindowToContent(visibleFrame: compactScreen)
+		expect(compactScreen.contains(window.frame), "Long history must not grow the window past the screen")
+		main.update(receiving: true, transfers: [])
+		main.fitWindowToContent(visibleFrame: screen)
+		expect(abs(window.contentView!.bounds.height-readyHeight)<1, "Clearing transfers must shrink the window back to the compact ready state")
+		main.automaticallyFitsContent=true
+		main.showSend()
+		_ = main.sendController.selectItems([files[0]])
+		expect(waitUntil{window.contentView!.bounds.height>readyHeight}, "Selection changes must schedule automatic height fitting without a manual call")
+		let stableFrame=window.frame
+		main.fitWindowToContent()
+		expect(window.frame==stableFrame, "Repeated layout with unchanged content must not make the window jump")
+		main.automaticallyFitsContent=false
 	}
 
 	static func testStatusBarMenu(){
@@ -1077,7 +1181,7 @@ struct UISmokeTests{
 		let suite="QuickShareMac-folder-settings-tests-\(UUID().uuidString)"
 		let defaults=UserDefaults(suiteName: suite)!
 		defer{defaults.removePersistentDomain(forName: suite)}
-		expect(SendPreferences.compressFolders(in: defaults), "New installs must retain ZIP compression by default")
+		expect(!SendPreferences.compressFolders(in: defaults), "New installs must send folders without ZIP compression by default")
 		defaults.set(false, forKey: SendPreferences.compressFoldersKey)
 		expect(!SendPreferences.compressFolders(in: UserDefaults(suiteName: suite)!), "Turning compression off must persist across preference instances")
 		defaults.set(true, forKey: SendPreferences.compressFoldersKey)

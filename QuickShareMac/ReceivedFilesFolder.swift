@@ -1,5 +1,19 @@
 import Foundation
 
+/// Reset only user-facing preferences, never the whole app domain (which also
+/// contains remembered devices, caches, and other data).
+enum AppSettingsDefaults{
+	static func restore(in defaults:UserDefaults = .standard){
+		defaults.set(true, forKey: "StartReceivingOnLaunch")
+		defaults.set(false, forKey: "AlwaysOnTop")
+		defaults.set(false, forKey: "CompressFoldersBeforeSending")
+		defaults.set(0, forKey: "ReceivingDuration")
+		defaults.set("never", forKey: "UpdateCheckFrequency")
+		defaults.removeObject(forKey: "AutomaticallyCheckForUpdates")
+		defaults.removeObject(forKey: ReceivedFilesFolder.bookmarkDefaultsKey)
+	}
+}
+
 /// The folder where incoming files are saved. Defaults to Downloads; Settings can point it anywhere.
 enum ReceivedFilesFolder{
 	static let bookmarkDefaultsKey="ReceivedFilesFolderBookmark"

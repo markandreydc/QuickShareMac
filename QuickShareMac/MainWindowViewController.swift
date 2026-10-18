@@ -230,9 +230,14 @@ private final class TransferRowView:CardView{
 }
 
 final class MainWindowViewController:NSViewController{
-	static let defaultSize=NSSize(width: 560, height: 680)
-	static let minimumSize=NSSize(width: 520, height: 680)
+	static let defaultSize=NSSize(width: 560, height: 420)
+	static let minimumSize=NSSize(width: 520, height: 380)
 	let sendController=SendViewController()
+	var automaticallyFitsContent=false{didSet{scheduleWindowFit()}}
+	private let content=WindowUI.stack(spacing: 16)
+	private let tabHost=WindowUI.stack(spacing: 0)
+	private var windowFitScheduled=false
+	private var fittingWindow=false
 	private let tabs=NSSegmentedControl(labels: [NSLocalizedString("ReceiveTab", value: "Receive", comment: ""), NSLocalizedString("SendTab", value: "Send", comment: "")], trackingMode: .selectOne, target: nil, action: nil)
 	private let receiveContent=WindowUI.stack(spacing: 16)
 	var onReceivingChange:((Bool)->Void)?
@@ -278,7 +283,6 @@ final class MainWindowViewController:NSViewController{
 		}
 		view=drop
 		view.wantsLayer=true
-		let content=WindowUI.stack(spacing: 16)
 		WindowUI.pin(content, to: view, inset: 20)
 		let header=WindowUI.stack(.horizontal, spacing: 12)
 		let icon=NSImageView(image: NSImage(named: "QuickShareMacBrandIcon") ?? NSImage())
@@ -319,13 +323,13 @@ final class MainWindowViewController:NSViewController{
 		openReceived.bezelStyle = .inline
 		tabsRow.addArrangedSubview(openReceived)
 		WindowUI.fill(tabsRow, in: content)
-		let tabHost=NSView()
 		WindowUI.fill(tabHost, in: content)
 		tabHost.setContentHuggingPriority(.defaultLow, for: .vertical)
-		WindowUI.pin(receiveContent, to: tabHost, inset: 0)
+		WindowUI.fill(receiveContent, in: tabHost)
 		sendController.onTransferActivityChange={ [weak drop] active in drop?.acceptsItems = !active }
+		sendController.onContentSizeChange={ [weak self] in self?.scheduleWindowFit() }
 		addChild(sendController)
-		WindowUI.pin(sendController.view, to: tabHost, inset: 0)
+		WindowUI.fill(sendController.view, in: tabHost)
 		sendController.view.isHidden=true
 
 		let developerCredit=WindowUI.label(NSLocalizedString("DeveloperCredit", value: "Developed by Mark Andrey · github.com/markandreydc", comment: ""), size: 11, secondary: true)
@@ -401,6 +405,48 @@ final class MainWindowViewController:NSViewController{
 		super.viewDidAppear()
 		view.window?.level=isAlwaysOnTop ? .floating : .normal
 		sendController.setActive(tabs.selectedSegment==1)
+		for name in [NSWindow.didEndLiveResizeNotification,NSWindow.didChangeScreenNotification]{
+			NotificationCenter.default.removeObserver(self, name: name, object: nil)
+			NotificationCenter.default.addObserver(self, selector: #selector(windowGeometryChanged(_:)), name: name, object: view.window)
+		}
+		scheduleWindowFit()
+	}
+	override func viewDidLayout(){super.viewDidLayout(); scheduleWindowFit()}
+	@objc private func windowGeometryChanged(_ notification:Notification){scheduleWindowFit()}
+	private func scheduleWindowFit(){
+		guard automaticallyFitsContent, !windowFitScheduled, !fittingWindow else{return}
+		windowFitScheduled=true
+		DispatchQueue.main.async{ [weak self] in
+			guard let self=self else{return}
+			self.windowFitScheduled=false
+			if self.automaticallyFitsContent{self.fitWindowToContent()}
+		}
+	}
+	/// Measure wrapped content at the current width. History and long lists can
+	/// scroll once the screen limit is reached; the title bar stays in place.
+	func fitWindowToContent(visibleFrame:NSRect?=nil){
+		guard let window=view.window, !window.inLiveResize, !window.styleMask.contains(.fullScreen), window.attachedSheet==nil, !fittingWindow else{return}
+		fittingWindow=true
+		defer{fittingWindow=false}
+		view.layoutSubtreeIfNeeded()
+		let chrome=content.arrangedSubviews.filter {$0 !== tabHost}.reduce(CGFloat(40+3*16)) {$0+$1.fittingSize.height}
+		let tabHeight:CGFloat
+		if tabs.selectedSegment==1{
+			tabHeight=sendController.contentHeight
+		}else{
+			tabHeight=(receiveContent.arrangedSubviews.first?.fittingSize.height ?? 0)+receiveContent.spacing+max(80,rows.fittingSize.height)
+		}
+		let screen=visibleFrame ?? window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
+		let maxHeight=window.contentRect(forFrameRect: screen).height
+		window.contentMinSize=NSSize(width: min(Self.minimumSize.width,screen.width), height: min(Self.minimumSize.height,maxHeight))
+		let height=min(maxHeight,max(window.contentMinSize.height,ceil(chrome+tabHeight)))
+		var frame=window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: min(view.bounds.width,screen.width), height: height))
+		frame.origin.x=max(screen.minX,min(window.frame.minX,screen.maxX-frame.width))
+		frame.origin.y=max(screen.minY,min(window.frame.maxY,screen.maxY)-frame.height)
+		if abs(frame.height-window.frame.height)>0.5 || abs(frame.width-window.frame.width)>0.5 || frame.origin != window.frame.origin{
+			window.setFrame(frame, display: window.isVisible)
+			view.layoutSubtreeIfNeeded()
+		}
 	}
 	override func viewWillDisappear(){super.viewWillDisappear(); sendController.setActive(false)}
 	func setAlwaysOnTop(_ enabled:Bool){
@@ -434,6 +480,7 @@ final class MainWindowViewController:NSViewController{
 		receiveContent.isHidden=tabs.selectedSegment != 0
 		sendController.view.isHidden=tabs.selectedSegment != 1
 		sendController.setActive(tabs.selectedSegment==1)
+		scheduleWindowFit()
 	}
 	@objc private func tabChanged(_ sender:NSSegmentedControl){updateTab()}
 
@@ -495,6 +542,7 @@ final class MainWindowViewController:NSViewController{
 			scrollView.contentView.scroll(to: .zero)
 			scrollView.reflectScrolledClipView(scrollView.contentView)
 		}
+		scheduleWindowFit()
 	}
 
 	@objc private func receivingChanged(_ sender:NSSwitch){onReceivingChange?(sender.state == .on)}
@@ -519,6 +567,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	private let aboutVersionLabel=WindowUI.label("", size: 12, secondary: true)
 	var onStartReceivingOnLaunchChange:((Bool)->Void)?
 	var onCompressFoldersChange:((Bool)->Void)?
+	var onResetToDefaults:(() throws ->Void)?
 	var onLaunchAtLoginChange:((Bool)->Void)?
 	var onOpenLoginItems:(()->Void)?
 	var onForgetRememberedDevices:(()->Void)?
@@ -656,6 +705,9 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		compressFoldersButton.action=#selector(compressFoldersChanged(_:))
 		sending.addArrangedSubview(compressFoldersButton)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("CompressFoldersExplanation", value: "Applies to folders chosen, dropped, or shared from Finder. When off, files are sent directly with folder paths; folder layout depends on the receiver, and empty subfolders are omitted. Changes apply to your next selection.", comment: ""), size: 11, secondary: true), in: sending)
+		let reset=NSButton(title: NSLocalizedString("ResetToDefaults", value: "Reset to defaults…", comment: ""), target: self, action: #selector(resetToDefaults(_:)))
+		reset.bezelStyle = .rounded
+		general.addArrangedSubview(reset)
 
 		let updatePage=page(.updates)
 		let updates=card(NSLocalizedString("UpdatesSettings", value: "Updates", comment: ""), in: updatePage)
@@ -762,7 +814,7 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		if let section=Section(rawValue: sender.selectedSegment){show(section)}
 	}
 
-	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int, customDeviceName:String?=nil, systemDeviceName:String = LocalDeviceIdentity.shared.systemDeviceName, receivedFilesFolderName:String = "Downloads", receivedFilesFolderIsCustom:Bool = false, compressFolders:Bool = true){
+	func update(startReceivingOnLaunch:Bool, launchAtLogin:Bool, requiresLoginApproval:Bool, rememberedDeviceCount:Int, customDeviceName:String?=nil, systemDeviceName:String = LocalDeviceIdentity.shared.systemDeviceName, receivedFilesFolderName:String = "Downloads", receivedFilesFolderIsCustom:Bool = false, compressFolders:Bool = false){
 		_ = view
 		let hadNameDraft=hasNameDraftChanges
 		let savedNameChanged=savedCustomName != customDeviceName
@@ -786,6 +838,19 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 
 	@objc private func startReceivingChanged(_ sender:NSButton){onStartReceivingOnLaunchChange?(sender.state == .on)}
 	@objc private func compressFoldersChanged(_ sender:NSButton){onCompressFoldersChange?(sender.state == .on)}
+	@objc private func resetToDefaults(_ sender:NSButton){
+		guard let window=view.window, window.attachedSheet==nil else{return}
+		let alert=NSAlert()
+		alert.messageText=NSLocalizedString("ResetDefaultsTitle", value: "Reset settings to defaults?", comment: "")
+		alert.informativeText=NSLocalizedString("ResetDefaultsExplanation", value: "Restores your Mac’s name, Downloads folder, receiving on launch, indefinite availability, launch at login off, folder compression off, automatic update checks off, and window preferences. Received files, transfer history, remembered devices, and current transfers are kept.", comment: "")
+		alert.addButton(withTitle: NSLocalizedString("ResetDefaultsConfirm", value: "Reset to defaults", comment: "")).keyEquivalent=""
+		alert.addButton(withTitle: NSLocalizedString("Cancel", value: "Cancel", comment: "")).keyEquivalent="\u{1b}"
+		alert.beginSheetModal(for: window){ [weak self] response in
+			guard response == .alertFirstButtonReturn, let self=self else{return}
+			do{try self.onResetToDefaults?(); self.resetNameDraft()}
+			catch{NSAlert(error: error).beginSheetModal(for: window)}
+		}
+	}
 	func updateUpdates(frequency:UpdateCheckFrequency, checking:Bool, currentVersion:String, availableRelease:UpdateRelease?, status:String){
 		_ = view
 		updateFrequency.selectItem(withTitle: frequency.title)
