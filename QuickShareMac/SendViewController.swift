@@ -300,21 +300,36 @@ final class SendViewController:NSViewController{
 
 	@discardableResult func selectItems(_ urls:[URL]) -> Bool{
 		_ = view
+		guard urls.allSatisfy(\.isFileURL) else {
+			showSelectionError(NSLocalizedString("SendFilesOnly", value: "The Send tab accepts files only. To share a link, use the macOS Share menu.", comment: ""))
+			return false
+		}
+		return applySelection(urls)
+	}
+
+	/// A single HTTP or HTTPS link handed over by the macOS Share menu.
+	@discardableResult func selectLink(_ url:URL) -> Bool{
+		_ = view
+		return applySelection([url])
+	}
+
+	private func applySelection(_ items:[URL]) -> Bool{
 		do{
-			guard urls.allSatisfy(\.isFileURL) else {
-				throw NSError(domain: "QuickShareMac.Send", code: 1, userInfo: [NSLocalizedDescriptionKey:NSLocalizedString("SendFilesOnly", value: "The Send tab accepts files only. To share a link, use the macOS Share menu.", comment: "")])
-			}
-			try sender.configureItems(urls)
-			selectedFiles=urls
+			try sender.configureItems(items)
+			selectedFiles=items.filter(\.isFileURL)
 			errorLabel.isHidden=true
 			senderCard.isHidden=false
 			updateControls()
 			return true
 		}catch{
-			errorLabel.stringValue=error.localizedDescription
-			errorLabel.isHidden=false
+			showSelectionError(error.localizedDescription)
 			return false
 		}
+	}
+
+	private func showSelectionError(_ message:String){
+		errorLabel.stringValue=message
+		errorLabel.isHidden=false
 	}
 
 	@objc func chooseFiles(_ sender:Any?){
@@ -352,7 +367,11 @@ final class SendViewController:NSViewController{
 				? String.localizedStringWithFormat(NSLocalizedString("CompressingFolderStep", value: "Folder %d of %d. Folders are compressed into ZIP files before sending.", comment: ""), progress.index, progress.total)
 				: NSLocalizedString("CompressingFolderHelp", value: "Folders are compressed into ZIP files before sending. Large folders can take a moment.", comment: "")
 		}else if sender.state == .choosingDevice && !displayItems.isEmpty{
-			selectionTitle.stringValue=displayItems.count==1 ? displayItems[0].lastPathComponent : String.localizedStringWithFormat(NSLocalizedString("FilesReadyToSend", value: "%d files ready to send", comment: ""), displayItems.count)
+			if displayItems.count==1{
+				selectionTitle.stringValue=displayItems[0].isFileURL ? displayItems[0].lastPathComponent : displayItems[0].absoluteString
+			}else{
+				selectionTitle.stringValue=String.localizedStringWithFormat(NSLocalizedString("FilesReadyToSend", value: "%d files ready to send", comment: ""), displayItems.count)
+			}
 			selectionHelp.stringValue=NSLocalizedString("DropReadyChooseDevice", value: "Choose a nearby device. Nothing is sent until you choose a recipient.", comment: "")
 		}else if !enabled{
 			selectionTitle.stringValue=NSLocalizedString("DropBusyTitle", value: "Transfer in progress", comment: "")
@@ -408,7 +427,11 @@ final class SendViewController:NSViewController{
 	}
 	@objc private func retryRecent(_ button:NSButton){
 		guard let result=recentTransfers.first(where: {$0.id.uuidString==button.identifier?.rawValue}) else {return}
-		selectItems(result.urls)
+		if result.urls.count==1, let link=result.urls.first, !link.isFileURL{
+			_ = selectLink(link)
+		}else{
+			_ = selectItems(result.urls)
+		}
 	}
 	@objc private func dismissRecent(_ button:NSButton){
 		recentTransfers.removeAll {$0.id.uuidString==button.identifier?.rawValue}

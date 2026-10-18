@@ -6,5 +6,31 @@
 	<array>
 		<string>_FC9F5ED42C8A._tcp</string>
 	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>File or Folder</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>None</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.item</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>me.grishka.QuickShareMac.Handoff</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>quicksharemac</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

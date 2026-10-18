@@ -12,7 +12,7 @@ Tests/run-update-checker-tests.sh
 
 The UI suite uses a fake sending service: it does not discover or contact devices.
 It covers Send/Receive navigation, file/folder selection and drag-and-drop, Share
-extension link and folder handling, approval,
+menu handoff for files, folders, and links, approval,
 progress, cancellation, retry isolation, background completion, history, and native
 menu bar behavior (menu attachment, appearance defaults, actions, live transfer rows,
 pending-request review, icon progress, cancellation, and live state).

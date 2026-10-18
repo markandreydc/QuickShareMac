@@ -15,6 +15,7 @@ Developed by Mark Andrey · github.com/markandreydc
 ## Features
 
 - **Send files and folders** from the main window, by drag-and-drop, or through Finder’s Share menu. Folders are compressed into ZIP files automatically.
+- **Share-menu handoff:** choosing **Share → QuickShareMac** in Finder hands the selection to the main window’s Send tab instead of transferring inside the Finder sheet.
 - **Receive files** with explicit approval and a PIN check for each transfer.
 - **Connect with a QR code** to help your Android device become discoverable.
 - View transfer progress with speed and time-remaining estimates, cancel outgoing transfers, and retry by choosing a recipient again.
@@ -46,11 +47,11 @@ Both devices must be on the **same Wi-Fi/local network**. Keep your Android devi
 4. Select the device in QuickShareMac, or choose **Connect with QR code…** and scan the code with your phone’s camera.
 5. Check that the PIN matches on both devices, then accept on Android.
 
-Folders are compressed into ZIP files automatically. Each dropped or chosen folder becomes its own ZIP—named after the folder, matching Finder’s **Compress** result—and files chosen alongside folders are sent as they are. The Send tab shows a spinner with **Compressing “FolderName”…** while this happens; large folders can take a moment before device discovery begins. To send a folder without compression, compress it in Finder yourself and select the ZIP. The macOS Share menu still lists QuickShareMac for files only, so send folders from the main window.
+Folders are compressed into ZIP files automatically. Each dropped or chosen folder becomes its own ZIP—named after the folder, matching Finder’s **Compress** result—and files chosen alongside folders are sent as they are. The Send tab shows a spinner with **Compressing “FolderName”…** while this happens; large folders can take a moment before device discovery begins. To send a folder without compression, compress it in Finder yourself and select the ZIP. The Share menu handles folders the same way: choosing **Share → QuickShareMac** hands the folder to the app, which compresses it before discovery.
 
 During dragging, unreadable files and unsupported content show a specific explanation instead of an accepted-drop highlight. While an outgoing transfer is active, drops are blocked until you finish or cancel it. Leaving the window or canceling the drag dismisses the overlay without changing your selection.
 
-Alternatively, select files in Finder and choose **Share → QuickShareMac**. Links can still be shared through the macOS Share extension, such as Safari’s Share menu; there is no link-sharing control in the main Send tab.
+Alternatively, select files or folders in Finder and choose **Share → QuickShareMac**. The Share extension only hands the selection to the app: the main window comes forward with the Send tab already showing those items and device discovery running, and the transfer appears in history and the menu bar like any other send. Links can be shared the same way, such as through Safari’s Share menu; there is no link-sharing control in the main Send tab.
 
 ### Receive files on your Mac
 
@@ -83,7 +84,7 @@ Turning receiving off stops new incoming connections; transfers already in progr
 
 In **General**, choose whether receiving starts when the app opens. On macOS 13 or later, you can also enable **Launch at login**. On older systems, add the app to Login Items in System Settings.
 
-Under **Device name** in Settings, choose **Use Mac’s name** or **Use a custom name**. The system option shows the name nearby devices will see; choosing Custom reveals an input prefilled with the current name. Click **Save changes** to apply your choice, or **Cancel** to restore the saved setting. Empty custom input shows guidance instead of a technical error, and Save stays disabled until the name is valid and changed. This changes only QuickShareMac’s identity, not your computer’s name. Discovery, receiving instructions, and outgoing handshakes use the chosen name, including the Share extension. The extension has read-only access to the separate preference containing that name.
+Under **Device name** in Settings, choose **Use Mac’s name** or **Use a custom name**. The system option shows the name nearby devices will see; choosing Custom reveals an input prefilled with the current name. Click **Save changes** to apply your choice, or **Cancel** to restore the saved setting. Empty custom input shows guidance instead of a technical error, and Save stays disabled until the name is valid and changed. This changes only QuickShareMac’s identity, not your computer’s name. Discovery, receiving instructions, and outgoing handshakes use the chosen name. The Share menu extension only hands items to the app, so the app applies the name itself.
 
 Under **Received files** in Settings, choose **Choose…** to pick any folder for incoming files—for example Desktop, Documents, or a folder of your own—or **Use Downloads** to restore the default. The Receive footer always shows the current folder, and **Open Received Files** next to the Receive/Send tabs opens it. If the chosen folder disappears, QuickShareMac falls back to Downloads.
 
@@ -148,6 +149,10 @@ open DerivedData/Build/Products/Debug/QuickShareMac.app
 
 The default development build uses **ad-hoc signing** for local use. This is not notarization or a stable certificate-based identity. For consistent macOS permission identity across rebuilds, configure an Apple Development certificate and your team in Xcode. Do not disable code signing when building an app for device testing.
 
+Finder’s **Share → QuickShareMac** entry belongs to the app bundle that macOS registered as *QuickShareMac*. If an older copy is installed in `/Applications`, the Share menu keeps using that copy; replace it with the new build (or remove it) when verifying changes to the Share extension.
+
+The Share extension hands files and folders to the app through LaunchServices. Sandboxed callers may only open documents with an app that **claims** their type, so the app declares `public.item` in `CFBundleDocumentTypes`. The type uses handler rank **None**, which keeps the app out of Finder’s **Open With** menus. Removing that declaration, or narrowing it, makes the Share menu handoff fail with a “couldn’t open QuickShareMac” error even though the same open succeeds from the shell.
+
 For test instructions, see [Tests/README.md](Tests/README.md). The tests cover the UI and encrypted file transfers over localhost; Android discovery and QR handshakes still need real-device testing.
 
 ### Package a release ZIP
@@ -197,7 +202,7 @@ This is intentional: receiving and active transfers continue in the background. 
 - **Transfers are local network only.** Wi-Fi Direct, Bluetooth transfers, and internet relay are not implemented. Update checks optionally contact GitHub, as described above.
 - **Visible on your network while receiving is enabled.** Contact-only visibility is not supported.
 - **Approval is always required.** Remembered device names are not persistent, verified sender identities.
-- **Folders are compressed with `ditto` before sending.** Each folder becomes its own ZIP file; the original folder is never modified. The Share menu extension still accepts files only—send folders from the main window or compress them in Finder first.
+- **Folders are compressed with `ditto` before sending.** Each folder becomes its own ZIP file; the original folder is never modified. This applies to folders shared from Finder too, since the app performs the transfer.
 - **Notifications describe requests but never accept them.** The PIN check always happens in the main window.
 - **Not AirDrop.** This app implements part of the Quick Share/Nearby Share protocol, not Apple’s AirDrop protocol.
 

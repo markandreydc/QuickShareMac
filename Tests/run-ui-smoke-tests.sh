@@ -21,6 +21,7 @@ xcrun swiftc -swift-version 5 -I "$BUILD" -L "$BUILD" \
   "$ROOT/QuickShareMac/UpdateChecker.swift" \
   "$ROOT/QuickShareMac/UpdateResultPresenter.swift" \
   "$ROOT/Shared/SendTransferViewController.swift" \
+  "$ROOT/Shared/ShareHandoff.swift" \
   "$ROOT/ShareExtension/ShareViewController.swift" \
   "$ROOT/Tests/UISmokeTests.swift" -o "$OUTPUT/ui-smoke-tests"
 DYLD_LIBRARY_PATH="$BUILD:${DYLD_LIBRARY_PATH:-}" "$OUTPUT/ui-smoke-tests"

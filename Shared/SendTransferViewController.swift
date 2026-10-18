@@ -407,7 +407,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 	}
 
 	static func isSupportedLink(_ url:URL) -> Bool{
-		["http","https"].contains(url.scheme?.lowercased() ?? "") && !(url.host ?? "").isEmpty && url.user==nil && url.password==nil
+		ShareHandoff.isSupportedLink(url)
 	}
 
 	private func selectionError(_ message:String) -> Error{NSError(domain: "QuickShareMac.Send", code: 1, userInfo: [NSLocalizedDescriptionKey:message])}

@@ -2,12 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>QuickShareMac needs access to your local network to send files to nearby devices.</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_FC9F5ED42C8A._tcp</string>
-	</array>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionAttributes</key>
@@ -19,9 +13,8 @@
     SUBQUERY (
         $extensionItem.attachments,
         $attachment,
-        ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.file-url"
-        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
-        AND NOT (ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.folder")
+        ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
+        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.folder"
     ).@count == $extensionItem.attachments.@count
 ).@count &gt; 0</string>
 		</dict>

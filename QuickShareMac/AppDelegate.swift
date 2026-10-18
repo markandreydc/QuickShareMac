@@ -33,6 +33,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private var notificationsAuthorized=false
 	private var notificationPermissionRequested=false
 	private var menuRefreshTimer:Timer?
+	private var launchFinished=false
+	private var pendingSendHandoff:ShareHandoff.Payload?
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
 		UserDefaults.standard.register(defaults: [startReceivingKey:true])
@@ -167,6 +169,44 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		refreshWindow()
 		showMainWindow(nil)
 		updates.start()
+		launchFinished=true
+		if let pending=pendingSendHandoff{
+			pendingSendHandoff=nil
+			queueSendHandoff(pending)
+		}
+	}
+
+	/// Finder's Share menu, Finder's "Open With", and the `quicksharemac://`
+	/// handoff link all arrive here. Files are opened in the app by
+	/// LaunchServices, which is also what grants access to them; links come
+	/// through the handoff URL. The Send tab takes over either way.
+	func application(_ application:NSApplication, open urls:[URL]){
+		let files=urls.filter(\.isFileURL)
+		if !files.isEmpty{
+			queueSendHandoff(.files(files))
+			return
+		}
+		for url in urls{
+			if let link=ShareHandoff.link(fromHandoffURL: url){
+				queueSendHandoff(.link(link))
+				return
+			}
+		}
+	}
+
+	private func queueSendHandoff(_ payload:ShareHandoff.Payload){
+		guard launchFinished else{
+			pendingSendHandoff=payload
+			return
+		}
+		showMainWindow(nil)
+		windowController.showSend()
+		switch payload{
+		case .files(let items):
+			_=windowController.sendController.selectItems(items)
+		case .link(let link):
+			_=windowController.sendController.selectLink(link)
+		}
 	}
 
 	@objc private func showMainWindow(_ sender:Any?){

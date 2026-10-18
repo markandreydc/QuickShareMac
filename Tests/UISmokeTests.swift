@@ -402,16 +402,12 @@ struct UISmokeTests{
 		snapshot(sendWindow, "send-failure")
 		RunLoop.main.run(until: Date().addingTimeInterval(2.2))
 		_ = button("Close", in: failedSender.view)
-		let folderSender=FolderShareController()
-		sendWindow.contentViewController=folderSender
-		RunLoop.main.run(until: Date().addingTimeInterval(0.5))
-		expect(visible(folderSender.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue.contains("Compress the folder")}), "Folder input should explain how to share a ZIP instead")
-		let linkSender=LinkShareController()
-		sendWindow.contentViewController=linkSender
-		RunLoop.main.run(until: Date().addingTimeInterval(0.5))
-		expect(linkSender.ready, "Link attachments must load before discovery starts")
-		expect(button("Connect with QR code…", in: linkSender.view).isEnabled, "QR connection must be enabled after loading attachments")
-		linkSender.useQrCode(nil)
+		let qrSender=SendTransferViewController()
+		qrSender.service=FakeSendingService()
+		sendWindow.contentViewController=qrSender
+		try! qrSender.configureItems([URL(string: "https://example.com")!])
+		expect(button("Connect with QR code…", in: qrSender.view).isEnabled, "QR connection must be enabled after loading attachments")
+		qrSender.useQrCode(nil)
 		expect(sendWindow.sheets.count==1, "QR connection should open a native sheet")
 		if let sheet=sendWindow.sheets.first{
 			layout(sheet)
@@ -421,14 +417,43 @@ struct UISmokeTests{
 			expect(request.results?.first?.payloadStringValue?.hasPrefix("https://quickshare.google/qrcode#key=")==true, "Generated QR code must be readable by a barcode scanner")
 			snapshot(sheet, "qr-connection")
 		}
-		linkSender.dismissQrCodeSheet(nil)
+		qrSender.dismissQrCodeSheet(nil)
 		expect(sendWindow.sheets.isEmpty, "Cancel must dismiss the QR sheet")
+		qrSender.shutdown()
+		let folderSender=FolderShareController()
+		sendWindow.contentViewController=folderSender
+		expect(waitUntil{folderSender.handedOff != nil}, "The Share extension must hand folders to the main app instead of transferring them itself")
+		expect(folderSender.handedOff == .files([URL(fileURLWithPath: "/")]), "The extension must hand over exactly the shared folder URLs")
+		expect(folderSender.completed, "The Share panel must complete its request after the handoff")
+		expect(visible(folderSender.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue.contains("Opening QuickShareMac")}), "The Share panel must explain that the main window opens")
+		snapshot(sendWindow, "share-handoff-folder")
+		let linkSender=LinkShareController()
+		sendWindow.contentViewController=linkSender
+		expect(waitUntil{linkSender.handedOff != nil}, "The Share extension must hand links to the main app")
+		expect(linkSender.handedOff == .link(URL(string: "https://example.com")!), "A shared link must keep its exact URL")
+		expect(linkSender.completed, "The Share panel must complete its request after handing over a link")
+		expect(visible(linkSender.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="https://example.com"}), "The Share panel must preview the shared link")
+		let unsupportedSender=UnsupportedShareController()
+		sendWindow.contentViewController=unsupportedSender
+		expect(waitUntil{visible(unsupportedSender.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Can’t send these items"})}, "Unsupported share attachments must be reported in the panel")
+		expect(unsupportedSender.handOffCalls==0, "Unsupported share attachments must never reach the main app")
+		expect(!visible(unsupportedSender.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Retry"}), "Unsupported items must not offer a retry that cannot succeed")
+		button("Cancel", in: unsupportedSender.view).performClick(nil)
+		expect(unsupportedSender.canceled, "Cancel must abort the share request")
+		let failingSender=FailingShareController()
+		sendWindow.contentViewController=failingSender
+		expect(waitUntil{visible(failingSender.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Couldn’t open QuickShareMac"})}, "A failed handoff must be reported in the panel")
+		expect(visible(failingSender.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Simulated failure"}), "A failed handoff must show the underlying reason")
+		button("Retry", in: failingSender.view).performClick(nil)
+		expect(waitUntil{failingSender.completed}, "Retry must attempt the handoff again and dismiss when it succeeds")
+		expect(failingSender.handOffCalls==2, "Retry must not hand off more than one additional time")
 		controller.view.appearance=NSAppearance(named: .darkAqua)
 		controller.update(receiving: true, transfers: [transfer("dark", .awaitingApproval), transfer("done", .completed)])
 		layout(window)
 		snapshot(window, "dark-approval")
 		expect(button("Accept", in: controller.view).isEnabled, "Approval must remain usable in dark mode")
 		testMainWindowSending()
+		testShareHandoff()
 		testFolderCompression()
 		testFileDropExperience()
 		testTransferRateEstimator()
@@ -740,6 +765,9 @@ struct UISmokeTests{
 		expect(sendProgress.style == .bar && !sendProgress.isIndeterminate && sendProgress.doubleValue==0, "Sending must use an empty determinate bar, not a loading animation")
 		expect(!(main.view as! SendDropView).acceptsItems, "The window must not advertise replacement drops during an active transfer")
 		expect(!main.sendController.selectItems([file]), "Choosing replacement items during a transfer must be blocked")
+		expect(!main.sendController.selectLink(URL(string: "https://example.com/other")!), "A link handed over during a transfer must be blocked too")
+		expect(main.sendController.sender.preparedItems.first?.pathExtension=="zip", "A blocked handoff must keep the in-flight selection")
+		expect(visible(main.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Finish or cancel the current transfer before choosing other items."}), "A blocked handoff must explain why the selection was not replaced")
 		let oldAttempt=service.attempts[0]
 		oldAttempt.connectionWasEstablished(pinCode: "2468")
 		expect(main.sendController.sender.state == .awaitingApproval, "Established connections must wait for approval")
@@ -802,6 +830,11 @@ struct UISmokeTests{
 		pasteboard.releaseGlobally()
 		expect(main.sendController.selectItems([file]), "An empty regular file must be selectable")
 		expect(!main.sendController.selectItems([file,url]), "Mixed files and web links must not be silently truncated")
+		expect(main.sendController.selectLink(url), "A link handed over by the Share menu must be accepted by the Send tab")
+		expect(main.sendController.sender.preparedItems==[url] && main.sendController.sender.state == .choosingDevice, "Handing over a link must prepare it and start discovery")
+		layout(window)
+		expect(visible(main.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue==url.absoluteString}), "The Send tab must show the shared link instead of a path fragment")
+		expect(!main.sendController.selectLink(URL(string: "mailto:someone@example.com")!), "Unsupported link schemes must not be handed to the Send flow")
 		main.sendController.sender.shutdown()
 		expect(main.sendController.sender.state == .idle && !main.sendController.sender.hasItems, "Shutdown must release the selection")
 		main.showReceive()
@@ -917,6 +950,26 @@ struct UISmokeTests{
 		expect(overlay.isHidden && drop.dropFeedback==nil, "Removing the view from its window must clear an abandoned preview")
 	}
 
+	static func testShareHandoff(){
+		let link=URL(string: "https://example.com/a?b=c#d")!
+		expect(ShareHandoff.isSupportedLink(link), "Plain HTTP and HTTPS links must be shareable")
+		expect(!ShareHandoff.isSupportedLink(URL(string: "ftp://example.com")!) && !ShareHandoff.isSupportedLink(URL(string: "mailto:someone@example.com")!), "Only HTTP and HTTPS links may be shared")
+		expect(!ShareHandoff.isSupportedLink(URL(string: "https://user:password@example.com")!), "Links containing credentials must not be shared")
+		guard let handoff=ShareHandoff.handoffURL(for: link) else{fatalError("A supported link must have a handoff URL")}
+		expect(handoff.scheme==ShareHandoff.scheme && handoff.host==ShareHandoff.host, "Link handoffs must use the quicksharemac:// scheme")
+		expect(ShareHandoff.link(fromHandoffURL: handoff)==link, "The handoff URL must round-trip the exact link, including its query and fragment")
+		expect(ShareHandoff.handoffURL(for: URL(string: "ftp://example.com")!)==nil, "Unsupported links must not produce a handoff URL")
+		expect(ShareHandoff.link(fromHandoffURL: URL(string: "quicksharemac://send?url=ftp%3A%2F%2Fexample.com")!)==nil, "Handoff URLs must reject unsupported links")
+		expect(ShareHandoff.link(fromHandoffURL: URL(string: "https://example.com")!)==nil, "Ordinary links must not be mistaken for handoff URLs")
+		expect(ShareHandoff.link(fromHandoffURL: URL(string: "quicksharemac://other?url=https%3A%2F%2Fexample.com")!)==nil, "Only the send host may be handled")
+		let file=URL(fileURLWithPath: "/tmp/example.txt")
+		let folder=URL(fileURLWithPath: "/tmp/example-folder")
+		expect(ShareHandoff.payload(for: [file,folder]) == .files([file,folder]), "File and folder shares must be handed over as files")
+		expect(ShareHandoff.payload(for: [link]) == .link(link), "A single link must be handed over as a link")
+		expect(ShareHandoff.payload(for: [file,link])==nil, "Mixed shares must be rejected rather than silently truncated")
+		expect(ShareHandoff.payload(for: [])==nil && ShareHandoff.payload(for: [URL(string: "mailto:someone@example.com")!])==nil, "Empty or unsupported shares must not reach the main app")
+	}
+
 	static func testFolderCompression(){
 		let root=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-zip-tests-\(UUID().uuidString)")
 		let folder=root.appendingPathComponent("Projects")
@@ -1025,35 +1078,85 @@ private final class FakeSendingService:SendingService{
 	func clearQrCodeKey(){}
 }
 
-private final class PreviewShareController:ShareViewController{
+private final class PreviewShareController:SendTransferViewController{
 	// Build the real view without loading attachments or starting discovery.
 	override func viewDidLoad(){}
 }
 
 private final class FolderShareController:ShareViewController{
 	private let context=FolderExtensionContext()
+	var handedOff:ShareHandoff.Payload?
+	var completed:Bool{context.completed}
 	override var extensionContext:NSExtensionContext? {context}
+	// Observe the handoff instead of opening another app.
+	override func handOff(_ payload:ShareHandoff.Payload, completion:@escaping (Error?) -> Void){
+		handedOff=payload
+		completion(nil)
+	}
 }
 
 private final class FolderExtensionContext:NSExtensionContext{
+	var completed=false
+	var canceled=false
 	override var inputItems:[Any]{
 		let item=NSExtensionItem()
 		item.attachments=[NSItemProvider(object: NSURL(fileURLWithPath: "/"))]
 		return [item]
 	}
+	override func completeRequest(returningItems items:[Any]?, completionHandler completion:((Bool) -> Void)? = nil){completed=true; completion?(true)}
+	override func cancelRequest(withError error:Error){canceled=true}
 }
 
 private final class LinkShareController:ShareViewController{
 	private let context=LinkExtensionContext()
-	var ready=false
+	var handedOff:ShareHandoff.Payload?
+	var completed:Bool{context.completed}
 	override var extensionContext:NSExtensionContext? {context}
-	override func beginDiscovery(){ready=true}
+	override func handOff(_ payload:ShareHandoff.Payload, completion:@escaping (Error?) -> Void){
+		handedOff=payload
+		completion(nil)
+	}
 }
 
 private final class LinkExtensionContext:NSExtensionContext{
+	var completed=false
 	override var inputItems:[Any]{
 		let item=NSExtensionItem()
 		item.attachments=[NSItemProvider(object: NSURL(string: "https://example.com")!)]
 		return [item]
+	}
+	override func completeRequest(returningItems items:[Any]?, completionHandler completion:((Bool) -> Void)? = nil){completed=true; completion?(true)}
+	override func cancelRequest(withError error:Error){}
+}
+
+private final class UnsupportedShareController:ShareViewController{
+	private let context=UnsupportedExtensionContext()
+	var handOffCalls=0
+	var canceled:Bool{context.canceled}
+	override var extensionContext:NSExtensionContext? {context}
+	override func handOff(_ payload:ShareHandoff.Payload, completion:@escaping (Error?) -> Void){
+		handOffCalls+=1
+		completion(nil)
+	}
+}
+
+private final class UnsupportedExtensionContext:NSExtensionContext{
+	var canceled=false
+	override var inputItems:[Any]{
+		let item=NSExtensionItem()
+		item.attachments=[NSItemProvider(object: NSURL(string: "mailto:someone@example.com")!)]
+		return [item]
+	}
+	override func cancelRequest(withError error:Error){canceled=true}
+}
+
+private final class FailingShareController:ShareViewController{
+	private let context=LinkExtensionContext()
+	var handOffCalls=0
+	var completed:Bool{context.completed}
+	override var extensionContext:NSExtensionContext? {context}
+	override func handOff(_ payload:ShareHandoff.Payload, completion:@escaping (Error?) -> Void){
+		handOffCalls+=1
+		completion(handOffCalls==1 ? NSError(domain: "QuickShareMac.Tests", code: 1, userInfo: [NSLocalizedDescriptionKey:"Simulated failure"]) : nil)
 	}
 }

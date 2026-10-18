@@ -50,6 +50,27 @@
     "UnsupportedSelection" : {
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose files, or one HTTP or HTTPS link. Files and links cannot be sent together." } } }
     },
+    "HandoffOpening" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Opening QuickShareMac…" } } }
+    },
+    "HandoffContinues" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The device list opens in the main window. Nothing is sent until you choose a recipient." } } }
+    },
+    "HandoffItemsCount" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d items" } } }
+    },
+    "HandoffUnsuitableTitle" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Can’t send these items" } } }
+    },
+    "HandoffFailedTitle" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn’t open QuickShareMac" } } }
+    },
+    "HandoffFailedHelp" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open QuickShareMac from Applications, then try again." } } }
+    },
+    "Retry" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry" } } }
+    },
     "Cancel" : {
       "localizations" : {
         "en" : {
