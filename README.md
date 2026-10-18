@@ -153,6 +153,8 @@ Finder’s **Share → QuickShareMac** entry belongs to the app bundle that macO
 
 The Share extension hands files and folders to the app through LaunchServices. Sandboxed callers may only open documents with an app that **claims** their type, so the app declares `public.item` in `CFBundleDocumentTypes`. The type uses handler rank **None**, which keeps the app out of Finder’s **Open With** menus. Removing that declaration, or narrowing it, makes the Share menu handoff fail with a “couldn’t open QuickShareMac” error even though the same open succeeds from the shell.
 
+One handoff can also lose items if it is treated as a single open event. LaunchServices delivers one multi-file open as several events grouped by file type, and it silently drops the siblings of a quarantined download (for example a downloaded ZIP shared next to a DOCX) when the security check takes over the request. For that reason the extension opens each shared item in its own request, and the app merges open events that arrive within a couple of seconds into one Send-tab selection. Do not simplify either half back to a single batched open.
+
 For test instructions, see [Tests/README.md](Tests/README.md). The tests cover the UI and encrypted file transfers over localhost; Android discovery and QR handshakes still need real-device testing.
 
 ### Package a release ZIP

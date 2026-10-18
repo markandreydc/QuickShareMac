@@ -195,7 +195,24 @@ class ShareViewController:NSViewController{
 				completion(handoffError)
 				return
 			}
-			NSWorkspace.shared.open(files, withApplicationAt: app, configuration: openConfiguration()){ _, error in completion(error)}
+			// LaunchServices can silently drop sibling documents when a
+			// multi-item open contains a quarantined item whose security check
+			// takes over the whole request (observed with a downloaded ZIP
+			// shared next to a DOCX), so each item travels in its own open
+			// request. The main app merges the resulting events back into one
+			// selection.
+			let group=DispatchGroup()
+			var failure:Error?
+			for file in files{
+				group.enter()
+				NSWorkspace.shared.open([file], withApplicationAt: app, configuration: openConfiguration()){ _, error in
+					DispatchQueue.main.async{
+						if failure==nil{failure=error}
+						group.leave()
+					}
+				}
+			}
+			group.notify(queue: .main){completion(failure)}
 		}
 	}
 

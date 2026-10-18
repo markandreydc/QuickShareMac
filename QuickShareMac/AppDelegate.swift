@@ -35,6 +35,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private var menuRefreshTimer:Timer?
 	private var launchFinished=false
 	private var pendingSendHandoff:ShareHandoff.Payload?
+	/// URLs and time of the most recent Share-menu handoff; see
+	/// `application(_:open:)` for how LaunchServices bursts are merged.
+	private var handoffBurstURLs:[URL]=[]
+	private var handoffBurstDate=Date.distantPast
+	private static let handoffBurstWindow:TimeInterval=2.0
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
 		UserDefaults.standard.register(defaults: [startReceivingKey:true])
@@ -183,11 +188,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	func application(_ application:NSApplication, open urls:[URL]){
 		let files=urls.filter(\.isFileURL)
 		if !files.isEmpty{
-			queueSendHandoff(.files(files))
+			// The Share extension opens each item in its own request, and
+			// LaunchServices delivers those as separate open events, sometimes
+			// grouped by file type and up to a moment apart. A burst arriving
+			// within the window extends the previous handoff instead of
+			// replacing it, so every shared item survives.
+			let now=Date()
+			handoffBurstURLs=ShareHandoff.mergedHandoffURLs(previous: handoffBurstURLs, previousEvent: handoffBurstDate, new: files, now: now, window: Self.handoffBurstWindow)
+			handoffBurstDate=now
+			queueSendHandoff(.files(handoffBurstURLs))
 			return
 		}
 		for url in urls{
 			if let link=ShareHandoff.link(fromHandoffURL: url){
+				handoffBurstURLs=[]
+				handoffBurstDate=Date.distantPast
 				queueSendHandoff(.link(link))
 				return
 			}

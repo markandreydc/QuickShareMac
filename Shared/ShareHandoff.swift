@@ -45,4 +45,15 @@ enum ShareHandoff{
 		guard let raw=components.queryItems?.first(where: {$0.name==linkQueryName})?.value, let link=URL(string: raw) else{return nil}
 		return isSupportedLink(link) ? link : nil
 	}
+
+	/// LaunchServices can deliver one Share-menu handoff as several open
+	/// events, sometimes grouped by file type and spread over a moment. Open
+	/// events that arrive within `window` of the previous one extend that
+	/// handoff instead of replacing it, so every shared item survives.
+	static func mergedHandoffURLs(previous:[URL], previousEvent:Date, new:[URL], now:Date, window:TimeInterval) -> [URL]{
+		guard now.timeIntervalSince(previousEvent) <= window else{return new}
+		var merged=previous
+		for url in new where !merged.contains(url){merged.append(url)}
+		return merged
+	}
 }

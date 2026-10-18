@@ -968,6 +968,12 @@ struct UISmokeTests{
 		expect(ShareHandoff.payload(for: [link]) == .link(link), "A single link must be handed over as a link")
 		expect(ShareHandoff.payload(for: [file,link])==nil, "Mixed shares must be rejected rather than silently truncated")
 		expect(ShareHandoff.payload(for: [])==nil && ShareHandoff.payload(for: [URL(string: "mailto:someone@example.com")!])==nil, "Empty or unsupported shares must not reach the main app")
+		let burstStart=Date()
+		expect(ShareHandoff.mergedHandoffURLs(previous: [], previousEvent: burstStart.addingTimeInterval(-5), new: [file], now: burstStart, window: 2)==[file], "A new Share-menu handoff must replace the previous selection")
+		let merged=ShareHandoff.mergedHandoffURLs(previous: [file], previousEvent: burstStart, new: [folder], now: burstStart.addingTimeInterval(0.4), window: 2)
+		expect(merged==[file,folder], "Open events from one Share-menu handoff must merge instead of replacing each other")
+		expect(ShareHandoff.mergedHandoffURLs(previous: merged, previousEvent: burstStart.addingTimeInterval(0.4), new: [folder], now: burstStart.addingTimeInterval(0.6), window: 2)==merged, "Repeated items in one handoff must not be duplicated")
+		expect(ShareHandoff.mergedHandoffURLs(previous: merged, previousEvent: burstStart.addingTimeInterval(0.4), new: [file], now: burstStart.addingTimeInterval(3), window: 2)==[file], "A later handoff must replace the previous selection")
 	}
 
 	static func testFolderCompression(){
