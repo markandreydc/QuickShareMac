@@ -1,6 +1,15 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "RemoveAllSelectedItems" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove All" } } } },
+    "RemoveAllFromSendList" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove all items from the send list without deleting files" } } } },
+    "CannotAddFilesToLink" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove the shared link before adding files or folders." } } } },
+    "RemoveFromSendList" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove from send list" } } } },
+    "RemoveSelectedItem" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove %@ from send list" } } } },
+    "OpenSelectedItem" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open" } } } },
+    "RevealSelectedItem" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Reveal in Finder" } } } },
+    "SelectedItemMissing" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This item is no longer available at its original location." } } } },
+    "SelectedItemOpenFailed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This item could not be opened with its default app." } } } },
     "GeneralSettings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "General" } } } },
     "AboutSettings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "About" } } } },
     "SettingsSections" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings sections" } } } },

@@ -314,7 +314,7 @@ final class MainWindowViewController:NSViewController{
 		drop.onURLs={ [weak self] urls in
 			guard let self=self else {return false}
 			self.showSend()
-			return self.sendController.selectItems(urls)
+			return self.sendController.appendItems(urls)
 		}
 		view=drop
 		view.wantsLayer=true

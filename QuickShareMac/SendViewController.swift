@@ -204,23 +204,72 @@ final class SendDropView:WindowBackgroundView{
 	override func viewDidMoveToWindow(){super.viewDidMoveToWindow(); if window==nil{endDropPreview()}}
 }
 
-final class SendViewController:NSViewController{
+final class SelectedItemsTableView:NSTableView{
+	var onContextMenu:((Int)->NSMenu?)?
+	func contextMenu(forRow row:Int)->NSMenu?{
+		guard row>=0, row<numberOfRows else{return nil}
+		selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+		window?.makeFirstResponder(self)
+		return onContextMenu?(row)
+	}
+	override func menu(for event:NSEvent)->NSMenu?{
+		contextMenu(forRow: row(at: convert(event.locationInWindow, from: nil)))
+	}
+}
+
+private final class SelectedItemCellView:NSTableCellView{
+	let removeButton=NSButton()
+	var onRemove:(()->Void)?
+	init(){
+		super.init(frame: .zero)
+		let row=WindowUI.stack(.horizontal, spacing: 8)
+		WindowUI.pin(row, to: self, inset: 4)
+		let icon=NSImageView()
+		icon.imageScaling = .scaleProportionallyUpOrDown
+		NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 20),icon.heightAnchor.constraint(equalToConstant: 20)])
+		row.addArrangedSubview(icon)
+		imageView=icon
+		let name=NSTextField(labelWithString: "")
+		name.identifier=NSUserInterfaceItemIdentifier("SendSelectionItem")
+		name.lineBreakMode = .byTruncatingMiddle
+		name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+		row.addArrangedSubview(name)
+		textField=name
+		row.addArrangedSubview(WindowUI.spacer())
+		removeButton.identifier=NSUserInterfaceItemIdentifier("SendSelectionRemove")
+		removeButton.image=NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
+		removeButton.imagePosition = .imageOnly
+		removeButton.isBordered=false
+		removeButton.contentTintColor = .secondaryLabelColor
+		removeButton.target=self
+		removeButton.action=#selector(removeItem(_:))
+		NSLayoutConstraint.activate([removeButton.widthAnchor.constraint(equalToConstant: 20),removeButton.heightAnchor.constraint(equalToConstant: 20)])
+		row.addArrangedSubview(removeButton)
+	}
+	required init?(coder:NSCoder){fatalError("init(coder:) has not been implemented")}
+	@objc private func removeItem(_ sender:Any?){onRemove?()}
+}
+
+final class SendViewController:NSViewController, NSTableViewDataSource, NSTableViewDelegate{
 	let sender=SendTransferViewController()
 	var compressFolders=SendPreferences.compressFolders(){didSet{sender.folderHandling=compressFolders ? .compress : .sendContents}}
 	var onTransferActivityChange:((Bool)->Void)?
 	var onContentSizeChange:(()->Void)?
+	var onOpenItem:((URL)->Bool)?
+	var onRevealItem:((URL)->Void)?
 	var contentHeight:CGFloat{content.fittingSize.height}
 	private(set) var recentTransfers:[OutgoingTransferResult]=[]
 	private let content=WindowUI.stack(spacing: 16)
 	private let senderCard=CardView()
 	private let errorLabel=WindowUI.label("", size: 12, secondary: true)
 	private let selectionTitle=WindowUI.label("", size: 16, weight: .semibold)
+	private let removeAllButton=NSButton(title: NSLocalizedString("RemoveAllSelectedItems", value: "Remove All", comment: ""), target: nil, action: nil)
 	private let selectionHelp=WindowUI.label("", size: 12, secondary: true)
-	private let selectionList=WindowUI.stack(spacing: 6)
+	private let selectionList=SelectedItemsTableView()
 	private let selectionScroll=NSScrollView()
 	private var selectionListHeight:NSLayoutConstraint!
 	private var listedFiles:[URL]=[]
-	private var selectedFiles:[URL]=[]
+	private var listedItemsEditable=true
 	private let chooseButton=NSButton(title: NSLocalizedString("SendFiles", value: "Send files…", comment: ""), target: nil, action: nil)
 	private let preparingSpinner=NSProgressIndicator()
 	private let history=WindowUI.stack(spacing: 10)
@@ -250,19 +299,48 @@ final class SendViewController:NSViewController{
 		selectionTitle.identifier=NSUserInterfaceItemIdentifier("SendSelectionTitle")
 		selectionTitle.maximumNumberOfLines=2
 		selectionTitle.lineBreakMode = .byTruncatingMiddle
-		WindowUI.fill(selectionTitle, in: selectionContent)
+		let selectionHeading=WindowUI.stack(.horizontal)
+		selectionHeading.addArrangedSubview(selectionTitle)
+		selectionHeading.addArrangedSubview(WindowUI.spacer())
+		removeAllButton.identifier=NSUserInterfaceItemIdentifier("SendSelectionRemoveAll")
+		removeAllButton.bezelStyle = .regularSquare
+		if #available(macOS 26.0, *){removeAllButton.borderShape = .roundedRectangle}
+		removeAllButton.controlSize = .small
+		removeAllButton.toolTip=NSLocalizedString("RemoveAllFromSendList", value: "Remove all items from the send list without deleting files", comment: "")
+		removeAllButton.target=self
+		removeAllButton.action=#selector(removeAllItems(_:))
+		removeAllButton.isHidden=true
+		selectionHeading.addArrangedSubview(removeAllButton)
+		WindowUI.fill(selectionHeading, in: selectionContent)
 		selectionList.identifier=NSUserInterfaceItemIdentifier("SendSelectionList")
+		selectionList.headerView=nil
+		selectionList.style = .plain
+		selectionList.rowHeight=28
+		selectionList.intercellSpacing = .zero
+		selectionList.usesAutomaticRowHeights=false
+		selectionList.usesAlternatingRowBackgroundColors=true
+		selectionList.allowsMultipleSelection=false
+		selectionList.allowsEmptySelection=true
+		selectionList.allowsColumnReordering=false
+		selectionList.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+		selectionList.setAccessibilityLabel(NSLocalizedString("SelectedFilesAndFolders", value: "Selected files and folders", comment: ""))
+		let column=NSTableColumn(identifier: NSUserInterfaceItemIdentifier("SelectedItem"))
+		column.resizingMask = .autoresizingMask
+		selectionList.addTableColumn(column)
+		selectionList.dataSource=self
+		selectionList.delegate=self
+		selectionList.onContextMenu={ [weak self] row in self?.itemMenu(forRow: row) }
 		selectionScroll.identifier=NSUserInterfaceItemIdentifier("SendSelectionScroll")
 		selectionScroll.setAccessibilityLabel(NSLocalizedString("SelectedFilesAndFolders", value: "Selected files and folders", comment: ""))
 		selectionScroll.hasVerticalScroller=true
-		selectionScroll.autohidesScrollers=true
+		selectionScroll.autohidesScrollers=false
+		selectionScroll.scrollerStyle = .legacy
+		selectionScroll.hasHorizontalScroller=false
 		selectionScroll.borderType = .noBorder
 		selectionScroll.drawsBackground=false
-		let listDocument=FlippedDocumentView()
-		listDocument.translatesAutoresizingMaskIntoConstraints=false
-		selectionScroll.documentView=listDocument
-		WindowUI.pin(selectionList, to: listDocument, inset: 0)
-		listDocument.widthAnchor.constraint(equalTo: selectionScroll.contentView.widthAnchor).isActive=true
+		selectionList.frame=NSRect(x: 0, y: 0, width: 440, height: 0)
+		selectionList.autoresizingMask = .width
+		selectionScroll.documentView=selectionList
 		selectionListHeight=selectionScroll.heightAnchor.constraint(equalToConstant: 0)
 		selectionListHeight.isActive=true
 		selectionScroll.isHidden=true
@@ -304,7 +382,6 @@ final class SendViewController:NSViewController{
 			guard let self=self else{return}
 			self.errorLabel.stringValue=error.localizedDescription
 			self.errorLabel.isHidden=false
-			self.selectedFiles=[]
 			self.senderCard.isHidden=true
 			self.updateControls()
 		}
@@ -340,6 +417,32 @@ final class SendViewController:NSViewController{
 		return applySelection(urls)
 	}
 
+	/// Window drops add original source items, never prepared ZIPs or folder contents.
+	@discardableResult func appendItems(_ urls:[URL])->Bool{
+		_ = view
+		guard !sender.isTransferring else{
+			showSelectionError(NSLocalizedString("FinishCurrentTransfer", value: "Finish or cancel the current transfer before choosing other items.", comment: ""))
+			return false
+		}
+		guard !urls.isEmpty, urls.allSatisfy(\.isFileURL) else{
+			showSelectionError(NSLocalizedString("SendFilesOnly", value: "The Send tab accepts files only. To share a link, use the macOS Share menu.", comment: ""))
+			return false
+		}
+		let existing=sender.originalItems
+		guard existing.allSatisfy(\.isFileURL) else{
+			showSelectionError(NSLocalizedString("CannotAddFilesToLink", value: "Remove the shared link before adding files or folders.", comment: ""))
+			return false
+		}
+		var seen=Set(existing.map { $0.standardizedFileURL })
+		let additions=urls.filter { seen.insert($0.standardizedFileURL).inserted }
+		guard !additions.isEmpty else{
+			errorLabel.isHidden=true
+			onContentSizeChange?()
+			return true
+		}
+		return applySelection(existing+additions)
+	}
+
 	/// A single HTTP or HTTPS link handed over by the macOS Share menu.
 	@discardableResult func selectLink(_ url:URL) -> Bool{
 		_ = view
@@ -349,7 +452,6 @@ final class SendViewController:NSViewController{
 	private func applySelection(_ items:[URL]) -> Bool{
 		do{
 			try sender.configureItems(items)
-			selectedFiles=items.filter(\.isFileURL)
 			errorLabel.isHidden=true
 			senderCard.isHidden=false
 			updateControls()
@@ -380,52 +482,113 @@ final class SendViewController:NSViewController{
 	}
 	private func clearSelection(){
 		sender.shutdown()
-		selectedFiles=[]
 		senderCard.isHidden=true
+		errorLabel.isHidden=true
 		updateControls()
 	}
 	private func updateSelectionList(){
-		// Keep original names in a list capped at five rows. Extra items scroll
-		// independently instead of pushing the recipient controls down the tab.
-		let files=(sender.hasItems || sender.isPreparing) ? (selectedFiles.isEmpty ? sender.preparedItems : selectedFiles) : []
-		guard files != listedFiles else {return}
+		let files=sender.originalItems
+		let editable = !sender.isTransferring
+		guard files != listedFiles || editable != listedItemsEditable else{return}
+		let selectedRow=selectionList.selectedRow
+		let selected=listedFiles.indices.contains(selectedRow) ? listedFiles[selectedRow] : nil
+		let origin=selectionScroll.contentView.bounds.origin
+		let preserveScroll=files == listedFiles || (files.count>listedFiles.count && files.starts(with: listedFiles))
 		listedFiles=files
-		for row in selectionList.arrangedSubviews{selectionList.removeArrangedSubview(row); row.removeFromSuperview()}
+		listedItemsEditable=editable
 		selectionScroll.isHidden=files.isEmpty
-		selectionListHeight.constant=CGFloat(max(0,min(files.count,5)*26-6))
-		for file in files{
-			let row=WindowUI.stack(.horizontal, spacing: 8)
-			row.heightAnchor.constraint(equalToConstant: 20).isActive=true
-			let icon=NSImageView()
-			icon.image=file.isFileURL ? NSWorkspace.shared.icon(forFile: file.path) : NSImage(named: NSImage.networkName)
-			icon.imageScaling = .scaleProportionallyUpOrDown
-			NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 20), icon.heightAnchor.constraint(equalToConstant: 20)])
-			row.addArrangedSubview(icon)
-			let name=WindowUI.label(file.isFileURL ? file.lastPathComponent : file.absoluteString)
-			name.identifier=NSUserInterfaceItemIdentifier("SendSelectionItem")
-			name.maximumNumberOfLines=1
-			name.lineBreakMode = .byTruncatingMiddle
-			name.isSelectable=true
-			name.toolTip=file.isFileURL ? file.path : file.absoluteString
-			name.setAccessibilityHelp(name.toolTip)
-			row.addArrangedSubview(name)
-			WindowUI.fill(row, in: selectionList)
+		selectionListHeight.constant=CGFloat(min(files.count,5))*selectionList.rowHeight
+		selectionList.reloadData()
+		if let selected=selected, let row=files.firstIndex(of: selected){
+			selectionList.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+		}else{
+			selectionList.deselectAll(nil)
 		}
-		selectionScroll.contentView.scroll(to: .zero)
+		selectionScroll.contentView.scroll(to: preserveScroll ? origin : .zero)
 		selectionScroll.reflectScrolledClipView(selectionScroll.contentView)
+	}
+
+	func numberOfRows(in tableView:NSTableView)->Int{listedFiles.count}
+	func tableView(_ tableView:NSTableView, viewFor tableColumn:NSTableColumn?, row:Int)->NSView?{
+		guard listedFiles.indices.contains(row) else{return nil}
+		let identifier=NSUserInterfaceItemIdentifier("SelectedItemCell")
+		let cell=tableView.makeView(withIdentifier: identifier, owner: self) as? SelectedItemCellView ?? SelectedItemCellView()
+		cell.identifier=identifier
+		let file=listedFiles[row]
+		let name=file.isFileURL ? file.lastPathComponent : file.absoluteString
+		cell.textField?.stringValue=name
+		cell.textField?.toolTip=file.isFileURL ? file.path : file.absoluteString
+		cell.setAccessibilityHelp(cell.textField?.toolTip)
+		cell.imageView?.image=file.isFileURL ? NSWorkspace.shared.icon(forFile: file.path) : NSImage(named: NSImage.networkName)
+		cell.removeButton.isEnabled = !sender.isTransferring
+		cell.removeButton.toolTip=NSLocalizedString("RemoveFromSendList", value: "Remove from send list", comment: "")
+		cell.removeButton.setAccessibilityLabel(String(format: NSLocalizedString("RemoveSelectedItem", value: "Remove %@ from send list", comment: ""), name))
+		cell.onRemove={ [weak self] in self?.removeItem(file) }
+		return cell
+	}
+
+	private func removeItem(_ url:URL){
+		guard !sender.isTransferring, sender.originalItems.contains(url) else{return}
+		let remaining=sender.originalItems.filter { $0 != url }
+		if remaining.isEmpty{clearSelection()}
+		else{_ = applySelection(remaining)}
+	}
+	@objc private func removeAllItems(_ sender:Any?){
+		guard !self.sender.isTransferring else{return}
+		clearSelection()
+	}
+	private func itemMenu(forRow row:Int)->NSMenu?{
+		guard listedFiles.indices.contains(row) else{return nil}
+		let url=listedFiles[row]
+		let menu=NSMenu()
+		menu.autoenablesItems=false
+		let open=NSMenuItem(title: NSLocalizedString("OpenSelectedItem", value: "Open", comment: ""), action: #selector(openItem(_:)), keyEquivalent: "")
+		open.target=self
+		open.representedObject=url
+		open.isEnabled = !url.isFileURL || FileManager.default.fileExists(atPath: url.path)
+		menu.addItem(open)
+		if url.isFileURL{
+			let reveal=NSMenuItem(title: NSLocalizedString("RevealSelectedItem", value: "Reveal in Finder", comment: ""), action: #selector(revealItem(_:)), keyEquivalent: "")
+			reveal.target=self
+			reveal.representedObject=url
+			reveal.isEnabled=open.isEnabled
+			menu.addItem(reveal)
+		}
+		return menu
+	}
+	private func validItemURL(_ item:NSMenuItem)->URL?{
+		guard let url=item.representedObject as? URL, sender.originalItems.contains(url) else{return nil}
+		guard !url.isFileURL || FileManager.default.fileExists(atPath: url.path) else{
+			showSelectionError(NSLocalizedString("SelectedItemMissing", value: "This item is no longer available at its original location.", comment: ""))
+			return nil
+		}
+		return url
+	}
+	@objc private func openItem(_ item:NSMenuItem){
+		guard let url=validItemURL(item) else{return}
+		if !(onOpenItem?(url) ?? NSWorkspace.shared.open(url)){
+			showSelectionError(NSLocalizedString("SelectedItemOpenFailed", value: "This item could not be opened with its default app.", comment: ""))
+		}
+	}
+	@objc private func revealItem(_ item:NSMenuItem){
+		guard let url=validItemURL(item), url.isFileURL else{return}
+		if let reveal=onRevealItem{reveal(url)}
+		else{NSWorkspace.shared.activateFileViewerSelecting([url])}
 	}
 	private func updateControls(){
 		updateSelectionList()
 		let enabled = !sender.isTransferring
 		let preparing=sender.isPreparing
 		chooseButton.isEnabled=enabled && !preparing
+		removeAllButton.isHidden=sender.originalItems.isEmpty
+		removeAllButton.isEnabled=enabled && !sender.originalItems.isEmpty
 		if preparing{
 			preparingSpinner.startAnimation(nil)
 		}else{
 			preparingSpinner.stopAnimation(nil)
 		}
 		preparingSpinner.isHidden = !preparing
-		let displayItems=sender.preparedItems.isEmpty ? selectedFiles : sender.preparedItems
+		let displayItems=sender.preparedItems.isEmpty ? sender.originalItems : sender.preparedItems
 		if sender.state == .preparing, let name=sender.gatheringFolderName{
 			selectionTitle.stringValue=String(format: NSLocalizedString("GatheringFolderFiles", value: "Gathering files from “%@”…", comment: ""), name)
 			selectionHelp.stringValue=NSLocalizedString("GatheringFolderHelp", value: "Files are sent directly, with folder paths. No ZIP is created. Large folders can take a moment.", comment: "")

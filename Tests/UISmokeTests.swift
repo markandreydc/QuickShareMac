@@ -14,6 +14,15 @@ struct UISmokeTests{
 	}
 	static func descendants(_ view:NSView) -> [NSView]{[view]+view.subviews.flatMap(descendants)}
 	static func visible(_ view:NSView) -> [NSView]{descendants(view).filter {!$0.isHiddenOrHasHiddenAncestor}}
+	static func itemTable(in view:NSView)->SelectedItemsTableView{
+		descendants(view).compactMap {$0 as? SelectedItemsTableView}.first!
+	}
+	static func itemNames(in view:NSView)->[NSTextField]{
+		let table=itemTable(in: view)
+		return (0..<table.numberOfRows).compactMap {row in
+			(table.view(atColumn: 0, row: row, makeIfNecessary: true) as? NSTableCellView)?.textField
+		}
+	}
 	static func button(_ title:String, in view:NSView) -> NSButton{
 		guard let button=visible(view).compactMap({$0 as? NSButton}).first(where: {$0.title==title}) else {fatalError("Missing button: \(title)")}
 		return button
@@ -511,6 +520,8 @@ struct UISmokeTests{
 		testMainWindowSending()
 		testShareHandoff()
 		testSelectedItemList()
+		testSelectedItemActions()
+		testRemoveAllSelectedItems()
 		testFolderCompression()
 		testFolderSendingWithoutCompression()
 		testFileDropExperience()
@@ -1087,6 +1098,7 @@ struct UISmokeTests{
 		expect(drop.dropFeedback==nil && overlay.isHidden && service.attempts.isEmpty, "Leaving or canceling a drag must dismiss the overlay without doing work")
 		_ = drop.previewDrop(from: pasteboard)
 		expect(drop.receiveDrop(from: pasteboard), "Dropping a valid file on Receive must prepare Send")
+		layout(window)
 		expect(drop.dropFeedback==nil && overlay.isHidden, "The overlay must disappear after a drop")
 		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==0, "A successful drop must switch to Send")
 		expect(selectionTitle()=="1 file ready to send" && shows("first.txt") && shows("Choose a nearby device. Nothing is sent until you choose a recipient."), "A single dropped file must show a summary, filename row, and recipient-selection instruction")
@@ -1094,9 +1106,9 @@ struct UISmokeTests{
 		write([first,second])
 		expect(drop.previewDrop(from: pasteboard) == .copy && shows("2 files"), "Multi-file drags must preview their file count")
 		expect(drop.receiveDrop(from: pasteboard) && selectionTitle()=="2 files ready to send", "Multiple dropped files must show a ready-to-send summary")
-		func listedNames()->[NSTextField]{visible(main.sendController.view).compactMap {$0 as? NSTextField}.filter {$0.identifier?.rawValue=="SendSelectionItem"}}
+		func listedNames()->[NSTextField]{itemNames(in: main.sendController.view)}
 		expect(listedNames().map(\.stringValue)==["first.txt","second.txt"], "Multiple selected items must list every filename in selection order")
-		expect(listedNames().map(\.toolTip)==[first.path,second.path] && listedNames().allSatisfy(\.isSelectable), "Listed filenames must be selectable and reveal their full paths on hover")
+		expect(listedNames().map(\.toolTip)==[first.path,second.path] && itemTable(in: main.view).allowsEmptySelection, "Listed filenames must use selectable rows and reveal their full paths on hover")
 		let list=visible(main.sendController.view).first {$0.identifier?.rawValue=="SendSelectionList"}!
 		expect(descendants(list).compactMap {$0 as? NSImageView}.count==2, "Each listed item must have a file icon")
 		layout(window)
@@ -1110,18 +1122,17 @@ struct UISmokeTests{
 		expect(shows("Compress & send") && shows("Folders are compressed into ZIP files before sending.") && shows(directory.lastPathComponent), "Folder drops must explain the ZIP behavior and preview the folder name")
 		snapshot(window, "drop-folder")
 		expect(drop.receiveDrop(from: pasteboard), "Dropping a folder must start compression and prepare Send")
-		expect(listedNames().map(\.stringValue)==[directory.lastPathComponent], "A single folder must retain its own item row during compression")
+		expect(listedNames().map(\.stringValue)==["first.txt","second.txt",directory.lastPathComponent], "A folder drop must append its original name while preserving existing file rows")
 		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==0, "A folder drop must switch to Send")
 		expect(waitUntil{main.sendController.sender.state == .choosingDevice}, "Dropping a folder must finish compressing before discovery")
-		expect(selectionTitle()=="1 file ready to send" && listedNames().map(\.stringValue)==[directory.lastPathComponent], "A compressed folder must retain its original name in a one-item list")
+		expect(selectionTitle()=="3 files ready to send" && listedNames().map(\.stringValue)==["first.txt","second.txt",directory.lastPathComponent], "Compressing an appended folder must preserve the complete original-item list")
 		expect(service.discoveryStarts>startsBeforeFolderDrop, "The compressed folder must start discovery")
 		write([first,directory])
 		expect(drop.previewDrop(from: pasteboard) == .copy && drop.dropFeedback == .folder([first,directory]), "A mixed file/folder drag must be accepted")
 		expect(shows("2 items"), "Mixed drags must preview how many items are being sent")
 		expect(drop.receiveDrop(from: pasteboard), "A mixed file/folder drop must keep files and compress folders")
-		expect(listedNames().map(\.stringValue)==["first.txt",directory.lastPathComponent], "The list must include original folder names during compression")
-		expect(waitUntil{selectionTitle()=="2 files ready to send"}, "Mixed drops must keep files and add the compressed folder")
-		expect(listedNames().map(\.stringValue)==["first.txt",directory.lastPathComponent], "Folder compression must preserve the selected-item list")
+		expect(listedNames().map(\.stringValue)==["first.txt","second.txt",directory.lastPathComponent], "Repeated file/folder drops must not duplicate existing items")
+		expect(selectionTitle()=="3 files ready to send", "A duplicate drop must leave the prepared selection unchanged")
 		write([first,URL(string: "https://example.com")!])
 		expect(drop.previewDrop(from: pasteboard).isEmpty && drop.dropFeedback == .unsupported && shows("Files only"), "Mixed web links and files must not be silently truncated")
 		pasteboard.clearContents()
@@ -1166,7 +1177,7 @@ struct UISmokeTests{
 		defer{controller.sender.shutdown(); try? FileManager.default.removeItem(at: directory)}
 		let files=(0..<30).map {directory.appendingPathComponent("Selected item \($0).\(["txt","png","docx"][$0 % 3])")}
 		for file in files{try! Data().write(to: file)}
-		func names()->[NSTextField]{visible(controller.view).compactMap {$0 as? NSTextField}.filter {$0.identifier?.rawValue=="SendSelectionItem"}}
+		func names()->[NSTextField]{itemNames(in: controller.view)}
 		expect(controller.selectItems(Array(files.prefix(5))), "A five-item selection must be accepted")
 		layout(window)
 		let outer=controller.view.subviews.compactMap {$0 as? NSScrollView}.first!
@@ -1174,9 +1185,14 @@ struct UISmokeTests{
 		let originalFrame=window.frame
 		expect(controller.selectItems(files), "A large mixed-type selection must be accepted")
 		layout(window)
+		expect(!visible(controller.view).contains {$0.identifier?.rawValue=="OutgoingAttachmentSummary"}, "The main window must not repeat the attachment summary above the nearby-device heading")
+		expect(visible(controller.view).compactMap {$0 as? NSTextField}.contains {$0.stringValue=="30 files ready to send"}, "Removing the duplicate summary must preserve the count above the selected-items list")
 		expect(names().map(\.stringValue)==files.map(\.lastPathComponent), "The item list must show all items without a preview limit")
 		let scroll=visible(controller.view).compactMap {$0 as? NSScrollView}.first {$0.identifier?.rawValue=="SendSelectionScroll"}!
-		expect(scroll !== outer && scroll.bounds.height==124 && scroll.hasVerticalScroller, "The filename list must have its own scroll area capped at five rows")
+		expect(scroll !== outer && scroll.bounds.height==140 && scroll.hasVerticalScroller, "The filename list must have its own scroll area capped at five rows")
+		expect(!scroll.autohidesScrollers && scroll.scrollerStyle == .legacy && scroll.verticalScroller?.isHidden==false, "The selected-items scrollbar must stay visible regardless of the system overlay preference")
+		expect(scroll.verticalScroller?.isEnabled==true && (scroll.verticalScroller?.knobProportion ?? 1)<1, "An overflowing item list must expose an enabled scrollbar with a usable thumb")
+		expect(itemTable(in: controller.view).usesAlternatingRowBackgroundColors, "The item table must use native alternating row colors")
 		expect(scroll.documentView!.bounds.height>scroll.contentView.bounds.height, "Long item lists must scroll inside their own bounded area")
 		expect(outer.documentView!.bounds.height==fiveItemHeight && window.frame==originalFrame, "Adding more than five filenames must not enlarge the card, tab, or window")
 		expect(scroll.documentView!.bounds.width==scroll.contentView.bounds.width, "The filename list must fit horizontally without scrolling sideways")
@@ -1189,17 +1205,206 @@ struct UISmokeTests{
 		expect(controller.selectItems([files[1],files[0]]), "A replacement multi-selection must be accepted")
 		expect(names().map(\.stringValue)==[files[1].lastPathComponent,files[0].lastPathComponent], "Replacing items must remove old rows and reflect the new order")
 		layout(window)
-		expect(scroll.bounds.height==46 && scroll.documentVisibleRect.minY==0, "Short replacement lists must shrink to their rows and reset scrolling")
+		expect(scroll.bounds.height==56 && scroll.documentVisibleRect.minY==0, "Short replacement lists must shrink to their rows and reset scrolling")
 		expect(controller.selectItems([files[0]]) && names().map(\.stringValue)==[files[0].lastPathComponent], "A single file must use the same item list as a multi-selection")
 		layout(window)
-		expect(!scroll.isHidden && scroll.bounds.height==20, "A single-file list must fit one row without reserving empty space")
-		expect(names().first?.toolTip==files[0].path && names().first?.isSelectable==true, "A single file row must retain selectable text and its full-path tooltip")
+		expect(!scroll.isHidden && scroll.bounds.height==28 && scroll.verticalScroller?.isHidden==false, "A single-file list must fit one row and retain its scrollbar")
+		itemTable(in: controller.view).selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+		expect(names().first?.toolTip==files[0].path && itemTable(in: controller.view).selectedRow==0, "A single file row must support native selection and retain its full-path tooltip")
 		_ = controller.selectItems(files)
 		expect(controller.selectLink(URL(string: "https://example.com")!) && names().map(\.stringValue)==["https://example.com"], "A shared link must replace file rows with a single link row")
 		expect(names().first?.toolTip=="https://example.com", "A link row must show its full URL on hover")
 		_ = controller.selectItems(files)
 		controller.sender.shutdown()
 		expect(names().isEmpty, "Releasing the selection must hide stale item rows")
+	}
+
+	static func testSelectedItemActions(){
+		let main=MainWindowViewController()
+		let controller=main.sendController
+		let service=FakeSendingService()
+		controller.sender.service=service
+		main.setCompressFolders(false)
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		window.contentViewController=main
+		main.update(receiving: true, transfers: [])
+		let drop=main.view as! SendDropView
+		let root=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-item-actions-\(UUID().uuidString)")
+		let folder=root.appendingPathComponent("Original folder")
+		try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+		let files=(0..<8).map {root.appendingPathComponent("Item \($0).txt")}
+		for file in files+[folder.appendingPathComponent("Inside.txt")]{try! Data("item".utf8).write(to: file)}
+		let pasteboard=NSPasteboard.withUniqueName()
+		defer{controller.sender.shutdown(); pasteboard.releaseGlobally(); try? FileManager.default.removeItem(at: root)}
+		let table=itemTable(in: main.view)
+		func removeButton(_ row:Int)->NSButton{
+			let cell=table.view(atColumn: 0, row: row, makeIfNecessary: true)!
+			return descendants(cell).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="SendSelectionRemove"}!
+		}
+		func perform(_ item:NSMenuItem){NSApp.sendAction(item.action!, to: item.target, from: item)}
+		func addDrop(_ urls:[URL])->Bool{
+			pasteboard.clearContents()
+			pasteboard.writeObjects(urls.map {$0 as NSURL})
+			return drop.receiveDrop(from: pasteboard)
+		}
+		var opened:[URL]=[]
+		var revealed:[URL]=[]
+		controller.onOpenItem={opened.append($0); return true}
+		controller.onRevealItem={revealed.append($0)}
+		expect(addDrop([files[0]]), "An initial drop must populate the item table")
+		expect(addDrop([files[1],files[0],files[1]]) && controller.sender.originalItems==Array(files.prefix(2)), "A second drop must append unique originals in order")
+		let starts=service.discoveryStarts
+		expect(addDrop([files[0]]) && service.discoveryStarts==starts, "A duplicate-only drop must not restart device discovery")
+		expect(!controller.appendItems([root.appendingPathComponent("missing")]) && controller.sender.originalItems==Array(files.prefix(2)), "Invalid additions must preserve the complete current selection")
+		table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+		layout(window)
+		let clickedRow=table.rect(ofRow: 1)
+		let location=table.convert(NSPoint(x: clickedRow.midX, y: clickedRow.midY), to: nil)
+		let rightClick=NSEvent.mouseEvent(with: .rightMouseDown, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)!
+		let menu=table.menu(for: rightClick)!
+		expect(table.selectedRow==1 && menu.items.map(\.title)==["Open","Reveal in Finder"], "Right-clicking another row must select it and offer file actions")
+		perform(menu.items[0]); perform(menu.items[1])
+		expect(opened==[files[1]] && revealed==[files[1]], "Context actions must target the clicked file, not the prior selection")
+		expect(table.contextMenu(forRow: -1)==nil && table.contextMenu(forRow: table.numberOfRows)==nil, "Right-clicking empty space must not reuse a prior row's menu")
+		layout(window)
+		let remove=removeButton(0)
+		let removeFrame=remove.convert(remove.bounds, to: table)
+		expect(table.bounds.maxX-removeFrame.maxX<12, "Each remove button must align at the right edge of its item row")
+		remove.performClick(nil)
+		expect(controller.sender.originalItems==[files[1]] && FileManager.default.fileExists(atPath: files[0].path), "Removing a row must update the send selection without deleting the source file")
+		expect(table.selectedRow==0, "Removing a different row must preserve selection of the remaining URL")
+		perform(menu.items[0])
+		expect(opened.last==files[1], "A context action must retain its URL when another row is removed")
+		let removedMenu=table.contextMenu(forRow: 0)!
+		removeButton(0).performClick(nil)
+		expect(controller.sender.state == .idle && table.numberOfRows==0 && !controller.sender.hasItems, "Removing the last item must stop discovery and restore the empty Send state")
+		let openCount=opened.count
+		perform(removedMenu.items[0])
+		expect(opened.count==openCount, "An old menu action must not open an item removed from the list")
+		expect(service.attempts.isEmpty, "Adding, selecting, opening, and removing items must never send automatically")
+
+		_ = controller.selectItems(Array(files.prefix(2)))
+		let missingMenu=table.contextMenu(forRow: 0)!
+		try! FileManager.default.removeItem(at: files[0])
+		expect(table.contextMenu(forRow: 0)!.items.allSatisfy {!$0.isEnabled}, "Missing files must disable both context actions")
+		perform(missingMenu.items[0])
+		expect(opened.count==openCount, "Files removed after opening a menu must be revalidated before launching")
+		try! Data().write(to: files[0])
+		controller.onOpenItem={_ in false}
+		perform(table.contextMenu(forRow: 0)!.items[0])
+		expect(visible(controller.view).compactMap {$0 as? NSTextField}.contains {$0.stringValue=="This item could not be opened with its default app."}, "Default-app launch failures must show an explanation without discarding items")
+		controller.onOpenItem={opened.append($0); return true}
+		let staleRemove=removeButton(0)
+		controller.sender.selectDevice(RemoteDeviceInfo(name: "Test phone", type: .phone, id: "item-action-phone"))
+		expect(!removeButton(0).isEnabled && !removeButton(1).isEnabled && !drop.acceptsItems, "Active outgoing transfers must disable every remove button and further drops")
+		NSApp.sendAction(staleRemove.action!, to: staleRemove.target, from: staleRemove)
+		expect(!controller.appendItems([files[2]]) && controller.sender.originalItems==Array(files.prefix(2)), "Mutation guards must also reject stale button callbacks and direct additions during a transfer")
+		controller.sender.cancel(nil)
+		expect(removeButton(0).isEnabled && drop.acceptsItems, "Canceling a transfer must restore list editing")
+
+		let link=URL(string: "https://example.com/shared")!
+		_ = controller.selectLink(link)
+		let linkMenu=table.contextMenu(forRow: 0)!
+		expect(linkMenu.items.map(\.title)==["Open"], "Shared links must offer Open without a Finder action")
+		perform(linkMenu.items[0])
+		expect(opened.last==link && !addDrop([files[0]]) && controller.sender.originalItems==[link], "Links must open their exact URL and must not silently mix with dropped files")
+		removeButton(0).performClick(nil)
+		expect(addDrop([files[0]]), "Files must be addable after removing a shared link")
+
+		_ = controller.selectItems(Array(files.prefix(6)))
+		layout(window)
+		table.selectRowIndexes(IndexSet(integer: 2), byExtendingSelection: false)
+		table.scrollRowToVisible(5)
+		let listScroll=table.enclosingScrollView!
+		let origin=listScroll.contentView.bounds.origin
+		main.showReceive()
+		expect(addDrop([files[6]]) && controller.sender.originalItems==Array(files.prefix(7)), "Dropping while Receive is selected must append to the existing Send list")
+		layout(window)
+		expect(table.selectedRow==2 && listScroll.contentView.bounds.origin==origin, "Appending items must preserve row selection and the list scroll position")
+		for (appearance,name) in [(NSAppearance.Name.aqua,"light"),(.darkAqua,"dark")]{
+			main.view.appearance=NSAppearance(named: appearance)
+			main.fitWindowToContent()
+			expect(table.usesAlternatingRowBackgroundColors && !listScroll.autohidesScrollers && listScroll.verticalScroller?.isHidden==false, "Alternating colors and a persistent scrollbar must remain enabled in both appearances")
+			snapshot(window, "selected-items-\(name)")
+		}
+		main.view.appearance=nil
+
+		_ = controller.selectItems([folder])
+		expect(controller.sender.state == .preparing && controller.appendItems([files[0]]), "Appending during folder enumeration must safely rebuild the original-item selection")
+		expect(controller.sender.originalItems==[folder,files[0]], "An expanding folder must stay one original row when files are appended")
+		removeButton(0).performClick(nil)
+		expect(waitUntil{controller.sender.state == .choosingDevice} && controller.sender.preparedItems==[files[0]], "Removing a folder during enumeration must discard it and its prepared contents")
+		RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+		expect(controller.sender.originalItems==[files[0]] && controller.sender.parentFolders.isEmpty, "Late enumeration callbacks must not restore removed folder contents")
+
+		main.setCompressFolders(true)
+		let compressor=DeferredFolderCompressor()
+		controller.sender.folderCompressor=compressor
+		_ = controller.selectItems([folder])
+		expect(controller.sender.state == .compressing && compressor.completions.count==1, "Folder compression must expose the original folder while work is pending")
+		perform(table.contextMenu(forRow: 0)!.items[1])
+		expect(revealed.last==folder, "Finder actions must reveal the original folder rather than a temporary ZIP")
+		expect(controller.appendItems([files[1]]) && compressor.completions.count==2 && controller.sender.originalItems==[folder,files[1]], "Appending during compression must restart preparation from the original folder")
+		compressor.completions[0](.failure(CocoaError(.userCancelled)))
+		expect(controller.sender.state == .compressing && table.numberOfRows==2, "A stale compression callback must not clear the rebuilt list")
+		removeButton(0).performClick(nil)
+		compressor.completions[1](.failure(CocoaError(.userCancelled)))
+		expect(controller.sender.state == .choosingDevice && controller.sender.originalItems==[files[1]] && controller.sender.preparedItems==[files[1]], "Removing a compressing folder must ignore its late callback and keep the remaining file")
+		expect(FileManager.default.fileExists(atPath: folder.path), "Removing a folder row must never delete the original folder")
+	}
+
+	static func testRemoveAllSelectedItems(){
+		let controller=SendViewController()
+		let service=FakeSendingService()
+		controller.sender.service=service
+		controller.compressFolders=false
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		window.contentViewController=controller
+		controller.setActive(true)
+		let table=itemTable(in: controller.view)
+		let removeAll=descendants(controller.view).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="SendSelectionRemoveAll"}!
+		let root=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-remove-all-\(UUID().uuidString)")
+		let folder=root.appendingPathComponent("Folder")
+		try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+		let files=[root.appendingPathComponent("One.txt"),root.appendingPathComponent("Two.txt")]
+		for file in files+[folder.appendingPathComponent("Inside.txt")]{try! Data("contents".utf8).write(to: file)}
+		defer{controller.sender.shutdown(); try? FileManager.default.removeItem(at: root)}
+		expect(removeAll.isHidden && !removeAll.isEnabled, "Remove All must be hidden and disabled when the selection is empty")
+		_ = controller.selectItems(files)
+		layout(window)
+		let heading=descendants(controller.view).compactMap {$0 as? NSTextField}.first {$0.identifier?.rawValue=="SendSelectionTitle"}!
+		let headingFrame=heading.convert(heading.bounds, to: controller.view)
+		let buttonFrame=removeAll.convert(removeAll.bounds, to: controller.view)
+		expect(!removeAll.isHidden && removeAll.isEnabled && buttonFrame.minX>headingFrame.maxX && abs(buttonFrame.midY-headingFrame.midY)<1, "Remove All must appear beside the item count")
+		removeAll.performClick(nil)
+		expect(controller.sender.state == .idle && controller.sender.originalItems.isEmpty && table.numberOfRows==0, "Remove All must clear the complete selection and restore the idle state")
+		expect(removeAll.isHidden && !removeAll.isEnabled && table.enclosingScrollView!.isHidden && service.discoveryStarts==service.discoveryStops, "Clearing all items must hide the table and action and stop discovery")
+		expect(files.allSatisfy {FileManager.default.fileExists(atPath: $0.path)}, "Remove All must never delete source files")
+		_ = controller.selectItems(files)
+		controller.sender.selectDevice(RemoteDeviceInfo(name: "Test phone", type: .phone, id: "remove-all-phone"))
+		expect(!removeAll.isEnabled, "Remove All must be disabled during an active transfer")
+		NSApp.sendAction(removeAll.action!, to: removeAll.target, from: removeAll)
+		expect(controller.sender.isTransferring && controller.sender.originalItems==files && service.cancellations==0, "A stale Remove All callback must not cancel a transfer or alter its files")
+		controller.sender.cancel(nil)
+		expect(removeAll.isEnabled && controller.recentTransfers.count==1, "Remove All must be restored after cancellation")
+		removeAll.performClick(nil)
+		expect(controller.recentTransfers.count==1 && controller.sender.state == .idle, "Clearing the current selection must preserve transfer history")
+		_ = controller.selectItems([folder])
+		expect(controller.sender.isPreparing && removeAll.isEnabled, "Remove All must be available while gathering folder contents")
+		removeAll.performClick(nil)
+		RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+		expect(controller.sender.state == .idle && controller.sender.preparedItems.isEmpty && table.numberOfRows==0, "Clearing during enumeration must ignore late callbacks")
+		controller.compressFolders=true
+		let compressor=DeferredFolderCompressor()
+		controller.sender.folderCompressor=compressor
+		_ = controller.selectItems([folder])
+		expect(controller.sender.state == .compressing && removeAll.isEnabled, "Remove All must be available while compressing a folder")
+		removeAll.performClick(nil)
+		compressor.completions[0](.failure(CocoaError(.userCancelled)))
+		expect(controller.sender.state == .idle && controller.sender.originalItems.isEmpty && table.numberOfRows==0 && FileManager.default.fileExists(atPath: folder.path), "Clearing compression must discard late callbacks without deleting the source folder")
+		_ = controller.selectLink(URL(string: "https://example.com")!)
+		removeAll.performClick(nil)
+		expect(controller.sender.state == .idle && table.numberOfRows==0 && removeAll.isHidden, "Remove All must also clear a shared link")
 	}
 
 	static func testShareHandoff(){
@@ -1311,7 +1516,7 @@ struct UISmokeTests{
 		expect(parent(first, in: sender.parentFolders)=="Album" && parent(second, in: sender.parentFolders)=="Album/2023", "Attachments must retain their root folder and relative subfolder paths")
 		expect(parent(loose, in: sender.parentFolders)==nil, "Loose files must remain outside the selected folders")
 		expect(choose.isEnabled && service.discoveryStarts==1 && service.attempts.isEmpty, "Gathering must discover recipients without automatically sending")
-		let listed=visible(main.view).compactMap {$0 as? NSTextField}.filter {$0.identifier?.rawValue=="SendSelectionItem"}
+		let listed=itemNames(in: main.view)
 		expect(listed.map(\.stringValue)==["Album","loose.txt"], "The selected-item list must retain the user's original folder and file names")
 		let device=RemoteDeviceInfo(name: "Test phone", type: .phone, id: "direct-folder-device")
 		sender.selectDevice(device)
@@ -1445,6 +1650,12 @@ struct UISmokeTests{
 		expect(!visible(sender.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Open Network Settings…"}), "Refused connections must not show irrelevant permission controls")
 		sender.shutdown()
 	}
+}
+
+private final class DeferredFolderCompressor:FolderCompressing{
+	var completions:[(Result<URL,Error>)->Void]=[]
+	func compress(folder:URL, into directory:URL, completion:@escaping (Result<URL,Error>)->Void){completions.append(completion)}
+	func cancel(){}
 }
 
 private final class FakeSendingService:SendingService{

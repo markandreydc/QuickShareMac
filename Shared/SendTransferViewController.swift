@@ -222,6 +222,8 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 	/// The items actually being sent; folders are replaced by their ZIP files
 	/// once compression finishes.
 	var preparedItems:[URL]{urls}
+	/// The user's original files, folders, or shared link, before preparation.
+	var originalItems:[URL]{sourceSelection}
 	/// The progress of the folder currently being compressed, if any.
 	private(set) var compressionProgress:FolderCompressionStatus?
 	var isTransferring:Bool{state == .connecting || state == .awaitingApproval || state == .sending}
@@ -277,6 +279,9 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		ShareUI.pin(content, to: view, inset: embeddedInMainWindow ? 0 : 20)
 		if !embeddedInMainWindow{ShareUI.fill(ShareUI.label(NSLocalizedString("SendWithQuickShareMac", value: "Send with QuickShareMac", comment: ""), size: 18, weight: .semibold), in: content)}
 		let files=ShareUI.stack(.horizontal)
+		files.identifier=NSUserInterfaceItemIdentifier("OutgoingAttachmentSummary")
+		// The main window already shows the selection and count above this card.
+		files.isHidden=embeddedInMainWindow
 		filesIcon.imageScaling = .scaleProportionallyUpOrDown
 		NSLayoutConstraint.activate([filesIcon.widthAnchor.constraint(equalToConstant: 28), filesIcon.heightAnchor.constraint(equalToConstant: 28)])
 		files.addArrangedSubview(filesIcon)

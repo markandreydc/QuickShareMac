@@ -18,11 +18,23 @@ events LaunchServices can send for one handoff, approval,
 progress, cancellation, retry isolation, background completion, history, and native
 menu bar behavior (menu attachment, appearance defaults, actions, live transfer rows,
 pending-request review, icon progress, cancellation, and live state).
-All selections, including a single file, folder, or shared link, list every item with an icon and full-path/URL
-tooltip in a dedicated scroll area capped at five rows; checks cover reaching the
-last filename, keeping the card/tab/window height fixed as more items are added,
+All selections, including a single file, folder, or shared link, use a native selectable
+table with icons, full-path/URL tooltips, alternating row colors, and a persistent
+legacy scrollbar in a dedicated scroll area capped at five rows. Checks cover reaching
+the last filename, keeping the card/tab/window height fixed as more items are added,
 shrinking and resetting short replacement lists, file/folder compression, replacement,
 rejected selections, one-row sizing for single items, replacing files with links, and clearing on shutdown.
+Item-action checks exercise actual right-click row targeting, Open/Reveal callbacks
+without launching apps or Finder, missing-file/launch-failure handling, shared-link
+menus, right-aligned remove buttons, last-item clearing, source-file preservation,
+stale-menu/button safety, and active-transfer editing guards. Drop checks cover
+ordered additive selection on either tab, deduplication without rediscovery,
+invalid additions and file/link isolation, and preserving selection/scroll position.
+Folder edits during enumeration and deferred compression verify cancellation and
+isolation from stale callbacks. Light/dark snapshots cover the table appearance.
+Remove All checks cover placement beside the count, empty-list visibility, discovery
+shutdown, source-file and history preservation, active-transfer guards, shared links,
+and cancellation of pending folder enumeration/compression without late restoration.
 The folder-compression setting is checked for default-off behavior, persistence,
 Settings callbacks, live overlay changes, and applying only to new selections.
 Uncompressed folders are checked for nested paths, hidden and zero-byte files,
