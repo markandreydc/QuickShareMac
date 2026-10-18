@@ -40,7 +40,7 @@ struct UISmokeTests{
 		return true
 	}
 	static func transfer(_ id:String, _ state:IncomingTransferState, pin:String = "1234", remembered:Bool = false, progress:Double = 0.5) -> IncomingTransferDisplay{
-		IncomingTransferDisplay(id: id, deviceName: "Android \(id)", description: "A photograph with a longer filename.jpg · 10 MB", status: state == .failed ? "The connection was interrupted before the transfer could finish." : "Transfer status", state: state, progress: state == .receiving ? progress : nil, pinCode: pin, remembered: remembered, receivedBytes: Int64(progress*10000000), totalBytes: 10000000, savedFileURLs: [URL(fileURLWithPath: "/Users/Shared/photo.jpg")])
+		IncomingTransferDisplay(id: id, deviceName: "Android \(id)", description: "A photograph with a longer filename.jpg · 10 MB", status: state == .failed ? "The connection was interrupted before the transfer could finish." : state == .canceled ? "Canceled" : "Transfer status", state: state, progress: state == .receiving ? progress : nil, pinCode: pin, remembered: remembered, receivedBytes: Int64(progress*10000000), totalBytes: 10000000, savedFileURLs: [URL(fileURLWithPath: "/Users/Shared/photo.jpg")])
 	}
 	static func snapshot(_ window:NSWindow, _ name:String){
 		layout(window)
@@ -187,6 +187,15 @@ struct UISmokeTests{
 		expect(controller.view.bounds.contains(accept.convert(accept.bounds, to: controller.view)), "Approval controls must remain reachable by scrolling at the minimum window size")
 		expect(abs(window.contentView!.bounds.height-MainWindowViewController.minimumSize.height)<1, "Incoming requests must scroll instead of expanding the window: actual \(window.contentView!.bounds.height), minimum \(MainWindowViewController.minimumSize.height)")
 		expect(visible(controller.view).filter({$0 is NSProgressIndicator}).count==1, "Only active transfers should show progress")
+		var canceledTransfer:String?
+		controller.onCancelIncomingTransfer={canceledTransfer=$0}
+		expect(visible(controller.view).compactMap({$0 as? NSButton}).filter({$0.title=="Cancel"}).count==1, "Only the in-progress transfer should offer cancellation")
+		let cancelButton=button("Cancel", in: controller.view)
+		_ = cancelButton.scrollToVisible(cancelButton.bounds)
+		layout(window)
+		expect(controller.view.bounds.contains(cancelButton.convert(cancelButton.bounds, to: controller.view)), "Cancellation controls must remain reachable by scrolling at the minimum window size")
+		cancelButton.performClick(nil)
+		expect(canceledTransfer=="b", "Canceling an incoming transfer must identify the receiving transfer")
 		controller.update(receiving: true, transfers: [transfer("a", .awaitingApproval), transfer("b", .receiving, progress: 0.8)])
 		expect(button("Remember this device name", in: controller.view) === remember, "Progress updates must preserve approval controls")
 		expect(remember.state == .on, "Progress updates must preserve checkbox selection")
@@ -204,6 +213,14 @@ struct UISmokeTests{
 		controller.update(receiving: true, transfers: [transfer("a", .completed), transfer("b", .failed)])
 		layout(window)
 		expect(visible(controller.view).filter({$0 is NSProgressIndicator}).isEmpty, "Finished and failed transfers must not show progress bars")
+		controller.update(receiving: true, transfers: [transfer("b", .canceled)])
+		layout(window)
+		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Canceled"}), "Canceled transfers must keep a clear canceled status")
+		expect(!visible(controller.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Cancel"}), "Canceled transfers must not offer cancellation")
+		expect(!visible(controller.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Show in Finder"}), "Canceled transfers must not offer Show in Finder")
+		expect(visible(controller.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Dismiss"}), "Canceled transfers must stay dismissible")
+		controller.update(receiving: true, transfers: [transfer("a", .completed), transfer("b", .failed)])
+		layout(window)
 		var revealed:String?
 		controller.onRevealTransfer={revealed=$0}
 		button("Show in Finder", in: controller.view).performClick(nil)
@@ -354,10 +371,12 @@ struct UISmokeTests{
 		layout(settingsWindow)
 		let nameField=descendants(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="CustomDeviceName"})!
 		let nameMessage=descendants(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="DeviceNameMessage"})!
-		let systemName=button("Use Mac’s name", in: settings.view)
-		let customName=button("Use a custom name", in: settings.view)
-		let saveName=button("Save changes", in: settings.view)
-		let cancelName=button("Cancel", in: settings.view)
+		let currentName=descendants(settings.view).compactMap {$0 as? NSTextField}.first(where: {$0.identifier?.rawValue=="CurrentDeviceName"})!
+		let editNameButton=descendants(settings.view).compactMap {$0 as? NSButton}.first(where: {$0.identifier?.rawValue=="EditDeviceName"})!
+		let systemName=descendants(settings.view).compactMap {$0 as? NSButton}.first(where: {$0.title=="Use Mac’s name"})!
+		let customName=descendants(settings.view).compactMap {$0 as? NSButton}.first(where: {$0.title=="Use a custom name"})!
+		let saveName=descendants(settings.view).compactMap {$0 as? NSButton}.first(where: {$0.title=="Save changes"})!
+		let cancelName=descendants(settings.view).compactMap {$0 as? NSButton}.first(where: {$0.title=="Cancel"})!
 		var savedNames:[String?]=[]
 		var storedName:String?
 		func refreshNameSettings(){
@@ -375,24 +394,35 @@ struct UISmokeTests{
 			refreshNameSettings() // Match the app's synchronous refresh after persistence.
 		}
 		refreshNameSettings()
-		expect(systemName.state == .on && customName.state == .off && nameField.isHidden, "The default must explicitly select the Mac's name and hide custom input")
-		expect(nameMessage.isHidden && !saveName.isEnabled && !cancelName.isEnabled, "Untouched name settings must not show an error or enable Save/Cancel")
+		expect(!currentName.isHiddenOrHasHiddenAncestor && currentName.stringValue=="System Mac", "The idle device name must show the effective advertised name")
+		expect(nameField.isHiddenOrHasHiddenAncestor && nameMessage.isHiddenOrHasHiddenAncestor, "The device-name field and its status must stay hidden until editing begins")
+		expect([systemName,customName,saveName,cancelName].allSatisfy(\.isHiddenOrHasHiddenAncestor), "Untouched device-name editing controls must stay hidden")
+		expect(!editNameButton.isHiddenOrHasHiddenAncestor && editNameButton.title=="Edit name…", "An Edit name action must be available without exposing the field")
+		editNameButton.performClick(nil)
+		layout(settingsWindow)
+		expect(systemName.state == .on && customName.state == .off && nameField.isHidden, "Editing the default must select the Mac’s name with custom input hidden")
+		expect(saveName.isHiddenOrHasHiddenAncestor && cancelName.isHiddenOrHasHiddenAncestor && editNameButton.title=="Done" && !editNameButton.isHiddenOrHasHiddenAncestor, "An untouched editor must keep Save and Cancel hidden and offer Done")
 		expect(visible(settings.view).compactMap({$0 as? NSTextField}).contains(where: {$0.identifier?.rawValue=="SystemDeviceName" && $0.stringValue=="System Mac"}), "The system-name option must show the actual advertised fallback")
 		customName.performClick(nil)
 		expect(customName.state == .on && systemName.state == .off && !nameField.isHidden, "Choosing Custom must reveal its input and deselect the system option")
+		expect(!saveName.isHiddenOrHasHiddenAncestor && !cancelName.isHiddenOrHasHiddenAncestor && editNameButton.isHiddenOrHasHiddenAncestor, "Save and Cancel must appear once there is an unsaved change")
 		expect(nameField.stringValue=="System Mac" && saveName.isEnabled && savedNames.isEmpty, "Custom names must be prefilled without saving until explicitly approved")
 		editName("  Studio Mac  ")
 		expect(nameField.currentEditor() != nil, "The device name field must be focused before testing save")
 		saveName.performClick(nil)
 		expect(savedNames.count==1 && savedNames[0]=="Studio Mac", "Settings must trim and save a custom device name once; got \(savedNames)")
 		expect(nameField.currentEditor()==nil, "Saving a valid name must remove focus from the field")
-		expect(nameField.stringValue=="Studio Mac", "The saved field must display the trimmed name")
-		expect(!saveName.isEnabled && !cancelName.isEnabled && nameMessage.stringValue=="Device name updated.", "Successful saves must confirm the change and clear dirty state")
+		expect(nameField.isHiddenOrHasHiddenAncestor && saveName.isHiddenOrHasHiddenAncestor && cancelName.isHiddenOrHasHiddenAncestor, "Saving must collapse the editor and hide its actions")
+		expect(currentName.stringValue=="Studio Mac" && nameMessage.stringValue=="Device name updated." && !nameMessage.isHidden, "Successful saves must confirm the change and show the new name")
 		refreshNameSettings()
 		expect(!nameMessage.isHidden && nameMessage.stringValue=="Device name updated.", "Background refreshes must preserve the save confirmation")
+		editNameButton.performClick(nil)
 		editName("  Studio Mac  ")
-		expect(!saveName.isEnabled && cancelName.isEnabled, "Whitespace-only differences must not enable a redundant save")
+		expect(!saveName.isHiddenOrHasHiddenAncestor && !saveName.isEnabled && cancelName.isEnabled, "Whitespace-only differences must not enable a redundant save")
 		cancelName.performClick(nil)
+		expect(nameField.isHiddenOrHasHiddenAncestor && currentName.stringValue=="Studio Mac", "Cancel must close the editor and restore the saved name without a persistence callback")
+		expect(savedNames.count==1, "Cancel must not persist a draft")
+		editNameButton.performClick(nil)
 		editName("Uncommitted name")
 		refreshNameSettings()
 		expect(nameField.stringValue=="Uncommitted name", "Refreshes must preserve focused name drafts")
@@ -403,7 +433,8 @@ struct UISmokeTests{
 		settings.show(.general)
 		expect(nameField.stringValue=="Uncommitted name", "Switching Settings sections must preserve the draft without saving")
 		cancelName.performClick(nil)
-		expect(nameField.stringValue=="Studio Mac" && savedNames.count==1 && !cancelName.isEnabled, "Cancel must restore the saved name without a persistence callback")
+		expect(nameField.stringValue=="Studio Mac" && savedNames.count==1 && !cancelName.isEnabled && nameField.isHiddenOrHasHiddenAncestor, "Cancel must restore the saved name without a persistence callback")
+		editNameButton.performClick(nil)
 		for blank in ["","   "]{
 			editName(blank)
 			expect(!saveName.isEnabled && cancelName.isEnabled, "Empty and whitespace-only custom names must disable Save")
@@ -422,23 +453,26 @@ struct UISmokeTests{
 		expect(settingsScroll.documentView!.frame.height>settingsScroll.contentView.bounds.height, "Expanded validation messages must scroll rather than clip at minimum size")
 		snapshot(settingsWindow, "settings-validation")
 		cancelName.performClick(nil)
+		editNameButton.performClick(nil)
 		systemName.performClick(nil)
-		expect(nameField.isHidden && saveName.isEnabled && savedNames.count==1, "Selecting the system name must be a draft, not an immediate reset")
+		expect(nameField.isHidden && !saveName.isHiddenOrHasHiddenAncestor && saveName.isEnabled && savedNames.count==1, "Selecting the system name must be a draft, not an immediate reset")
 		cancelName.performClick(nil)
-		expect(customName.state == .on && nameField.stringValue=="Studio Mac" && !saveName.isEnabled, "Cancel must also restore the saved naming mode")
+		expect(customName.state == .on && nameField.stringValue=="Studio Mac" && !saveName.isEnabled && nameField.isHiddenOrHasHiddenAncestor, "Cancel must also restore the saved naming mode")
+		editNameButton.performClick(nil)
 		systemName.performClick(nil)
 		saveName.performClick(nil)
-		expect(savedNames.count==2 && savedNames[1]==nil && nameField.isHidden, "Saving the system option must clear the custom name, not persist a copied system name")
+		expect(savedNames.count==2 && savedNames[1]==nil && nameField.isHiddenOrHasHiddenAncestor && currentName.stringValue=="System Mac", "Saving the system option must clear the custom name, not persist a copied system name")
 		settings.onDeviceNameChange={_ in throw NSError(domain: "Test", code: 1, userInfo: [NSLocalizedDescriptionKey:"Could not save the device name."])}
+		editNameButton.performClick(nil)
 		customName.performClick(nil)
 		editName("Retry this name")
 		saveName.performClick(nil)
 		expect(saveName.isEnabled && nameField.stringValue=="Retry this name" && nameMessage.stringValue=="Could not save the device name.", "Persistence failures must preserve the draft and report failure instead of success")
 		cancelName.performClick(nil)
-		expect(systemName.state == .on && nameField.isHidden && nameMessage.isHidden, "Cancel after a failed save must restore the persisted mode and clear feedback")
+		expect(systemName.state == .on && nameField.isHidden && nameMessage.isHidden && nameField.isHiddenOrHasHiddenAncestor, "Cancel after a failed save must restore the persisted mode and clear feedback")
 		storedName="Existing custom Mac"
 		refreshNameSettings()
-		expect(customName.state == .on && nameField.stringValue=="Existing custom Mac" && !saveName.isEnabled && !cancelName.isEnabled, "An existing saved custom name must load as a clean custom selection")
+		expect(customName.state == .on && nameField.stringValue=="Existing custom Mac" && !saveName.isEnabled && nameField.isHiddenOrHasHiddenAncestor && currentName.stringValue=="Existing custom Mac", "An existing saved custom name must load read-only until Edit name is clicked")
 		settingsWindow.setContentSize(NSSize(width: 700, height: 650))
 		settings.view.appearance=NSAppearance(named: .darkAqua)
 		settings.show(.updates)
@@ -648,7 +682,12 @@ struct UISmokeTests{
 					if section == .general{
 						let scroll=visible(settings.view).compactMap {$0 as? NSScrollView}.first!
 						expect(scroll.documentView!.bounds.height>scroll.contentView.bounds.height, "General settings must scroll instead of pushing the header and footer outside the window")
+						let editToggle=descendants(settings.view).compactMap({$0 as? NSButton}).first {$0.identifier?.rawValue=="EditDeviceName"}!
+						expect(!editToggle.isHiddenOrHasHiddenAncestor, "The device name must be read-only until Edit name is clicked")
+						editToggle.performClick(nil)
+						button("Use Mac’s name", in: settings.view).performClick(nil)
 						expect(button("Save changes", in: settings.view).bezelColor == .systemBlue, "Saving a device name must use the shared blue primary action")
+						button("Cancel", in: settings.view).performClick(nil)
 						let folder=visible(settings.view).compactMap {$0 as? NSTextField}.first {$0.identifier?.rawValue=="ReceivedFilesFolder"}!
 						expect(folder.maximumNumberOfLines==1 && folder.lineBreakMode == .byTruncatingMiddle && folder.toolTip==folder.stringValue, "Long folder names must truncate and remain available in a tooltip")
 						let choose=button("Choose…", in: settings.view)
@@ -707,7 +746,8 @@ struct UISmokeTests{
 		expect(waitUntil{window.attachedSheet != nil}, "Reset confirmation must be reopenable")
 		button("Reset to defaults", in: window.attachedSheet!.contentView!).performClick(nil)
 		expect(waitUntil{resets==1}, "Confirmed reset must call the restore action exactly once")
-		expect(button("Compress folders into ZIP files before sending", in: settings.view).state == .off && button("Use Mac’s name", in: settings.view).state == .on, "Reset must immediately display default compression and device-name controls")
+		let systemNameControl=descendants(settings.view).compactMap({$0 as? NSButton}).first(where: {$0.title=="Use Mac’s name"})!
+		expect(button("Compress folders into ZIP files before sending", in: settings.view).state == .off && systemNameControl.state == .on && !button("Edit name…", in: settings.view).isHidden, "Reset must immediately display default compression and device-name controls")
 		expect(!visible(settings.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Use Downloads"}), "Reset must restore the Downloads destination display")
 	}
 

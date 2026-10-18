@@ -43,7 +43,11 @@ children, skipped symbolic links, empty-folder errors, retries that gather files
 again, and replacement/shutdown isolation from late enumeration callbacks.
 Scroll checks verify that approval controls remain reachable in a constrained
 window, and that a new approval request scrolls back to the
-top. Compact Receive checks ensure the status heading and device-specific
+top. Incoming-transfer checks cover the per-row **Cancel** action: only active
+receives offer it, clicking it identifies the transfer, it stays reachable in a
+constrained window, and finished or canceled rows replace it with their status,
+Dismiss, and Show in Finder as appropriate.
+Compact Receive checks ensure the status heading and device-specific
 instructions appear only once, the instruction row fits at narrow widths in both
 appearances, and enabling receiving and reviewing incoming requests remain usable.
 The upper-right pin button is tested for direct one-click Always on top control,
@@ -81,9 +85,12 @@ background-with-notifications, and no-notifications fallbacks, and the notificat
 copy is verified to name the device and point at the PIN check. History retry is
 covered for folders: **Send again** recompresses the original folder instead of
 pointing at deleted temporary ZIPs.
-It also checks explicit system/custom device-name choices, prefilled custom input,
-Save/Cancel draft handling, refresh isolation, friendly inline validation,
-save confirmation/failure handling, and name persistence; read-only visibility details,
+It also checks the read-only device-name card: the current advertised name with
+an edit action, editing only revealing the system/custom choice and input,
+Save/Cancel appearing only once something changed, Done closing an untouched
+editor, prefilled custom input, refresh isolation, friendly inline validation,
+save confirmation/failure handling, and collapsing back to read-only after save
+or cancel; read-only visibility details,
 availability dropdowns, timer replacement/expiry, and deadlines passed during sleep.
 Settings update-frequency selection and status-menu update actions, busy states, and update availability are
 also covered, without making update requests or opening a browser.

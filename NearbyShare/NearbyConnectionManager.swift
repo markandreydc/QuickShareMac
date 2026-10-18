@@ -272,6 +272,17 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 		tcpListener=nil
 	}
 	
+	/// Re-publishes the listener and Bonjour advertisement with the current
+	/// device name. Bonjour clients cache TXT records, so simply updating the
+	/// record can leave the previous name visible; restarting the listener
+	/// while receiving is active replaces an existing advertisement immediately.
+	/// Active connections, transfers, and the availability timer are untouched.
+	public func restartReceiving() throws{
+		guard tcpListener != nil else {return}
+		stopReceiving()
+		try startReceiving()
+	}
+	
 	private static func generateEndpointID()->[UInt8]{
 		var id:[UInt8]=[]
 		let alphabet="0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".compactMap {UInt8($0.asciiValue!)}
@@ -324,6 +335,10 @@ public class NearbyConnectionManager : NSObject, NetServiceDelegate, InboundNear
 	public func submitUserConsent(transferID:String, accept:Bool){
 		guard let conn=activeConnections[transferID] else {return}
 		conn.submitUserConsent(accepted: accept)
+	}
+	
+	public func cancelIncomingTransfer(id:String){
+		activeConnections[id]?.cancelTransfer()
 	}
 	
 	public func startDeviceDiscovery(){

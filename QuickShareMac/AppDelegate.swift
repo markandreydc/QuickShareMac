@@ -149,8 +149,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		}
 		settingsController.onDeviceNameChange={ [weak self] name in
 			try LocalDeviceIdentity.shared.setCustomName(name)
-			NearbyConnectionManager.shared.refreshDeviceName()
-			self?.refreshWindow()
+			self?.advertiseCurrentDeviceName()
 		}
 		windowController.onTransferDecision={ [weak self] id, accepted in
 			self?.respondToIncomingTransfer(id: id, decision: accepted)
@@ -169,6 +168,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 			self?.recentTransferOrder.removeAll {$0==id}
 			self?.refreshWindow()
 		}
+		windowController.onCancelIncomingTransfer={ [weak self] id in self?.cancelIncomingTransfer(id) }
 		windowController.onClearRecentTransfers={ [weak self] in
 			self?.recentlyFinishedTransfers.removeAll()
 			self?.recentTransferOrder.removeAll()
@@ -401,7 +401,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		updates.setFrequency(.never)
 		windowController.setAlwaysOnTop(false)
 		windowController.setCompressFolders(false)
-		NearbyConnectionManager.shared.refreshDeviceName()
+		advertiseCurrentDeviceName()
 		NearbyConnectionManager.shared.incomingDownloadDirectory=ReceivedFilesFolder.currentURL
 		NSWindow.removeFrame(usingName: "QuickShareMacMainWindow")
 		if let window=mainWindow{
@@ -596,6 +596,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		refreshWindow()
 	}
 
+	/// Stops an active receive. The connection reports back through
+	/// `incomingTransfer(id:didFinishWith:)`, which records the canceled result
+	/// and cleans up partially received files.
+	private func cancelIncomingTransfer(_ id:String){
+		guard let transfer=activeIncomingTransfers[id], transfer.accepted else {return}
+		NearbyConnectionManager.shared.cancelIncomingTransfer(id: id)
+	}
+
+	/// Re-publishes the advertised name. Bonjour caches TXT records, so a
+	/// restart is used while receiving; the availability timer and transfers
+	/// in progress are left untouched.
+	private func advertiseCurrentDeviceName(){
+		if NearbyConnectionManager.shared.isReceiving{
+			do{try NearbyConnectionManager.shared.restartReceiving()}
+			catch{showError(error)}
+		}else{
+			NearbyConnectionManager.shared.refreshDeviceName()
+		}
+		refreshWindow()
+	}
+
 	private func forgetRememberedDevices(){
 		guard !rememberedDevices.isEmpty else {return}
 		let alert=NSAlert()
@@ -651,18 +672,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		self.activeIncomingTransfers.removeValue(forKey: id)
 		removeTransferNotification(id)
 		let completed=transfer.accepted && error==nil && (transfer.totalBytes==0 || transfer.receivedBytes>=transfer.totalBytes)
+		var canceled=false
+		if let nearby=error as? NearbyError, case .canceled = nearby{canceled=true}
 		let status:String
 		if completed{
 			status=NSLocalizedString("TransferFinished", value: "Transfer finished", comment: "")
+		}else if canceled{
+			status=NSLocalizedString("TransferCanceled", value: "Canceled", comment: "")
 		}else if let error=error{
 			status=String(format: NSLocalizedString("TransferFailedReason", value: "Transfer failed: %@", comment: ""), error.localizedDescription)
 		}else{
 			status=NSLocalizedString("TransferInterrupted", value: "Transfer interrupted", comment: "")
 		}
-		recentlyFinishedTransfers[id]=IncomingTransferDisplay(id: id, deviceName: transfer.device.name, description: transfer.description, status: status, state: completed ? .completed : .failed, progress: nil, pinCode: nil, remembered: false, receivedBytes: transfer.receivedBytes, totalBytes: transfer.totalBytes, savedFileURLs: completed ? transfer.transfer.savedFileURLs : [])
+		let state:IncomingTransferState = completed ? .completed : (canceled ? .canceled : .failed)
+		recentlyFinishedTransfers[id]=IncomingTransferDisplay(id: id, deviceName: transfer.device.name, description: transfer.description, status: status, state: state, progress: nil, pinCode: nil, remembered: false, receivedBytes: transfer.receivedBytes, totalBytes: transfer.totalBytes, savedFileURLs: completed ? transfer.transfer.savedFileURLs : [])
 		recentTransferOrder.insert(id, at: 0)
 		refreshWindow()
-		if error != nil{showMainWindow(nil)}
+		// A user-initiated cancellation must not pull focus back to the window.
+		if error != nil && !canceled{showMainWindow(nil)}
 	}
 }
 

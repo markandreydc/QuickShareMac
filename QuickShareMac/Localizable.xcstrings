@@ -2,6 +2,9 @@
   "sourceLanguage" : "en",
   "strings" : {
     "SettingsHeading" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } } } },
+    "EditDeviceName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit name…" } } } },
+    "FinishEditingDeviceName" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Done" } } } },
+    "CancelIncomingTransferTip" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop receiving this transfer" } } } },
     "RemoveAllSelectedItems" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove All" } } } },
     "RemoveAllFromSendList" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove all items from the send list without deleting files" } } } },
     "CannotAddFilesToLink" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove the shared link before adding files or folders." } } } },

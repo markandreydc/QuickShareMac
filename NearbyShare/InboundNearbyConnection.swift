@@ -418,6 +418,22 @@ class InboundNearbyConnection: NearbyConnection{
 		}
 	}
 	
+	/// Receiver-initiated cancellation of an active transfer. Mirrors the
+	/// sender's cancel: tell the peer before closing so it can report a clean
+	/// cancellation, then let the usual cleanup delete partially received files.
+	func cancelTransfer(){
+		NearbyConnection.dispatchQueue.async {
+			if self.encryptionDone{
+				var cancel=Sharing_Nearby_Frame()
+				cancel.version = .v1
+				cancel.v1=Sharing_Nearby_V1Frame()
+				cancel.v1.type = .cancel
+				try? self.sendTransferSetupFrame(cancel)
+			}
+			self.abort(with: NearbyError.canceled(reason: .userCanceled))
+		}
+	}
+	
 	private func acceptTransfer(){
 		do{
 			for (id, file) in transferredFiles{

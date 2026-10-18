@@ -7,7 +7,7 @@ enum TransferDecision:Equatable{
 }
 
 enum IncomingTransferState{
-	case awaitingApproval, receiving, completed, failed
+	case awaitingApproval, receiving, completed, failed, canceled
 }
 
 struct IncomingTransferDisplay{
@@ -147,6 +147,7 @@ private final class TransferRowView:CardView{
 	var onDecision:((String,TransferDecision)->Void)?
 	var onReveal:((String)->Void)?
 	var onDismiss:((String)->Void)?
+	var onCancel:((String)->Void)?
 
 	init(){
 		super.init(frame: .zero)
@@ -189,7 +190,13 @@ private final class TransferRowView:CardView{
 		progress.stopAnimation(nil)
 		for child in content.arrangedSubviews{content.removeArrangedSubview(child); child.removeFromSuperview()}
 		let heading=WindowUI.stack(.horizontal)
-		let symbolName=transfer.state == .completed ? "checkmark.circle.fill" : transfer.state == .failed ? "exclamationmark.triangle.fill" : "arrow.down.doc"
+		let symbolName:String
+		switch transfer.state{
+		case .completed: symbolName="checkmark.circle.fill"
+		case .failed: symbolName="exclamationmark.triangle.fill"
+		case .canceled: symbolName="xmark.circle.fill"
+		case .awaitingApproval, .receiving: symbolName="arrow.down.doc"
+		}
 		let symbol=WindowUI.symbol(symbolName, description: transfer.status)
 		symbol.contentTintColor=transfer.state == .completed ? .systemGreen : transfer.state == .failed ? .systemOrange : .secondaryLabelColor
 		NSLayoutConstraint.activate([symbol.widthAnchor.constraint(equalToConstant: 22), symbol.heightAnchor.constraint(equalToConstant: 22)])
@@ -235,10 +242,19 @@ private final class TransferRowView:CardView{
 				WindowUI.fill(progress, in: content)
 			}
 			WindowUI.fill(status, in: content)
+			if transfer.state == .receiving{
+				let actions=WindowUI.stack(.horizontal)
+				actions.addArrangedSubview(WindowUI.spacer())
+				let cancel=NSButton(title: NSLocalizedString("Cancel", value: "Cancel", comment: ""), target: self, action: #selector(cancelTransfer(_:)))
+				cancel.bezelStyle = .inline
+				cancel.toolTip=NSLocalizedString("CancelIncomingTransferTip", value: "Stop receiving this transfer", comment: "")
+				actions.addArrangedSubview(cancel)
+				WindowUI.fill(actions, in: content)
+			}
 			if transfer.state == .failed{
 				WindowUI.fill(WindowUI.label(NSLocalizedString("IncomingFailureHelp", value: "Ask the sender to try again. Keep both devices on the same Wi-Fi network and check available disk space.", comment: ""), size: 12, secondary: true), in: content)
 			}
-			if transfer.state == .completed || transfer.state == .failed{
+			if transfer.state == .completed || transfer.state == .failed || transfer.state == .canceled{
 				let actions=WindowUI.stack(.horizontal)
 				if transfer.state == .completed && !transfer.savedFileURLs.isEmpty{
 					let reveal=NSButton(title: NSLocalizedString("ShowInFinder", value: "Show in Finder", comment: ""), target: self, action: #selector(reveal(_:)))
@@ -261,6 +277,7 @@ private final class TransferRowView:CardView{
 	@objc private func decline(_ sender:NSButton){if let id=transfer?.id{onDecision?(id, .decline)}}
 	@objc private func reveal(_ sender:NSButton){if let id=transfer?.id{onReveal?(id)}}
 	@objc private func dismiss(_ sender:NSButton){if let id=transfer?.id{onDismiss?(id)}}
+	@objc private func cancelTransfer(_ sender:NSButton){if let id=transfer?.id{onCancel?(id)}}
 }
 
 final class MainWindowViewController:NSViewController{
@@ -285,6 +302,7 @@ final class MainWindowViewController:NSViewController{
 	var onTransferDecision:((String,TransferDecision)->Void)?
 	var onRevealTransfer:((String)->Void)?
 	var onDismissTransfer:((String)->Void)?
+	var onCancelIncomingTransfer:((String)->Void)?
 	var onClearRecentTransfers:(()->Void)?
 	private let receivingSwitch=NSSwitch()
 	private let deviceNameLabel=WindowUI.label("", size: 11, secondary: true)
@@ -562,7 +580,7 @@ final class MainWindowViewController:NSViewController{
 			approvalRow.update(first, prominent: true)
 		}
 		let active=transfers.filter {$0.state == .receiving || ($0.state == .awaitingApproval && $0.id != pending.first?.id)}
-		let recent=transfers.filter {$0.state == .completed || $0.state == .failed}
+		let recent=transfers.filter {$0.state == .completed || $0.state == .failed || $0.state == .canceled}
 		let visible=active+recent
 		let visibleIDs=Set(visible.map(\.id))
 		for id in Array(transferRows.keys) where !visibleIDs.contains(id){
@@ -573,6 +591,7 @@ final class MainWindowViewController:NSViewController{
 			row.onDecision={ [weak self] id, decision in self?.onTransferDecision?(id, decision) }
 			row.onReveal={ [weak self] id in self?.onRevealTransfer?(id) }
 			row.onDismiss={ [weak self] id in self?.onDismissTransfer?(id) }
+			row.onCancel={ [weak self] id in self?.onCancelIncomingTransfer?(id) }
 			row.update(transfer)
 			transferRows[transfer.id]=row
 		}
@@ -647,9 +666,14 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 	private let nameMessage=WindowUI.label("", size: 11, secondary: true)
 	private let saveNameButton=NSButton(title: NSLocalizedString("SaveDeviceNameChanges", value: "Save changes", comment: ""), target: nil, action: nil)
 	private let cancelNameButton=NSButton(title: NSLocalizedString("Cancel", value: "Cancel", comment: ""), target: nil, action: nil)
+	private let currentNameLabel=WindowUI.label("", size: 13, weight: .semibold)
+	private let editNameButton=NSButton(title: NSLocalizedString("EditDeviceName", value: "Edit name…", comment: ""), target: nil, action: nil)
+	private let nameEditor=WindowUI.stack(spacing: 8)
+	private let nameActions=WindowUI.stack(.horizontal)
 	private var savedCustomName:String?
 	private var systemDeviceName=LocalDeviceIdentity.shared.systemDeviceName
 	private var usesCustomName=false
+	private var editingName=false
 	private var showNameValidation=false
 	private var nameSaveError:String?
 	private var nameConfirmation:DispatchWorkItem?
@@ -715,24 +739,36 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		let general=page(.general)
 		let device=card(NSLocalizedString("DeviceNameSetting", value: "Device name", comment: ""), symbol: "desktopcomputer", in: general)
 		WindowUI.fill(WindowUI.label(NSLocalizedString("DeviceNameExplanation", value: "Shown to nearby devices. Your Mac’s system name is unchanged.", comment: ""), size: 12, secondary: true), in: device)
+		let nameRow=WindowUI.stack(.horizontal)
+		currentNameLabel.identifier=NSUserInterfaceItemIdentifier("CurrentDeviceName")
+		currentNameLabel.maximumNumberOfLines=1
+		currentNameLabel.lineBreakMode = .byTruncatingMiddle
+		nameRow.addArrangedSubview(currentNameLabel)
+		nameRow.addArrangedSubview(WindowUI.spacer())
+		editNameButton.identifier=NSUserInterfaceItemIdentifier("EditDeviceName")
+		editNameButton.target=self
+		editNameButton.action=#selector(toggleNameEditing(_:))
+		styleButton(editNameButton)
+		editNameButton.controlSize = .small
+		nameRow.addArrangedSubview(editNameButton)
+		WindowUI.fill(nameRow, in: device)
+		nameMessage.identifier=NSUserInterfaceItemIdentifier("DeviceNameMessage")
+		WindowUI.fill(nameMessage, in: device)
 		for button in [systemNameButton,customNameButton]{
 			button.target=self
 			button.action=#selector(nameModeChanged(_:))
 		}
-		device.addArrangedSubview(systemNameButton)
+		nameEditor.addArrangedSubview(systemNameButton)
 		systemNameLabel.identifier=NSUserInterfaceItemIdentifier("SystemDeviceName")
-		WindowUI.fill(systemNameLabel, in: device)
-		device.addArrangedSubview(customNameButton)
+		WindowUI.fill(systemNameLabel, in: nameEditor)
+		nameEditor.addArrangedSubview(customNameButton)
 		nameField.identifier=NSUserInterfaceItemIdentifier("CustomDeviceName")
 		nameField.setAccessibilityLabel(NSLocalizedString("CustomDeviceNameLabel", value: "Custom device name", comment: ""))
 		nameField.placeholderString=NSLocalizedString("EnterDeviceName", value: "Enter a device name", comment: "")
 		nameField.bezelStyle = .roundedBezel
 		nameField.font=NSFont.systemFont(ofSize: 13)
 		nameField.delegate=self
-		WindowUI.fill(nameField, in: device)
-		nameMessage.identifier=NSUserInterfaceItemIdentifier("DeviceNameMessage")
-		WindowUI.fill(nameMessage, in: device)
-		let nameActions=WindowUI.stack(.horizontal)
+		WindowUI.fill(nameField, in: nameEditor)
 		cancelNameButton.target=self
 		cancelNameButton.action=#selector(cancelNameChanges(_:))
 		saveNameButton.target=self
@@ -741,7 +777,8 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 			styleButton(button, primary: button === saveNameButton)
 			nameActions.addArrangedSubview(button)
 		}
-		device.addArrangedSubview(nameActions)
+		nameEditor.addArrangedSubview(nameActions)
+		WindowUI.fill(nameEditor, in: device)
 		resetNameDraft()
 		let startup=card(NSLocalizedString("StartupSettings", value: "Startup", comment: ""), symbol: "power", in: general)
 		startReceivingButton.target=self
@@ -976,30 +1013,57 @@ final class SettingsViewController:NSViewController, NSTextFieldDelegate{
 		nameField.stringValue=savedCustomName ?? systemDeviceName
 		systemNameLabel.stringValue=systemDeviceName
 		showNameValidation=false
+		editingName=false
 		updateNameControls()
 	}
 	private func updateNameControls(){
 		systemNameButton.state=usesCustomName ? .off : .on
 		customNameButton.state=usesCustomName ? .on : .off
+		currentNameLabel.stringValue=savedCustomName ?? systemDeviceName
+		currentNameLabel.toolTip=currentNameLabel.stringValue
 		nameField.isHidden = !usesCustomName
 		let validated=try? LocalDeviceIdentity.validate(nameField.stringValue)
 		let valid = !usesCustomName || validated != nil
 		let candidate=usesCustomName ? validated : nil
+		let dirty=hasNameDraftChanges
 		saveNameButton.isEnabled=valid && candidate != savedCustomName
-		cancelNameButton.isEnabled=hasNameDraftChanges
+		cancelNameButton.isEnabled=dirty
+		nameEditor.isHidden = !editingName
+		nameActions.isHidden = !editingName || !dirty
+		// The Edit name action doubles as the way to close an editor that has
+		// nothing to save; once there is a change, Save and Cancel take over.
+		editNameButton.title=editingName ? NSLocalizedString("FinishEditingDeviceName", value: "Done", comment: "") : NSLocalizedString("EditDeviceName", value: "Edit name…", comment: "")
+		editNameButton.isHidden = editingName && dirty
 		nameMessage.textColor = .secondaryLabelColor
-		nameMessage.isHidden=false
 		if let error=nameSaveError{
 			nameMessage.stringValue=error
 			nameMessage.textColor = .systemRed
-		}else if nameConfirmation != nil{
+			nameMessage.isHidden = !editingName
+		}else if nameConfirmation != nil && !editingName{
 			nameMessage.stringValue=NSLocalizedString("DeviceNameUpdated", value: "Device name updated.", comment: "")
-		}else if usesCustomName && nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty{
+			nameMessage.isHidden=false
+		}else if editingName && usesCustomName && nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty{
 			nameMessage.stringValue=NSLocalizedString("CustomDeviceNameGuidance", value: "Enter a name or select Use Mac’s name.", comment: "")
-		}else if usesCustomName && !valid && showNameValidation{
+			nameMessage.isHidden=false
+		}else if editingName && usesCustomName && !valid && showNameValidation{
+			nameMessage.isHidden=false
 			do{_ = try LocalDeviceIdentity.validate(nameField.stringValue)}
 			catch{nameMessage.stringValue=error.localizedDescription; nameMessage.textColor = .systemRed}
 		}else{nameMessage.isHidden=true}
+	}
+	@objc private func toggleNameEditing(_ sender:NSButton){
+		if editingName{
+			view.window?.makeFirstResponder(nil)
+			resetNameDraft()
+		}else{
+			clearNameFeedback()
+			editingName=true
+			updateNameControls()
+			if usesCustomName{
+				view.window?.makeFirstResponder(nameField)
+				nameField.currentEditor()?.selectAll(nil)
+			}
+		}
 	}
 	@objc private func nameModeChanged(_ sender:NSButton){
 		let selectedCustom=sender === customNameButton
