@@ -212,6 +212,8 @@ final class SendViewController:NSViewController{
 	private let errorLabel=WindowUI.label("", size: 12, secondary: true)
 	private let selectionTitle=WindowUI.label("", size: 16, weight: .semibold)
 	private let selectionHelp=WindowUI.label("", size: 12, secondary: true)
+	private let selectionList=WindowUI.stack(spacing: 6)
+	private var listedFiles:[URL]=[]
 	private var selectedFiles:[URL]=[]
 	private let chooseButton=NSButton(title: NSLocalizedString("SendFiles", value: "Send files…", comment: ""), target: nil, action: nil)
 	private let preparingSpinner=NSProgressIndicator()
@@ -241,6 +243,9 @@ final class SendViewController:NSViewController{
 		selectionTitle.maximumNumberOfLines=2
 		selectionTitle.lineBreakMode = .byTruncatingMiddle
 		WindowUI.fill(selectionTitle, in: selectionContent)
+		selectionList.identifier=NSUserInterfaceItemIdentifier("SendSelectionList")
+		selectionList.isHidden=true
+		WindowUI.fill(selectionList, in: selectionContent)
 		WindowUI.fill(selectionHelp, in: selectionContent)
 		chooseButton.bezelStyle = .rounded
 		chooseButton.target=self
@@ -350,7 +355,34 @@ final class SendViewController:NSViewController{
 		senderCard.isHidden=true
 		updateControls()
 	}
+	private func updateSelectionList(){
+		// Keep the original names, including folders while their ZIPs are
+		// prepared. The tab's existing scroll view makes every row reachable.
+		let files=(sender.hasItems || sender.state == .compressing) && selectedFiles.count>1 ? selectedFiles : []
+		guard files != listedFiles else {return}
+		listedFiles=files
+		for row in selectionList.arrangedSubviews{selectionList.removeArrangedSubview(row); row.removeFromSuperview()}
+		selectionList.isHidden=files.isEmpty
+		for file in files{
+			let row=WindowUI.stack(.horizontal, spacing: 8)
+			let icon=NSImageView()
+			icon.image=NSWorkspace.shared.icon(forFile: file.path)
+			icon.imageScaling = .scaleProportionallyUpOrDown
+			NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 20), icon.heightAnchor.constraint(equalToConstant: 20)])
+			row.addArrangedSubview(icon)
+			let name=WindowUI.label(file.lastPathComponent)
+			name.identifier=NSUserInterfaceItemIdentifier("SendSelectionItem")
+			name.maximumNumberOfLines=1
+			name.lineBreakMode = .byTruncatingMiddle
+			name.isSelectable=true
+			name.toolTip=file.path
+			name.setAccessibilityHelp(file.path)
+			row.addArrangedSubview(name)
+			WindowUI.fill(row, in: selectionList)
+		}
+	}
 	private func updateControls(){
+		updateSelectionList()
 		let enabled = !sender.isTransferring
 		let compressing = sender.state == .compressing
 		chooseButton.isEnabled=enabled && !compressing

@@ -17,6 +17,9 @@ events LaunchServices can send for one handoff, approval,
 progress, cancellation, retry isolation, background completion, history, and native
 menu bar behavior (menu attachment, appearance defaults, actions, live transfer rows,
 pending-request review, icon progress, cancellation, and live state).
+Multi-item selections list every original filename with an icon and full-path
+tooltip; checks cover scrolling long lists, file/folder compression, replacement,
+rejected selections, and clearing the list for single files, links, or shutdown.
 Scroll checks verify that approval controls remain reachable by scrolling
 without expanding the window, and that a new approval request scrolls back to the
 top. The upper-right pin is tested for normal/floating window levels, on/off state,

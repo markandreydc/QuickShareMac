@@ -454,6 +454,7 @@ struct UISmokeTests{
 		expect(button("Accept", in: controller.view).isEnabled, "Approval must remain usable in dark mode")
 		testMainWindowSending()
 		testShareHandoff()
+		testSelectedItemList()
 		testFolderCompression()
 		testFileDropExperience()
 		testTransferRateEstimator()
@@ -901,6 +902,14 @@ struct UISmokeTests{
 		write([first,second])
 		expect(drop.previewDrop(from: pasteboard) == .copy && shows("2 files"), "Multi-file drags must preview their file count")
 		expect(drop.receiveDrop(from: pasteboard) && selectionTitle()=="2 files ready to send", "Multiple dropped files must show a ready-to-send summary")
+		func listedNames()->[NSTextField]{visible(main.sendController.view).compactMap {$0 as? NSTextField}.filter {$0.identifier?.rawValue=="SendSelectionItem"}}
+		expect(listedNames().map(\.stringValue)==["first.txt","second.txt"], "Multiple selected items must list every filename in selection order")
+		expect(listedNames().map(\.toolTip)==[first.path,second.path] && listedNames().allSatisfy(\.isSelectable), "Listed filenames must be selectable and reveal their full paths on hover")
+		let list=visible(main.sendController.view).first {$0.identifier?.rawValue=="SendSelectionList"}!
+		expect(descendants(list).compactMap {$0 as? NSImageView}.count==2, "Each listed item must have a file icon")
+		layout(window)
+		expect(listedNames().allSatisfy {$0.bounds.width>0 && $0.bounds.height>0}, "Every selected-item row must have a usable layout")
+		snapshot(window, "send-selected-items")
 		expect(descendants(main.view).compactMap({$0 as? SendDropView}).count==1, "Send must not introduce a nested drag target that limits the overlay to its card")
 		main.showReceive()
 		let startsBeforeFolderDrop=service.discoveryStarts
@@ -909,6 +918,7 @@ struct UISmokeTests{
 		expect(shows("Compress & send") && shows("Folders are compressed into ZIP files before sending.") && shows(directory.lastPathComponent), "Folder drops must explain the ZIP behavior and preview the folder name")
 		snapshot(window, "drop-folder")
 		expect(drop.receiveDrop(from: pasteboard), "Dropping a folder must start compression and prepare Send")
+		expect(listedNames().isEmpty, "Replacing multiple files with one folder must hide the item list")
 		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==1, "A folder drop must switch to Send")
 		expect(waitUntil{main.sendController.sender.state == .choosingDevice}, "Dropping a folder must finish compressing before discovery")
 		expect(selectionTitle()==directory.lastPathComponent+".zip", "The folder must be presented as a ZIP file once compressed")
@@ -917,7 +927,9 @@ struct UISmokeTests{
 		expect(drop.previewDrop(from: pasteboard) == .copy && drop.dropFeedback == .folder([first,directory]), "A mixed file/folder drag must be accepted")
 		expect(shows("2 items"), "Mixed drags must preview how many items are being sent")
 		expect(drop.receiveDrop(from: pasteboard), "A mixed file/folder drop must keep files and compress folders")
+		expect(listedNames().map(\.stringValue)==["first.txt",directory.lastPathComponent], "The list must include original folder names during compression")
 		expect(waitUntil{selectionTitle()=="2 files ready to send"}, "Mixed drops must keep files and add the compressed folder")
+		expect(listedNames().map(\.stringValue)==["first.txt",directory.lastPathComponent], "Folder compression must preserve the selected-item list")
 		write([first,URL(string: "https://example.com")!])
 		expect(drop.previewDrop(from: pasteboard).isEmpty && drop.dropFeedback == .unsupported && shows("Files only"), "Mixed web links and files must not be silently truncated")
 		pasteboard.clearContents()
@@ -948,6 +960,39 @@ struct UISmokeTests{
 		_ = drop.previewDrop(from: pasteboard)
 		window.contentViewController=nil
 		expect(overlay.isHidden && drop.dropFeedback==nil, "Removing the view from its window must clear an abandoned preview")
+	}
+
+	static func testSelectedItemList(){
+		let controller=SendViewController()
+		let service=FakeSendingService()
+		controller.sender.service=service
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.minimumSize), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		window.contentViewController=controller
+		let directory=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-list-tests-\(UUID().uuidString)")
+		try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer{controller.sender.shutdown(); try? FileManager.default.removeItem(at: directory)}
+		let files=(0..<30).map {directory.appendingPathComponent("Selected item \($0).\(["txt","png","docx"][$0 % 3])")}
+		for file in files{try! Data().write(to: file)}
+		func names()->[NSTextField]{visible(controller.view).compactMap {$0 as? NSTextField}.filter {$0.identifier?.rawValue=="SendSelectionItem"}}
+		expect(controller.selectItems(files), "A large mixed-type selection must be accepted")
+		layout(window)
+		expect(names().map(\.stringValue)==files.map(\.lastPathComponent), "The item list must show all items without a preview limit")
+		let scroll=controller.view.subviews.compactMap {$0 as? NSScrollView}.first!
+		expect(scroll.documentView!.bounds.height>scroll.contentView.bounds.height, "Long item lists must scroll instead of enlarging the window")
+		let last=names().last!
+		last.scrollToVisible(last.bounds)
+		layout(window)
+		expect(last.convert(last.bounds, to: scroll.documentView!).intersects(scroll.documentVisibleRect), "The final selected item must be reachable by scrolling")
+		expect(!controller.selectItems([directory.appendingPathComponent("missing.txt")]), "An unreadable replacement must fail")
+		expect(names().count==files.count, "A rejected selection must preserve the existing item list")
+		expect(controller.selectItems([files[1],files[0]]), "A replacement multi-selection must be accepted")
+		expect(names().map(\.stringValue)==[files[1].lastPathComponent,files[0].lastPathComponent], "Replacing items must remove old rows and reflect the new order")
+		expect(controller.selectItems([files[0]]) && names().isEmpty, "A single file must keep the compact filename display without a duplicate list")
+		_ = controller.selectItems(files)
+		expect(controller.selectLink(URL(string: "https://example.com")!) && names().isEmpty, "A shared link must clear the old file list")
+		_ = controller.selectItems(files)
+		controller.sender.shutdown()
+		expect(names().isEmpty, "Releasing the selection must hide stale item rows")
 	}
 
 	static func testShareHandoff(){
