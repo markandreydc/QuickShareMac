@@ -1,14 +1,38 @@
-# QuickShareMac
+<p align="center">
+  <img src="images/quicksharemac.png" width="160" alt="QuickShareMac icon">
+</p>
 
-<img src="images/quicksharemac.png" width="96" alt="QuickShareMac icon">
+<h1 align="center">QuickShareMac</h1>
 
-Send files between your Mac and Android devices using **Quick Share** over your local network.
+<p align="center">
+  Send files between your Mac and Android devices using <strong>Quick Share</strong>.<br>
+  Simple, local transfers over your Wi-Fi network.
+</p>
 
-**[Download QuickShareMac for macOS](https://github.com/markandreydc/QuickShareMac/releases/latest/download/QuickShareMac.app.zip)** · macOS 12 or later · Apple Silicon and Intel
+<p align="center">
+  <a href="https://github.com/markandreydc/QuickShareMac/releases/latest/download/QuickShareMac.app.zip">Download</a> ·
+  <a href="#installation">Install</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#limitations-and-privacy">Privacy</a> ·
+  <a href="https://github.com/markandreydc/QuickShareMac/releases">Releases</a>
+</p>
 
-No GitHub account or coding tools needed. See [installation instructions](#installation) below.
+<p align="center">
+  <a href="https://github.com/markandreydc/QuickShareMac/releases/latest"><img src="https://img.shields.io/github/v/release/markandreydc/QuickShareMac?label=release" alt="Latest release"></a>
+  <a href="https://github.com/markandreydc/QuickShareMac/releases"><img src="https://img.shields.io/github/downloads/markandreydc/QuickShareMac/total" alt="Total downloads"></a>
+  <img src="https://img.shields.io/badge/macOS-12%2B%20%C2%B7%20Apple%20Silicon%20%26%20Intel-black" alt="macOS 12 or later, Apple Silicon and Intel">
+  <a href="UNLICENSE"><img src="https://img.shields.io/badge/license-Unlicense-blue" alt="License: Unlicense"></a>
+</p>
 
-Developed by Mark Andrey · github.com/markandreydc
+<p align="center">
+  No GitHub account or coding tools needed.<br>
+  Developed by <a href="https://github.com/markandreydc">Mark Andrey</a>.
+</p>
+
+<p align="center">
+  <a href="images/receive.png"><img src="images/receive.png" width="48%" alt="QuickShareMac Receive window"></a>
+  <a href="images/send.png"><img src="images/send.png" width="48%" alt="QuickShareMac Send window"></a>
+</p>
 
 **QuickShareMac is a fork of [NearDrop](https://github.com/grishka/NearDrop), created by [grishka](https://github.com/grishka).** NearDrop provides the original Quick Share/Nearby Share implementation and protocol research that this app builds on. This fork adds a dedicated Send/Receive interface, transfer history, settings, and connection diagnostics.
 
@@ -28,12 +52,6 @@ Developed by Mark Andrey · github.com/markandreydc
 - Choose receiving availability for **10 minutes**, **30 minutes**, **1 hour**, or **Indefinitely** (the default).
 - Configure launch at login, receiving on startup, and remembered device names in Settings.
 - Check GitHub for updates manually, or schedule daily, weekly, or monthly checks—no automatic downloads or installation.
-
-## Screenshots
-
-| Receive | Send | Settings |
-| --- | --- | --- |
-| [<img src="images/receive.png" width="280" alt="QuickShareMac Receive window">](images/receive.png) | [<img src="images/send.png" width="280" alt="QuickShareMac Send window">](images/send.png) | [<img src="images/settings.png" width="280" alt="QuickShareMac Settings window">](images/settings.png) |
 
 ## Getting started
 
