@@ -59,6 +59,8 @@ If macOS blocks the app, run this in Terminal, then open it again. **Only do thi
 xattr -dr com.apple.quarantine "/Applications/QuickShareMac.app"
 ```
 
+For more information or an alternative, see [Apple’s guide to opening an app from an unknown developer](https://support.apple.com/en-ph/guide/mac-help/mh40616/mac).
+
 ## Getting started
 
 Both devices must be on the **same Wi-Fi/local network**. Keep your Android device unlocked while connecting.
