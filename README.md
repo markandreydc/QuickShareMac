@@ -134,6 +134,8 @@ See [test instructions](Tests/README.md) and [protocol documentation](PROTOCOL.m
 
 Thanks to **[grishka](https://github.com/grishka)** and the **[NearDrop](https://github.com/grishka/NearDrop)** contributors for the original app and protocol research that make this fork possible.
 
+QuickShareMac is developed with AI-assisted coding tools, building on NearDrop by grishka and its contributors.
+
 ## License
 
 Released under the [Unlicense](UNLICENSE).
