@@ -34,6 +34,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 	private let notifications=UNUserNotificationCenter.current()
 	private var notificationsAuthorized=false
 	private var notificationPermissionRequested=false
+	private lazy var successNotifier=TransferSuccessNotifier(authorize: { [weak self] completion in
+		guard let self=self else{completion(false); return}
+		// Also covers send-only users who have never enabled receiving. macOS
+		// prompts only when permission is undetermined, never again after denial.
+		self.notifications.requestAuthorization(options: [.alert,.sound]){ [weak self] granted, _ in
+			DispatchQueue.main.async{
+				self?.notificationsAuthorized=granted
+				completion(granted)
+			}
+		}
+	}, deliver: { [weak self] notification in self?.postSuccessNotification(notification) })
 	private var menuRefreshTimer:Timer?
 	private var launchFinished=false
 	private var pendingSendHandoff:ShareHandoff.Payload?
@@ -121,6 +132,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		mainWindow=window
 		windowController.sendController.sender.onStateUpdate={ [weak self] in self?.scheduleMenuRefresh() }
 		windowController.sendController.sender.onProgress={ [weak self] _ in self?.scheduleMenuRefresh() }
+		windowController.sendController.onTransferCompleted={ [weak self] result in
+			self?.successNotifier.notify(TransferSuccessNotification(transferID: result.id.uuidString, direction: .sent, deviceName: result.deviceName, itemDescription: result.itemDescription))
+		}
 		windowController.onReceivingChange={ [weak self] enabled in self?.setReceiving(enabled) }
 		windowController.onDurationChange={ [weak self] duration in self?.availability.select(duration) }
 		availability.onExpiration={ [weak self] in self?.setReceiving(false) }
@@ -300,17 +314,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		notifications.removeDeliveredNotifications(withIdentifiers: identifiers)
 		notifications.removePendingNotificationRequests(withIdentifiers: identifiers)
 	}
+	private func postSuccessNotification(_ notification:TransferSuccessNotification){
+		let content=UNMutableNotificationContent()
+		content.title=notification.title
+		content.body=notification.body
+		content.sound = .default
+		content.userInfo=["transferID": notification.transferID, "transferDirection": notification.direction.rawValue]
+		notifications.add(UNNotificationRequest(identifier: notification.identifier, content: content, trigger: nil))
+	}
 
 	func userNotificationCenter(_ center:UNUserNotificationCenter, willPresent notification:UNNotification, withCompletionHandler completionHandler:@escaping (UNNotificationPresentationOptions)->Void){
 		// Requests are only announced with a banner while the app is in the
 		// background; if one arrives while the app is frontmost, the window is
 		// already on screen showing the approval card.
-		completionHandler([])
+		// Success banners, unlike approval requests, also appear in the foreground.
+		let success=TransferSuccessNotification.Direction(rawValue: notification.request.content.userInfo["transferDirection"] as? String ?? "") != nil
+		completionHandler(success ? [.banner,.list,.sound] : [])
 	}
 
 	func userNotificationCenter(_ center:UNUserNotificationCenter, didReceive response:UNNotificationResponse, withCompletionHandler completionHandler:@escaping ()->Void){
 		if response.notification.request.content.userInfo["transferID"] != nil{
-			DispatchQueue.main.async{ [weak self] in self?.showMainWindow(nil) }
+			let direction=response.notification.request.content.userInfo["transferDirection"] as? String
+			DispatchQueue.main.async{ [weak self] in
+				guard let self=self else{return}
+				if direction==TransferSuccessNotification.Direction.sent.rawValue{self.windowController.showSend()}
+				else{self.windowController.showReceive()}
+				self.showMainWindow(nil)
+			}
 		}
 		completionHandler()
 	}
@@ -713,6 +743,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MainAppDelegate, NSMenuItemV
 		recentlyFinishedTransfers[id]=IncomingTransferDisplay(id: id, deviceName: transfer.device.name, description: transfer.description, status: status, state: state, progress: nil, pinCode: nil, remembered: false, receivedBytes: transfer.receivedBytes, totalBytes: transfer.totalBytes, savedFileURLs: completed ? transfer.transfer.savedFileURLs : [])
 		recentTransferOrder.insert(id, at: 0)
 		refreshWindow()
+		if completed{
+			successNotifier.notify(TransferSuccessNotification(transferID: id, direction: .received, deviceName: transfer.device.name, itemDescription: transfer.description))
+		}
 		// A user-initiated cancellation must not pull focus back to the window.
 		if error != nil && !canceled{showMainWindow(nil)}
 	}

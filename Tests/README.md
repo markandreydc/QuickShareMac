@@ -89,6 +89,19 @@ background-with-notifications, and no-notifications fallbacks, and the notificat
 copy is verified to name the device and point at the PIN check. History retry is
 covered for folders: **Send again** recompresses the original folder instead of
 pointing at deleted temporary ZIPs.
+Outgoing history uses three compact rows with trailing overflow actions and a
+counted View all sheet. Checks cover fixed height with many transfers, light/dark
+and narrow-width layout, inline retry, virtualized history, expanding a 200-file
+batch, reaching its last filename, captured sizes, live updates, synchronized
+dismiss/clear actions, empty states, and preserving active transfers.
+Success-notification checks cover outgoing completion callbacks, cancellation and
+failure exclusion, batch/recipient wording for both directions, authorization,
+denied permissions, and deduplication while authorization is pending or finished.
+Successful sends clear the selected-item table and restore the empty drop area
+for single files, batches, shared links, and compressed folders, including while
+the Receive tab is open. Checks preserve history/retry snapshots, notifications,
+and original files, and keep failed/canceled selections or new selections after
+stale completion callbacks intact.
 It also checks the read-only device-name card: the current advertised name with
 an edit action, editing only revealing the system/custom choice and input,
 Save/Cancel appearing only once something changed, Done closing an untouched

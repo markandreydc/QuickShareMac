@@ -251,10 +251,254 @@ private final class SelectedItemCellView:NSTableCellView{
 	@objc private func removeItem(_ sender:Any?){onRemove?()}
 }
 
+/// A transfer is always one row, even when it contains hundreds of files.
+private final class OutgoingHistoryRowView:NSTableCellView{
+	let retryButton=NSButton()
+	private let moreButton=NSPopUpButton(frame: .zero, pullsDown: true)
+	private let disclosure=NSButton()
+	private let icon=NSImageView()
+	private let title=WindowUI.label("", size: 12, weight: .medium)
+	private let subtitle=WindowUI.label("", size: 11, secondary: true)
+	private let status=WindowUI.label("", size: 11, secondary: true)
+	private var retryItem:NSMenuItem?
+	var onRetry:(()->Void)?
+	var onDismiss:(()->Void)?
+	var onExpand:(()->Void)?
+
+	override init(frame:NSRect){
+		super.init(frame: frame)
+		identifier=NSUserInterfaceItemIdentifier("OutgoingHistoryRow")
+		let row=WindowUI.stack(.horizontal, spacing: 8)
+		WindowUI.pin(row, to: self, inset: 10)
+		disclosure.isBordered=false
+		disclosure.target=self
+		disclosure.action=#selector(expand(_:))
+		disclosure.identifier=NSUserInterfaceItemIdentifier("OutgoingHistoryExpand")
+		row.addArrangedSubview(disclosure)
+		icon.imageScaling = .scaleProportionallyUpOrDown
+		icon.contentTintColor = .secondaryLabelColor
+		row.addArrangedSubview(icon)
+		let labels=WindowUI.stack(spacing: 3)
+		for label in [title,subtitle]{
+			label.maximumNumberOfLines=1
+			label.lineBreakMode = .byTruncatingMiddle
+			WindowUI.fill(label, in: labels)
+		}
+		labels.setContentHuggingPriority(.defaultLow, for: .horizontal)
+		row.addArrangedSubview(labels)
+		row.addArrangedSubview(WindowUI.spacer())
+		status.maximumNumberOfLines=1
+		status.lineBreakMode = .byTruncatingTail
+		status.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+		row.addArrangedSubview(status)
+		retryButton.image=NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+		retryButton.isBordered=false
+		retryButton.target=self
+		retryButton.action=#selector(retry(_:))
+		retryButton.identifier=NSUserInterfaceItemIdentifier("OutgoingHistoryRetry")
+		retryButton.toolTip=NSLocalizedString("RetryTransfer", value: "Retry…", comment: "")
+		retryButton.setAccessibilityLabel(retryButton.toolTip)
+		row.addArrangedSubview(retryButton)
+		moreButton.isBordered=false
+		moreButton.imagePosition = .imageOnly
+		(moreButton.cell as? NSPopUpButtonCell)?.arrowPosition = .noArrow
+		moreButton.identifier=NSUserInterfaceItemIdentifier("OutgoingHistoryMore")
+		moreButton.setAccessibilityLabel(NSLocalizedString("TransferActions", value: "Transfer actions", comment: ""))
+		row.addArrangedSubview(moreButton)
+		NSLayoutConstraint.activate([
+			disclosure.widthAnchor.constraint(equalToConstant: 14),
+			disclosure.heightAnchor.constraint(equalToConstant: 24),
+			icon.widthAnchor.constraint(equalToConstant: 22),
+			icon.heightAnchor.constraint(equalToConstant: 22),
+			status.widthAnchor.constraint(lessThanOrEqualToConstant: 100),
+			retryButton.widthAnchor.constraint(equalToConstant: 24),
+			retryButton.heightAnchor.constraint(equalToConstant: 24),
+			moreButton.widthAnchor.constraint(equalToConstant: 24),
+			moreButton.heightAnchor.constraint(equalToConstant: 24)
+		])
+	}
+	required init?(coder:NSCoder){fatalError("init(coder:) has not been implemented")}
+	func configure(_ result:OutgoingTransferResult, expanded:Bool=false, retryEnabled:Bool){
+		let items=result.displayItems
+		let batch=items.count>1
+		title.stringValue=result.itemDescription
+		title.toolTip=result.itemDescription
+		let time=DateFormatter.localizedString(from: result.finishedAt, dateStyle: .none, timeStyle: .short)
+		var details=[String(format: NSLocalizedString("SentToDevice", value: "To %@", comment: ""), result.deviceName)]
+		if items.first?.isFileURL==true{details.append(ByteCountFormatter.string(fromByteCount: result.totalBytes, countStyle: .file))}
+		details.append(time)
+		subtitle.stringValue=details.joined(separator: " · ")
+		subtitle.toolTip=subtitle.stringValue+" · "+DateFormatter.localizedString(from: result.finishedAt, dateStyle: .medium, timeStyle: .short)
+		icon.image=NSImage(systemSymbolName: batch ? "doc.on.doc" : items.first?.isFileURL==false ? "link" : "doc", accessibilityDescription: nil)
+		disclosure.isHidden = !batch
+		disclosure.image=NSImage(systemSymbolName: expanded ? "chevron.down" : "chevron.right", accessibilityDescription: nil)
+		disclosure.setAccessibilityLabel(expanded ? NSLocalizedString("HideTransferFiles", value: "Hide files", comment: "") : NSLocalizedString("ShowTransferFiles", value: "Show files", comment: ""))
+		disclosure.setAccessibilityValue(expanded ? 1 : 0)
+		status.stringValue=result.state == .completed ? NSLocalizedString("OutgoingHistorySent", value: "Sent", comment: "") : result.status
+		status.toolTip=result.status
+		status.textColor=result.state == .completed ? .systemGreen : .secondaryLabelColor
+		retryButton.isHidden=result.state == .completed
+		let menu=NSMenu()
+		menu.autoenablesItems=false
+		let placeholder=NSMenuItem(title: "", action: nil, keyEquivalent: "")
+		placeholder.image=NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil)
+		menu.addItem(placeholder)
+		let retry=NSMenuItem(title: result.state == .completed ? NSLocalizedString("SendAgain", value: "Send again…", comment: "") : NSLocalizedString("RetryTransfer", value: "Retry…", comment: ""), action: #selector(retry(_:)), keyEquivalent: "")
+		retry.target=self
+		menu.addItem(retry)
+		retryItem=retry
+		let dismiss=NSMenuItem(title: NSLocalizedString("Dismiss", value: "Dismiss", comment: ""), action: #selector(dismissResult(_:)), keyEquivalent: "")
+		dismiss.target=self
+		menu.addItem(dismiss)
+		moreButton.menu=menu
+		setRetryEnabled(retryEnabled)
+	}
+	func setRetryEnabled(_ enabled:Bool){retryButton.isEnabled=enabled; retryItem?.isEnabled=enabled}
+	@objc private func retry(_ sender:Any?){guard retryButton.isEnabled else{return}; onRetry?()}
+	@objc private func dismissResult(_ sender:Any?){onDismiss?()}
+	@objc private func expand(_ sender:Any?){onExpand?()}
+}
+
+/// The full session history is virtualized; expanding a batch adds file rows,
+/// not a tall card or another nested scrolling area.
+private final class OutgoingHistoryViewController:NSViewController, NSTableViewDataSource, NSTableViewDelegate{
+	private struct Entry{let result:OutgoingTransferResult; var file:URL?=nil}
+	private let table=NSTableView()
+	private let scroll=NSScrollView()
+	private let empty=WindowUI.label(NSLocalizedString("NoOutgoingHistory", value: "No outgoing transfers this session", comment: ""), size: 13, secondary: true)
+	private let heading=WindowUI.label("", size: 16, weight: .semibold)
+	private let clear=NSButton(title: NSLocalizedString("ClearRecent", value: "Clear", comment: ""), target: nil, action: nil)
+	private var results:[OutgoingTransferResult]=[]
+	private var entries:[Entry]=[]
+	private var expanded=Set<UUID>()
+	private var retryEnabled=true
+	var onRetry:((UUID)->Void)?
+	var onDismiss:((UUID)->Void)?
+	var onClear:(()->Void)?
+	var onClose:(()->Void)?
+
+	override func loadView(){
+		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 580, height: 440))
+		let content=WindowUI.stack(spacing: 12)
+		WindowUI.pin(content, to: view, inset: 20)
+		let header=WindowUI.stack(.horizontal)
+		header.addArrangedSubview(heading)
+		header.addArrangedSubview(WindowUI.spacer())
+		clear.bezelStyle = .inline
+		clear.target=self
+		clear.action=#selector(clearHistory(_:))
+		header.addArrangedSubview(clear)
+		WindowUI.fill(header, in: content)
+		WindowUI.fill(WindowUI.label(NSLocalizedString("OutgoingHistorySession", value: "Outgoing transfers from this session", comment: ""), size: 12, secondary: true), in: content)
+		table.identifier=NSUserInterfaceItemIdentifier("OutgoingHistoryTable")
+		table.headerView=nil
+		table.style = .plain
+		table.intercellSpacing = .zero
+		table.allowsColumnReordering=false
+		table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+		table.selectionHighlightStyle = .none
+		let column=NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Transfer"))
+		column.resizingMask = .autoresizingMask
+		table.addTableColumn(column)
+		table.delegate=self
+		table.dataSource=self
+		table.setAccessibilityLabel(NSLocalizedString("OutgoingTransferHistory", value: "Outgoing transfer history", comment: ""))
+		scroll.hasVerticalScroller=true
+		scroll.autohidesScrollers=false
+		scroll.scrollerStyle = .legacy
+		scroll.borderType = .noBorder
+		scroll.drawsBackground=false
+		table.frame=NSRect(x: 0, y: 0, width: 540, height: 0)
+		table.autoresizingMask = .width
+		scroll.documentView=table
+		empty.translatesAutoresizingMaskIntoConstraints=false
+		empty.alignment = .center
+		scroll.addSubview(empty)
+		NSLayoutConstraint.activate([empty.centerXAnchor.constraint(equalTo: scroll.centerXAnchor),empty.centerYAnchor.constraint(equalTo: scroll.centerYAnchor),empty.widthAnchor.constraint(lessThanOrEqualTo: scroll.widthAnchor)])
+		WindowUI.fill(scroll, in: content)
+		scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
+		scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive=true
+		let footer=WindowUI.stack(.horizontal)
+		footer.addArrangedSubview(WindowUI.spacer())
+		let done=NSButton(title: NSLocalizedString("Done", value: "Done", comment: ""), target: self, action: #selector(closeHistory(_:)))
+		done.bezelStyle = .rounded
+		done.keyEquivalent="\r"
+		footer.addArrangedSubview(done)
+		WindowUI.fill(footer, in: content)
+	}
+	required init?(coder:NSCoder){fatalError("init(coder:) has not been implemented")}
+	init(){super.init(nibName: nil, bundle: nil)}
+	func update(_ results:[OutgoingTransferResult], retryEnabled:Bool, expanding id:UUID?=nil){
+		_ = view
+		self.results=results
+		self.retryEnabled=retryEnabled
+		expanded.formIntersection(Set(results.map(\.id)))
+		if let id=id{expanded.insert(id)}
+		heading.stringValue=String.localizedStringWithFormat(NSLocalizedString("OutgoingHistoryCount", value: "Transfer history · %d", comment: ""), results.count)
+		clear.isEnabled = !results.isEmpty
+		empty.isHidden = !results.isEmpty
+		reloadEntries()
+		if let id=id, let row=entries.firstIndex(where: {$0.result.id==id}){table.scrollRowToVisible(row)}
+	}
+	func setRetryEnabled(_ enabled:Bool){
+		retryEnabled=enabled
+		let visibleRows=table.rows(in: table.visibleRect)
+		guard visibleRows.location != NSNotFound else{return}
+		for row in visibleRows.location..<NSMaxRange(visibleRows){(table.view(atColumn: 0, row: row, makeIfNecessary: false) as? OutgoingHistoryRowView)?.setRetryEnabled(enabled)}
+	}
+	private func reloadEntries(){
+		let origin=scroll.contentView.bounds.origin
+		entries=results.flatMap {result -> [Entry] in
+			[Entry(result: result)]+(expanded.contains(result.id) ? result.displayItems.map {Entry(result: result, file: $0)} : [])
+		}
+		table.reloadData()
+		scroll.contentView.scroll(to: origin)
+		scroll.reflectScrolledClipView(scroll.contentView)
+	}
+	func numberOfRows(in tableView:NSTableView)->Int{entries.count}
+	func tableView(_ tableView:NSTableView, heightOfRow row:Int)->CGFloat{entries[row].file==nil ? 58 : 28}
+	func tableView(_ tableView:NSTableView, shouldSelectRow row:Int)->Bool{false}
+	func tableView(_ tableView:NSTableView, viewFor tableColumn:NSTableColumn?, row:Int)->NSView?{
+		let entry=entries[row]
+		if let file=entry.file{
+			let identifier=NSUserInterfaceItemIdentifier("OutgoingHistoryFile")
+			let cell=tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView ?? NSTableCellView()
+			if cell.textField==nil{
+				cell.identifier=identifier
+				let name=WindowUI.label("", size: 11, secondary: true)
+				name.maximumNumberOfLines=1
+				name.lineBreakMode = .byTruncatingMiddle
+				name.translatesAutoresizingMaskIntoConstraints=false
+				cell.addSubview(name)
+				NSLayoutConstraint.activate([name.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 64),name.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -10),name.centerYAnchor.constraint(equalTo: cell.centerYAnchor)])
+				cell.textField=name
+			}
+			cell.textField?.stringValue=file.isFileURL ? file.lastPathComponent : file.absoluteString
+			cell.textField?.toolTip=file.isFileURL ? file.path : file.absoluteString
+			return cell
+		}
+		let cell=tableView.makeView(withIdentifier: NSUserInterfaceItemIdentifier("OutgoingHistoryRow"), owner: self) as? OutgoingHistoryRowView ?? OutgoingHistoryRowView(frame: .zero)
+		let id=entry.result.id
+		cell.configure(entry.result, expanded: expanded.contains(id), retryEnabled: retryEnabled)
+		cell.onRetry={ [weak self] in self?.onRetry?(id) }
+		cell.onDismiss={ [weak self] in self?.onDismiss?(id) }
+		cell.onExpand={ [weak self] in
+			guard let self=self else{return}
+			if !self.expanded.insert(id).inserted{self.expanded.remove(id)}
+			self.reloadEntries()
+		}
+		return cell
+	}
+	@objc private func clearHistory(_ sender:Any?){onClear?()}
+	@objc private func closeHistory(_ sender:Any?){onClose?()}
+	override func cancelOperation(_ sender:Any?){onClose?()}
+}
+
 final class SendViewController:NSViewController, NSTableViewDataSource, NSTableViewDelegate{
 	let sender=SendTransferViewController()
 	var compressFolders=SendPreferences.compressFolders(){didSet{sender.folderHandling=compressFolders ? .compress : .sendContents}}
 	var onTransferActivityChange:((Bool)->Void)?
+	var onTransferCompleted:((OutgoingTransferResult)->Void)?
 	var onContentSizeChange:(()->Void)?
 	var onOpenItem:((URL)->Bool)?
 	var onRevealItem:((URL)->Void)?
@@ -278,9 +522,13 @@ final class SendViewController:NSViewController, NSTableViewDataSource, NSTableV
 	private var listedItemsEditable=true
 	private let chooseButton=NSButton(title: NSLocalizedString("SendFiles", value: "Send files…", comment: ""), target: nil, action: nil)
 	private let preparingSpinner=NSProgressIndicator()
-	private let history=WindowUI.stack(spacing: 10)
+	private let history=WindowUI.stack(spacing: 0)
+	private let historyCard=CardView()
 	private let historyHeading=WindowUI.stack(.horizontal)
-	private var historyButtons:[NSButton]=[]
+	private let historyTitle=WindowUI.label("", size: 13, weight: .semibold)
+	private let viewAllButton=NSButton(title: "", target: nil, action: nil)
+	private var historyRows:[OutgoingHistoryRowView]=[]
+	private var historySheet:OutgoingHistoryViewController?
 
 	override func loadView(){
 		view=WindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 520, height: 500))
@@ -410,15 +658,27 @@ final class SendViewController:NSViewController, NSTableViewDataSource, NSTableV
 		sender.view.heightAnchor.constraint(greaterThanOrEqualToConstant: 320).isActive=true
 		WindowUI.fill(senderCard, in: content)
 		senderCard.isHidden=true
-		historyHeading.addArrangedSubview(WindowUI.label(NSLocalizedString("RecentOutgoingTransfers", value: "Recent outgoing transfers · this session", comment: ""), size: 13, weight: .semibold))
+		historyTitle.maximumNumberOfLines=1
+		historyTitle.lineBreakMode = .byTruncatingTail
+		historyTitle.toolTip=NSLocalizedString("OutgoingHistorySession", value: "Outgoing transfers from this session", comment: "")
+		historyHeading.addArrangedSubview(historyTitle)
 		historyHeading.addArrangedSubview(WindowUI.spacer())
 		let clear=NSButton(title: NSLocalizedString("ClearRecent", value: "Clear", comment: ""), target: self, action: #selector(clearHistory(_:)))
 		clear.bezelStyle = .inline
 		historyHeading.addArrangedSubview(clear)
 		WindowUI.fill(historyHeading, in: content)
-		WindowUI.fill(history, in: content)
+		historyCard.wantsLayer=true
+		historyCard.usesSoftAppearance=true
+		WindowUI.pin(history, to: historyCard, inset: 0)
+		WindowUI.fill(historyCard, in: content)
+		viewAllButton.identifier=NSUserInterfaceItemIdentifier("ViewAllOutgoingTransfers")
+		viewAllButton.bezelStyle = .inline
+		viewAllButton.target=self
+		viewAllButton.action=#selector(viewAllHistory(_:))
+		WindowUI.fill(viewAllButton, in: content)
 		historyHeading.isHidden=true
-		history.isHidden=true
+		historyCard.isHidden=true
+		viewAllButton.isHidden=true
 		updateControls()
 	}
 
@@ -643,65 +903,81 @@ final class SendViewController:NSViewController, NSTableViewDataSource, NSTableV
 			selectionTitle.stringValue=NSLocalizedString("DropFilesToSend", value: "Drop files here to send", comment: "")
 			selectionHelp.stringValue=NSLocalizedString("SendFilesOrFoldersSelectionHint", value: "Choose files or folders, then select a device. Nothing is sent until you choose a recipient.", comment: "")
 		}
-		for button in historyButtons{button.isEnabled=enabled}
+		for row in historyRows{row.setRetryEnabled(enabled && !preparing)}
+		historySheet?.setRetryEnabled(enabled && !preparing)
 		onTransferActivityChange?(!enabled)
 		onContentSizeChange?()
 	}
 	private func record(_ result:OutgoingTransferResult){
+		let alreadyCompleted=recentTransfers.contains {$0.id==result.id && $0.state == .completed}
 		recentTransfers.removeAll {$0.id==result.id}
 		recentTransfers.insert(result, at: 0)
-		if result.state == .completed{senderCard.isHidden=true}
+		if result.state == .completed && !alreadyCompleted && sender.state == .completed{
+			// The result already owns the history/retry snapshot. Clear only the
+			// just-finished selection, never a new selection after a stale callback.
+			clearSelection()
+		}
 		rebuildHistory()
+		if result.state == .completed && !alreadyCompleted{onTransferCompleted?(result)}
 	}
 	private func rebuildHistory(){
 		for child in history.arrangedSubviews{history.removeArrangedSubview(child); child.removeFromSuperview()}
-		historyButtons.removeAll()
-		history.isHidden=recentTransfers.isEmpty
+		historyRows.removeAll()
+		historyCard.isHidden=recentTransfers.isEmpty
 		historyHeading.isHidden=recentTransfers.isEmpty
-		for result in recentTransfers{
-			let card=CardView()
-			card.wantsLayer=true
-			card.usesSoftAppearance=true
-			let body=WindowUI.stack(spacing: 6)
-			WindowUI.pin(body, to: card, inset: 14)
-			let title=WindowUI.label(String(format: NSLocalizedString("SentToDevice", value: "To %@", comment: ""), result.deviceName), weight: .semibold)
-			title.maximumNumberOfLines=2
-			WindowUI.fill(title, in: body)
-			let details=WindowUI.label(result.itemDescription, size: 12, secondary: true)
-			details.maximumNumberOfLines=2
-			details.toolTip=result.itemDescription
-			WindowUI.fill(details, in: body)
-			let status=WindowUI.label(result.status, size: 12, secondary: true)
-			status.textColor=result.state == .completed ? .systemGreen : .secondaryLabelColor
-			WindowUI.fill(status, in: body)
-			let actions=WindowUI.stack(.horizontal)
-			let retry=NSButton(title: result.state == .completed ? NSLocalizedString("SendAgain", value: "Send again…", comment: "") : NSLocalizedString("RetryTransfer", value: "Retry…", comment: ""), target: self, action: #selector(retryRecent(_:)))
-			retry.identifier=NSUserInterfaceItemIdentifier(result.id.uuidString)
-			retry.bezelStyle = .inline
-			actions.addArrangedSubview(retry)
-			historyButtons.append(retry)
-			actions.addArrangedSubview(WindowUI.spacer())
-			let dismiss=NSButton(title: NSLocalizedString("Dismiss", value: "Dismiss", comment: ""), target: self, action: #selector(dismissRecent(_:)))
-			dismiss.identifier=retry.identifier
-			dismiss.bezelStyle = .inline
-			actions.addArrangedSubview(dismiss)
-			WindowUI.fill(actions, in: body)
-			WindowUI.fill(card, in: history)
+		historyTitle.stringValue=String.localizedStringWithFormat(NSLocalizedString("RecentOutgoingTransfersCount", value: "Recent outgoing transfers · %d", comment: ""), recentTransfers.count)
+		viewAllButton.isHidden=recentTransfers.count<=3
+		viewAllButton.title=String.localizedStringWithFormat(NSLocalizedString("ViewAllOutgoingTransfers", value: "View all %d transfers →", comment: ""), recentTransfers.count)
+		for result in recentTransfers.prefix(3){
+			if !historyRows.isEmpty{
+				let separator=NSBox()
+				separator.boxType = .separator
+				WindowUI.fill(separator, in: history)
+			}
+			let row=OutgoingHistoryRowView(frame: .zero)
+			row.configure(result, retryEnabled: !sender.isTransferring && !sender.isPreparing)
+			row.heightAnchor.constraint(equalToConstant: 58).isActive=true
+			row.onRetry={ [weak self] in self?.retryRecent(result.id) }
+			row.onDismiss={ [weak self] in self?.dismissRecent(result.id) }
+			row.onExpand={ [weak self] in self?.showHistory(expanding: result.id) }
+			historyRows.append(row)
+			WindowUI.fill(row, in: history)
 		}
+		historySheet?.update(recentTransfers, retryEnabled: !sender.isTransferring && !sender.isPreparing)
 		onContentSizeChange?()
 		updateControls()
 	}
-	@objc private func retryRecent(_ button:NSButton){
-		guard let result=recentTransfers.first(where: {$0.id.uuidString==button.identifier?.rawValue}) else {return}
+	private func retryRecent(_ id:UUID){
+		guard !sender.isTransferring, !sender.isPreparing, let result=recentTransfers.first(where: {$0.id==id}) else {return}
+		closeHistory()
 		if result.urls.count==1, let link=result.urls.first, !link.isFileURL{
 			_ = selectLink(link)
 		}else{
 			_ = selectItems(result.urls)
 		}
 	}
-	@objc private func dismissRecent(_ button:NSButton){
-		recentTransfers.removeAll {$0.id.uuidString==button.identifier?.rawValue}
+	private func dismissRecent(_ id:UUID){
+		recentTransfers.removeAll {$0.id==id}
 		rebuildHistory()
+	}
+	@objc private func viewAllHistory(_ sender:Any?){showHistory()}
+	private func showHistory(expanding id:UUID?=nil){
+		guard view.window != nil else{return}
+		if let sheet=historySheet{sheet.update(recentTransfers, retryEnabled: !sender.isTransferring && !sender.isPreparing, expanding: id); return}
+		let sheet=OutgoingHistoryViewController()
+		sheet.onRetry={ [weak self] id in self?.retryRecent(id) }
+		sheet.onDismiss={ [weak self] id in self?.dismissRecent(id) }
+		sheet.onClear={ [weak self] in self?.clearHistory(nil) }
+		sheet.onClose={ [weak self] in self?.closeHistory() }
+		sheet.update(recentTransfers, retryEnabled: !sender.isTransferring && !sender.isPreparing, expanding: id)
+		historySheet=sheet
+		presentAsSheet(sheet)
+	}
+	private func closeHistory(){
+		guard let sheet=historySheet else{return}
+		dismiss(sheet)
+		historySheet=nil
+		onContentSizeChange?()
 	}
 	@objc private func clearHistory(_ sender:Any?){recentTransfers.removeAll(); rebuildHistory()}
 }

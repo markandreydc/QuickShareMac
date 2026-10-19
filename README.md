@@ -92,6 +92,8 @@ Open **Settings…** (`⌘,`) to change your device name, received-files folder,
 
 Closing the window keeps the app and transfers running. Use the Dock or menu bar to reopen it, or press **⌘Q** to quit. Transfer history lasts only for the current app session.
 
+Successful sends and receives show a macOS notification with the filename or file count and the other device’s name. Allow notifications when prompted; you can change this in System Settings → Notifications → QuickShareMac. Clicking a notification opens the corresponding Send or Receive tab.
+
 ## Troubleshooting
 
 If your devices cannot connect:

@@ -27,6 +27,11 @@ struct UISmokeTests{
 		guard let button=visible(view).compactMap({$0 as? NSButton}).first(where: {$0.title==title}) else {fatalError("Missing button: \(title)")}
 		return button
 	}
+	static func historyMenuItem(_ title:String, in view:NSView)->NSMenuItem{
+		let items=visible(view).compactMap {$0 as? NSPopUpButton}.filter {$0.identifier?.rawValue=="OutgoingHistoryMore"}.flatMap {$0.menu?.items ?? []}
+		guard let item=items.first(where: {$0.title==title}) else{fatalError("Missing history menu item: \(title)")}
+		return item
+	}
 	static func layout(_ window:NSWindow){
 		window.contentView?.needsLayout=true
 		window.contentView?.layoutSubtreeIfNeeded()
@@ -558,6 +563,8 @@ struct UISmokeTests{
 		snapshot(window, "dark-approval")
 		expect(button("Accept", in: controller.view).isEnabled, "Approval must remain usable in dark mode")
 		testMainWindowSending()
+		testSuccessfulSendClearsSelection()
+		testOutgoingHistory()
 		testShareHandoff()
 		testSelectedItemList()
 		testSelectedItemActions()
@@ -567,6 +574,7 @@ struct UISmokeTests{
 		testFileDropExperience()
 		testTransferRateEstimator()
 		testIncomingRequestPresentation()
+		testTransferSuccessNotifications()
 		testStatusBarMenu()
 		testUpdateResultPresentation()
 		testIdentityAndAvailability()
@@ -1202,9 +1210,139 @@ struct UISmokeTests{
 		expect((try? ReceivedFilesFolder.set(missing))==nil, "Missing folders must be rejected")
 	}
 
+	static func testOutgoingHistory(){
+		let controller=SendViewController()
+		let service=FakeSendingService()
+		controller.sender.service=service
+		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 700), styleMask: [.titled,.resizable], backing: .buffered, defer: false)
+		window.contentViewController=controller
+		_ = controller.view
+		(controller.view as? WindowBackgroundView)?.backgroundStyle = .soft
+		func rows()->[NSView]{visible(controller.view).filter {$0.identifier?.rawValue=="OutgoingHistoryRow"}}
+		func viewAll()->NSButton?{visible(controller.view).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="ViewAllOutgoingTransfers"}}
+		func invoke(_ item:NSMenuItem){NSApp.sendAction(item.action!, to: item.target, from: item)}
+		let files=(0..<200).map {URL(fileURLWithPath: "/Users/Shared/Batch/photo-\($0).jpg")}
+		let date=Date(timeIntervalSince1970: 1700000000)
+		func result(_ index:Int)->OutgoingTransferResult{
+			OutgoingTransferResult(id: UUID(), deviceName: "Android \(index)", itemDescription: "photo-\(index).jpg", urls: [files[index]], state: index.isMultiple(of: 2) ? .completed : .failed, status: index.isMultiple(of: 2) ? "Sent" : "Declined", items: [files[index]], totalBytes: 240000, finishedAt: date)
+		}
+		expect(rows().isEmpty && viewAll()==nil, "Empty outgoing history must not occupy the main screen")
+		for index in 0..<3{controller.sender.onResult?(result(index))}
+		layout(window)
+		expect(rows().count==3 && viewAll()==nil, "Up to three transfers must appear without an unnecessary View all action")
+		controller.sender.onResult?(result(3))
+		layout(window)
+		let cappedHeight=controller.contentHeight
+		for index in 4..<24{controller.sender.onResult?(result(index))}
+		let batch=OutgoingTransferResult(id: UUID(), deviceName: String(repeating: "Long phone name ", count: 20), itemDescription: "200 files", urls: files, state: .failed, status: String(repeating: "Connection interrupted. ", count: 20), items: files, totalBytes: 240000000, finishedAt: date)
+		controller.sender.onResult?(batch)
+		controller.sender.onResult?(batch)
+		layout(window)
+		expect(controller.recentTransfers.count==25 && rows().count==3, "Many transfers and duplicate callbacks must still render only the latest three rows")
+		expect(abs(controller.contentHeight-cappedHeight)<1, "Outgoing history must stop growing after the third row and View all action")
+		expect(rows().allSatisfy {abs($0.bounds.height-58)<1}, "Each history row must stay compact even with long recipient names and errors")
+		expect(viewAll()?.title=="View all 25 transfers →", "View all must reflect the full session history count")
+		let latest=rows()[0]
+		let subtitles=visible(latest).compactMap {$0 as? NSTextField}
+		expect(subtitles.contains {$0.stringValue.contains("240 MB")}, "A batch must display its captured total size without re-reading source files")
+		expect(subtitles.contains {$0.toolTip==batch.status && $0.maximumNumberOfLines==1}, "Long errors must truncate inline but remain available in a tooltip")
+		expect(visible(controller.view).compactMap({$0 as? NSButton}).allSatisfy {$0.title != "Dismiss" && $0.title != "Retry…" && $0.title != "Send again…"}, "History must move text actions out of the rows and into overflow menus")
+		for appearance in [NSAppearance.Name.aqua,.darkAqua]{
+			controller.view.appearance=NSAppearance(named: appearance)
+			for width:CGFloat in [520,600]{
+				window.setContentSize(NSSize(width: width, height: 700))
+				layout(window)
+				expect(rows().allSatisfy {row in visible(row).filter {$0 is NSControl}.allSatisfy {row.bounds.contains($0.convert($0.bounds, to: row))}}, "Compact history controls must not overlap row edges in either appearance or at narrow widths")
+				expect(rows().allSatisfy {row in
+					let more=visible(row).compactMap {$0 as? NSPopUpButton}.first!
+					return abs(more.convert(more.bounds, to: row).maxX-row.bounds.maxX+10)<1
+				}, "History overflow menus must stay aligned at the trailing edge of every row")
+			}
+			snapshot(window, appearance == .aqua ? "outgoing-history-light" : "outgoing-history-dark")
+		}
+		controller.view.appearance=nil
+		viewAll()!.performClick(nil)
+		expect(waitUntil{window.attachedSheet != nil}, "View all must open a native history sheet")
+		let sheet=window.attachedSheet!
+		layout(sheet)
+		let table=descendants(sheet.contentView!).compactMap {$0 as? NSTableView}.first!
+		expect(table.numberOfRows==25 && sheet.contentView!.bounds.height<=440, "The full history sheet must have a bounded scrollable list")
+		expect(visible(sheet.contentView!).filter {$0.identifier?.rawValue=="OutgoingHistoryRow"}.count<25, "The full history must create only visible transfer views")
+		let batchCell=table.view(atColumn: 0, row: 0, makeIfNecessary: true)!
+		let expand=visible(batchCell).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="OutgoingHistoryExpand"}!
+		expand.performClick(nil)
+		layout(sheet)
+		expect(table.numberOfRows==225, "Expanding a batch must add individual filenames without creating separate transfers")
+		table.scrollRowToVisible(200)
+		layout(sheet)
+		let lastFile=table.view(atColumn: 0, row: 200, makeIfNecessary: true) as! NSTableCellView
+		expect(lastFile.textField?.stringValue=="photo-199.jpg" && lastFile.textField?.toolTip==files[199].path, "The final filename in a large batch must remain reachable with its full path")
+		snapshot(sheet, "outgoing-history-expanded")
+		table.scrollRowToVisible(0)
+		layout(sheet)
+		let expandedCell=table.view(atColumn: 0, row: 0, makeIfNecessary: true)!
+		visible(expandedCell).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="OutgoingHistoryExpand"}!.performClick(nil)
+		expect(table.numberOfRows==25, "Batch disclosure must collapse its filenames")
+		button("Done", in: sheet.contentView!).performClick(nil)
+		expect(waitUntil{window.attachedSheet==nil}, "Done must close the history sheet")
+		visible(rows()[0]).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="OutgoingHistoryExpand"}!.performClick(nil)
+		expect(waitUntil{window.attachedSheet != nil}, "The main batch disclosure must open the full history")
+		let reopened=window.attachedSheet!
+		layout(reopened)
+		let reopenedTable=descendants(reopened.contentView!).compactMap {$0 as? NSTableView}.first!
+		expect(reopenedTable.numberOfRows==225, "Opening a batch from the preview must expand its filenames immediately")
+		snapshot(reopened, "outgoing-history-sheet")
+		invoke(historyMenuItem("Dismiss", in: reopened.contentView!))
+		layout(reopened)
+		expect(controller.recentTransfers.count==24 && reopenedTable.numberOfRows==24 && viewAll()?.title=="View all 24 transfers →", "Dismiss must synchronize the preview, count, and expanded history")
+		button("Clear", in: reopened.contentView!).performClick(nil)
+		expect(controller.recentTransfers.isEmpty && rows().isEmpty && viewAll()==nil && reopenedTable.numberOfRows==0, "Clear in the sheet must clear both history presentations")
+		expect(visible(reopened.contentView!).compactMap({$0 as? NSTextField}).contains {$0.stringValue=="No outgoing transfers this session"}, "Clearing the open sheet must show a friendly empty state")
+		button("Done", in: reopened.contentView!).performClick(nil)
+		expect(waitUntil{window.attachedSheet==nil}, "An empty history sheet must remain dismissible")
+
+		let file=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-history-\(UUID().uuidString).txt")
+		try! Data("history".utf8).write(to: file)
+		defer{try? FileManager.default.removeItem(at: file)}
+		let retryResult=OutgoingTransferResult(id: UUID(), deviceName: "Android", itemDescription: file.lastPathComponent, urls: [file], state: .failed, status: "Declined")
+		controller.sender.onResult?(retryResult)
+		for index in 0..<3{controller.sender.onResult?(result(index))}
+		layout(window)
+		viewAll()!.performClick(nil)
+		expect(waitUntil{window.attachedSheet != nil}, "History must be reopenable after clearing")
+		let liveSheet=window.attachedSheet!
+		let liveTable=descendants(liveSheet.contentView!).compactMap {$0 as? NSTableView}.first!
+		controller.sender.onResult?(retryResult)
+		layout(liveSheet)
+		expect(liveTable.numberOfRows==4, "Results recorded while history is open must update without duplicates")
+		let sheetRetry=historyMenuItem("Retry…", in: liveSheet.contentView!)
+		invoke(sheetRetry)
+		expect(waitUntil{window.attachedSheet==nil} && controller.sender.originalItems==[file] && service.attempts.isEmpty, "Retry from the full history must close the sheet and select original files without sending")
+		button("Clear", in: controller.view).performClick(nil)
+		controller.sender.onResult?(retryResult)
+		let staleRetry=visible(rows()[0]).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="OutgoingHistoryRetry"}!
+		staleRetry.performClick(nil)
+		expect(controller.sender.originalItems==[file] && controller.sender.state == .choosingDevice && service.attempts.isEmpty, "Inline Retry must select original items and require choosing a recipient")
+		controller.sender.selectDevice(RemoteDeviceInfo(name: "Android", type: .phone, id: "history-phone"))
+		expect(!staleRetry.isEnabled && !historyMenuItem("Retry…", in: controller.view).isEnabled, "History retry controls must be disabled while another transfer is active")
+		NSApp.sendAction(staleRetry.action!, to: staleRetry.target, from: staleRetry)
+		expect(controller.sender.isTransferring && service.attempts.count==1, "Stale retry actions must not replace an active transfer")
+		button("Clear", in: controller.view).performClick(nil)
+		expect(controller.sender.isTransferring && service.cancellations==0 && controller.recentTransfers.isEmpty, "Clearing history must never clear or cancel an active transfer")
+		service.attempts.last!.transferFinished()
+		expect(controller.recentTransfers.count==1 && controller.recentTransfers[0].items==[file] && controller.recentTransfers[0].totalBytes==7, "Completion must capture batch filenames and size for history")
+		let staleDismiss=historyMenuItem("Dismiss", in: controller.view)
+		button("Clear", in: controller.view).performClick(nil)
+		invoke(staleDismiss)
+		expect(controller.recentTransfers.isEmpty, "Stale overflow actions must safely ignore already-cleared transfers")
+		controller.sender.shutdown()
+	}
+
 	static func testMainWindowSending(){
 		let service=FakeSendingService()
 		let main=MainWindowViewController()
+		var completions:[OutgoingTransferResult]=[]
+		main.sendController.onTransferCompleted={completions.append($0)}
 		main.setCompressFolders(true)
 		main.sendController.sender.service=service
 		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.defaultSize), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
@@ -1261,6 +1399,7 @@ struct UISmokeTests{
 		main.showSend()
 		main.sendController.sender.cancel(nil)
 		expect(service.cancellations==1 && main.sendController.recentTransfers.first?.state == .canceled, "Cancel must stop sending and record its result")
+		expect(completions.isEmpty, "Canceled sends must not trigger success notifications")
 		main.sendController.sender.retry(nil)
 		expect(main.sendController.sender.state == .choosingDevice && service.attempts.count==1, "Retry must rediscover rather than automatically resend")
 		main.sendController.sender.selectDevice(device)
@@ -1284,19 +1423,25 @@ struct UISmokeTests{
 		currentAttempt.transferFinished()
 		expect(!sendProgress.isHidden && !sendProgress.isIndeterminate && sendProgress.doubleValue==100, "Successful transfers must leave the send bar completely full")
 		expect(main.sendController.recentTransfers.count==2 && main.sendController.recentTransfers.first?.state == .completed, "Background completion must remain in outgoing history")
+		expect(main.sendController.sender.state == .idle && main.sendController.sender.originalItems.isEmpty && main.sendController.sender.preparedItems.isEmpty && itemTable(in: main.sendController.view).numberOfRows==0, "Successful background sends must clear the selection, including original folders and temporary ZIPs")
+		expect(completions.count==1 && completions[0].deviceName==device.name, "A background send must announce successful completion with its recipient")
 		expect((main.view as! SendDropView).acceptsItems, "The window must accept drops again after a transfer finishes")
 		currentAttempt.transferFinished()
 		expect(main.sendController.recentTransfers.count==2, "Duplicate completion callbacks must not duplicate history")
+		main.sendController.sender.onResult?(completions[0])
+		expect(completions.count==1, "Duplicate result callbacks must not announce the same success twice")
 		main.showSend()
 		layout(window)
 		snapshot(window, "main-send-complete")
-		button("Send again…", in: main.view).performClick(nil)
+		let sendAgain=historyMenuItem("Send again…", in: main.view)
+		NSApp.sendAction(sendAgain.action!, to: sendAgain.target, from: sendAgain)
 		expect(waitUntil{main.sendController.sender.state == .choosingDevice}, "Send again must recompress the folder and ask for a recipient")
 		expect(service.attempts.count==2, "Send again must not automatically resend")
 		service.canStart=false
 		main.sendController.sender.selectDevice(device)
 		expect(main.sendController.sender.state == .failed, "A vanished recipient must fail immediately rather than hang")
 		expect(main.sendController.recentTransfers.first?.state == .failed, "Failed sends must be retained in history")
+		expect(completions.count==1, "Failed sends must not trigger success notifications")
 		let pasteboard=NSPasteboard.withUniqueName()
 		pasteboard.setString("https://example.com", forType: .string)
 		expect(SendDropView.urls(from: pasteboard).isEmpty, "Dropped web-link text must not enter the file-only Send flow")
@@ -1324,6 +1469,48 @@ struct UISmokeTests{
 		expect(visible(main.view).compactMap({$0 as? NSSegmentedControl}).first?.selectedSegment==0, "Dropping files must select the Send tab")
 		main.sendController.sender.shutdown()
 		testConnectionErrorUI()
+	}
+
+	static func testSuccessfulSendClearsSelection(){
+		let service=FakeSendingService()
+		let controller=SendViewController()
+		controller.sender.service=service
+		let window=NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+		window.contentViewController=controller
+		let directory=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-success-selection-\(UUID().uuidString)")
+		try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer{controller.sender.shutdown(); try? FileManager.default.removeItem(at: directory)}
+		let files=(0..<8).map {directory.appendingPathComponent("file-\($0).txt")}
+		for file in files{try! Data("contents".utf8).write(to: file)}
+		let link=URL(string: "https://example.com/success")!
+		let device=RemoteDeviceInfo(name: "Test phone", type: .phone, id: "clear-success")
+		var completed:[OutgoingTransferResult]=[]
+		controller.onTransferCompleted={completed.append($0)}
+		for (index,items) in [[files[0]],files,[link]].enumerated(){
+			let selected=items==[link] ? controller.selectLink(link) : controller.selectItems(items)
+			expect(selected, "Files, batches, and shared links must be selectable before testing completion")
+			controller.sender.selectDevice(device)
+			let attempt=service.attempts.last!
+			attempt.transferFinished()
+			layout(window)
+			expect(controller.sender.state == .idle && controller.sender.originalItems.isEmpty && controller.sender.preparedItems.isEmpty, "Successful sends must discard their selected originals and prepared items")
+			expect(itemTable(in: controller.view).numberOfRows==0 && !visible(controller.view).contains {$0.identifier?.rawValue=="SendSelectionScroll"}, "The selected-file list must disappear after success")
+			expect(!visible(controller.view).contains {$0.identifier?.rawValue=="SendSelectionRemoveAll"} && visible(controller.view).contains {$0.identifier?.rawValue=="SendDropIcon"}, "Success must restore the empty drop area without Remove All")
+			expect(controller.recentTransfers.count==index+1 && controller.recentTransfers.first?.urls==items && completed.count==index+1, "Clearing selection must preserve complete history, retry URLs, and success notifications")
+			attempt.transferFinished()
+			expect(controller.recentTransfers.count==index+1 && completed.count==index+1 && service.cancellations==0, "Late completion callbacks must not duplicate history or cancel finished sends")
+		}
+		expect(files.allSatisfy {FileManager.default.fileExists(atPath: $0.path)}, "Clearing successfully sent files must never delete the originals")
+		expect(controller.selectItems([files[1]]), "The drop area must accept a fresh selection after success")
+		controller.sender.onResult?(completed[0])
+		expect(controller.sender.originalItems==[files[1]], "A duplicate old result must not clear a new selection")
+		controller.sender.selectDevice(device)
+		service.attempts.last!.connectionFailed(with: NearbyError.inputOutput)
+		expect(controller.sender.originalItems==[files[1]] && itemTable(in: controller.view).numberOfRows==1, "Failed sends must keep their files available for retry")
+		controller.sender.retry(nil)
+		controller.sender.selectDevice(device)
+		controller.sender.cancel(nil)
+		expect(controller.sender.originalItems==[files[1]] && itemTable(in: controller.view).numberOfRows==1, "Canceled sends must keep their files available for retry")
 	}
 
 	static func testFileDropExperience(){
@@ -1908,6 +2095,33 @@ struct UISmokeTests{
 		expect(notification.title.contains("Pixel 8"), "The notification must name the sending device")
 		expect(notification.body.contains("holiday.jpg") && notification.body.contains("PIN"), "The notification must describe the items and point at the PIN check")
 		expect(notification.transferID=="abc-123", "The notification must carry the transfer ID so it can be cleared when the request ends")
+	}
+
+	static func testTransferSuccessNotifications(){
+		let sent=TransferSuccessNotification(transferID: "batch-1", direction: .sent, deviceName: "Pixel 8", itemDescription: "200 files")
+		let received=TransferSuccessNotification(transferID: "batch-1", direction: .received, deviceName: "Galaxy S24", itemDescription: "holiday.jpg")
+		expect(sent.title=="Transfer sent" && sent.body=="200 files sent to Pixel 8.", "Send completion banners must describe the entire batch and its recipient")
+		expect(received.title=="Transfer received" && received.body=="holiday.jpg received from Galaxy S24.", "Receive completion banners must describe the received item and sender")
+		expect(sent.identifier != received.identifier && sent.identifier != "transfer-batch-1", "Completion notifications must be distinct from requests and the opposite transfer direction")
+		var authorizations:[(Bool)->Void]=[]
+		var delivered:[TransferSuccessNotification]=[]
+		let notifier=TransferSuccessNotifier(authorize: {authorizations.append($0)}, deliver: {delivered.append($0)})
+		notifier.notify(sent)
+		notifier.notify(sent)
+		expect(authorizations.count==1 && delivered.isEmpty, "A success must wait for notification authorization, with no duplicate request while authorization is pending")
+		authorizations[0](true)
+		expect(delivered==[sent], "Authorized success notifications must be delivered once")
+		notifier.notify(sent)
+		expect(authorizations.count==1 && delivered.count==1, "Duplicate success callbacks must not repost a delivered notification")
+		notifier.notify(received)
+		expect(authorizations.count==2, "Incoming and outgoing successes must be independently announced")
+		authorizations[1](false)
+		notifier.notify(received)
+		expect(delivered==[sent] && authorizations.count==2, "Denied notifications must not be delivered, retried, or bring up a window")
+		let next=TransferSuccessNotification(transferID: "batch-2", direction: .sent, deviceName: "Pixel 8", itemDescription: "notes.txt")
+		notifier.notify(next)
+		authorizations[2](true)
+		expect(delivered==[sent,next], "New successful transfers must still notify after an earlier permission denial")
 	}
 
 	static func testConnectionErrorUI(){

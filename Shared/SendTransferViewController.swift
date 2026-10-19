@@ -195,6 +195,11 @@ struct OutgoingTransferResult{
 	let urls:[URL]
 	let state:OutgoingState
 	let status:String
+	/// Snapshot of the sent files for display only; retry always uses `urls`.
+	var items:[URL]=[]
+	var totalBytes:Int64=0
+	var finishedAt:Date=Date()
+	var displayItems:[URL]{items.isEmpty ? urls : items}
 }
 
 class SendTransferViewController:NSViewController, ShareExtensionDelegate{
@@ -913,7 +918,7 @@ class SendTransferViewController:NSViewController, ShareExtensionDelegate{
 		// History keeps the original selection so retrying recompresses folders
 		// instead of pointing at temporary ZIPs that no longer exist.
 		let recordedURLs=sourceSelection.isEmpty ? urls : sourceSelection
-		onResult?(OutgoingTransferResult(id: transferID, deviceName: device.name, itemDescription: filesLabel.stringValue, urls: recordedURLs, state: state, status: progressState.stringValue))
+		onResult?(OutgoingTransferResult(id: transferID, deviceName: device.name, itemDescription: filesLabel.stringValue, urls: recordedURLs, state: state, status: progressState.stringValue, items: urls, totalBytes: totalBytes))
 	}
 
 	private func armTimeout(seconds:Double){
