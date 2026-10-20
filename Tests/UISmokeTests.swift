@@ -28,7 +28,7 @@ struct UISmokeTests{
 		return button
 	}
 	static func historyMenuItem(_ title:String, in view:NSView)->NSMenuItem{
-		let items=visible(view).compactMap {$0 as? NSPopUpButton}.filter {$0.identifier?.rawValue=="OutgoingHistoryMore"}.flatMap {$0.menu?.items ?? []}
+		let items=visible(view).compactMap {$0 as? NSPopUpButton}.filter {$0.identifier?.rawValue=="OutgoingHistoryMore" || $0.identifier?.rawValue=="IncomingHistoryMore"}.flatMap {$0.menu?.items ?? []}
 		guard let item=items.first(where: {$0.title==title}) else{fatalError("Missing history menu item: \(title)")}
 		return item
 	}
@@ -223,16 +223,18 @@ struct UISmokeTests{
 		expect(visible(controller.view).compactMap({$0 as? NSTextField}).contains(where: {$0.stringValue=="Canceled"}), "Canceled transfers must keep a clear canceled status")
 		expect(!visible(controller.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Cancel"}), "Canceled transfers must not offer cancellation")
 		expect(!visible(controller.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Show in Finder"}), "Canceled transfers must not offer Show in Finder")
-		expect(visible(controller.view).compactMap({$0 as? NSButton}).contains(where: {$0.title=="Dismiss"}), "Canceled transfers must stay dismissible")
+		expect(historyMenuItem("Dismiss", in: controller.view).isEnabled, "Canceled transfers must stay dismissible through the overflow menu")
 		controller.update(receiving: true, transfers: [transfer("a", .completed), transfer("b", .failed)])
 		layout(window)
 		var revealed:String?
 		controller.onRevealTransfer={revealed=$0}
-		button("Show in Finder", in: controller.view).performClick(nil)
+		let reveal=visible(controller.view).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="IncomingHistoryReveal"}!
+		reveal.performClick(nil)
 		expect(revealed=="a", "Finder action must identify the completed transfer")
 		var dismissed:String?
 		controller.onDismissTransfer={dismissed=$0}
-		button("Dismiss", in: controller.view).performClick(nil)
+		let dismiss=historyMenuItem("Dismiss", in: controller.view)
+		NSApp.sendAction(dismiss.action!, to: dismiss.target, from: dismiss)
 		expect(dismissed=="a", "Dismiss action must identify the completed transfer")
 		var cleared=false
 		controller.onClearRecentTransfers={cleared=true}
@@ -565,6 +567,7 @@ struct UISmokeTests{
 		testMainWindowSending()
 		testSuccessfulSendClearsSelection()
 		testOutgoingHistory()
+		testIncomingHistory()
 		testShareHandoff()
 		testSelectedItemList()
 		testSelectedItemActions()
@@ -1208,6 +1211,110 @@ struct UISmokeTests{
 		expect(!ReceivedFilesFolder.isCustom, "Resetting must clear the custom folder")
 		let missing=FileManager.default.temporaryDirectory.appendingPathComponent("quickshare-missing-\(UUID().uuidString)")
 		expect((try? ReceivedFilesFolder.set(missing))==nil, "Missing folders must be rejected")
+	}
+
+	static func testIncomingHistory(){
+		let main=MainWindowViewController()
+		let window=NSWindow(contentRect: NSRect(origin: .zero, size: MainWindowViewController.minimumSize), styleMask: MainWindowViewController.windowStyle, backing: .buffered, defer: false)
+		window.contentViewController=main
+		let files=(0..<200).map {URL(fileURLWithPath: "/Users/Shared/Received/photo-\($0).jpg")}
+		let date=Date(timeIntervalSince1970: 1700000000)
+		let batch=IncomingTransferDisplay(id: "batch", deviceName: String(repeating: "Long phone name ", count: 20), description: "200 files", status: "Transfer finished", state: .completed, progress: nil, pinCode: nil, remembered: false, receivedBytes: 240000000, totalBytes: 240000000, savedFileURLs: files, finishedAt: date)
+		let failed=TransferHistoryItem(transfer("failed-history", .failed))
+		expect(failed.status=="Failed" && failed.statusDetail.contains("interrupted") && failed.actionTitle==nil, "Failed receive rows must retain the full error in a tooltip and never offer Finder access")
+		let canceled=TransferHistoryItem(transfer("canceled-history", .canceled))
+		expect(canceled.status=="Canceled" && canceled.actionTitle==nil, "Canceled receive rows must remain compact and must not offer Finder access")
+		var history=(1..<25).map {index -> IncomingTransferDisplay in
+			var item=transfer("compact-\(index)", index.isMultiple(of: 3) ? .failed : index.isMultiple(of: 2) ? .canceled : .completed)
+			item.finishedAt=date
+			return item
+		}
+		history.insert(batch, at: 0)
+		var active:[IncomingTransferDisplay]=[]
+		func update(){main.update(receiving: true, transfers: active+history)}
+		func rows()->[NSView]{visible(main.view).filter {$0.identifier?.rawValue=="IncomingHistoryRow"}}
+		func viewAll()->NSButton?{visible(main.view).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="ViewAllIncomingTransfers"}}
+		func invoke(_ item:NSMenuItem){NSApp.sendAction(item.action!, to: item.target, from: item)}
+		main.onDismissTransfer={id in history.removeAll {$0.id==id}; update()}
+		main.onClearRecentTransfers={history=[]; update()}
+		var revealed:[String]=[]
+		main.onRevealTransfer={revealed.append($0)}
+		main.update(receiving: true, transfers: [])
+		expect(rows().isEmpty && viewAll()==nil, "Empty Receive history must not take up space")
+		main.update(receiving: true, transfers: Array(history.prefix(3)))
+		layout(window)
+		expect(rows().count==3 && viewAll()==nil, "Receive history must show three compact rows without an unnecessary View all button")
+		main.update(receiving: true, transfers: Array(history.prefix(4)))
+		main.fitWindowToContent()
+		let cappedHeight=window.frame.height
+		update()
+		main.fitWindowToContent()
+		layout(window)
+		expect(rows().count==3 && viewAll()?.title=="View all 25 transfers →", "Receive must cap history at three transfers and show the full session count")
+		expect(abs(window.frame.height-cappedHeight)<1 && rows().allSatisfy {abs($0.bounds.height-58)<1}, "Many incoming transfers and long device names must not grow the preview or its rows")
+		let batchRow=rows()[0]
+		let batchLabels=visible(batchRow).compactMap {$0 as? NSTextField}
+		expect(batchLabels.contains {$0.stringValue=="200 files"} && batchLabels.contains {$0.stringValue.contains("From ") && $0.stringValue.contains("240 MB")}, "Incoming batches must show a compact summary, sender, size, and completion time")
+		expect(batchLabels.contains {$0.stringValue=="Received" && $0.textColor == .systemGreen}, "Completed receives must have a clear green Received status")
+		let reveal=visible(batchRow).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="IncomingHistoryReveal"}!
+		reveal.performClick(nil)
+		expect(revealed==["batch"], "The inline Finder action must identify the completed incoming batch")
+		let staleReveal=historyMenuItem("Show in Finder", in: batchRow)
+		for appearance in [NSAppearance.Name.aqua,.darkAqua]{
+			main.view.appearance=NSAppearance(named: appearance)
+			layout(window)
+			expect(rows().allSatisfy {row in visible(row).filter {$0 is NSControl}.allSatisfy {row.bounds.contains($0.convert($0.bounds, to: row))}}, "Incoming history controls must fit narrow rows in both appearances")
+			snapshot(window, appearance == .aqua ? "incoming-history-light" : "incoming-history-dark")
+		}
+		main.view.appearance=nil
+		viewAll()!.performClick(nil)
+		expect(waitUntil{window.attachedSheet != nil}, "Receive View all must open a native history sheet")
+		let sheet=window.attachedSheet!
+		layout(sheet)
+		let table=descendants(sheet.contentView!).compactMap {$0 as? NSTableView}.first!
+		expect(table.identifier?.rawValue=="IncomingHistoryTable" && table.numberOfRows==25 && sheet.contentView!.bounds.height<=440, "Incoming history must use the same bounded virtualized sheet as outgoing history")
+		expect(visible(sheet.contentView!).filter {$0.identifier?.rawValue=="IncomingHistoryRow"}.count<25, "Only visible incoming transfers should create row views")
+		let first=table.view(atColumn: 0, row: 0, makeIfNecessary: true)!
+		visible(first).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="IncomingHistoryExpand"}!.performClick(nil)
+		layout(sheet)
+		expect(table.numberOfRows==225, "An incoming batch must expand into individual received-file rows")
+		snapshot(sheet, "incoming-history-expanded")
+		table.scrollRowToVisible(200)
+		layout(sheet)
+		let lastFile=table.view(atColumn: 0, row: 200, makeIfNecessary: true) as! NSTableCellView
+		expect(lastFile.textField?.stringValue=="photo-199.jpg" && lastFile.textField?.toolTip==files[199].path, "Every received filename must be reachable, with its full saved path")
+		active=[transfer("live", .receiving)]
+		update()
+		let scroll=table.enclosingScrollView!
+		let origin=scroll.contentView.bounds.origin
+		active=[transfer("live", .receiving, progress: 0.9)]
+		update()
+		expect(rows()[0] === batchRow && table.numberOfRows==225 && scroll.contentView.bounds.origin==origin, "Receive progress updates must preserve compact rows, batch expansion, and sheet scrolling")
+		button("Done", in: sheet.contentView!).performClick(nil)
+		expect(waitUntil{window.attachedSheet==nil}, "Done must close incoming history")
+		visible(batchRow).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue=="IncomingHistoryExpand"}!.performClick(nil)
+		expect(waitUntil{window.attachedSheet != nil}, "The incoming preview disclosure must open history")
+		let reopened=window.attachedSheet!
+		layout(reopened)
+		let reopenedTable=descendants(reopened.contentView!).compactMap {$0 as? NSTableView}.first!
+		expect(reopenedTable.numberOfRows==225, "Opening a received batch from the preview must expand its filenames")
+		invoke(historyMenuItem("Dismiss", in: reopened.contentView!))
+		expect(history.count==24 && reopenedTable.numberOfRows==24 && viewAll()?.title=="View all 24 transfers →", "Incoming Dismiss must synchronize preview, sheet, counts, and expansion")
+		invoke(staleReveal)
+		expect(revealed==["batch"], "A stale Finder action must not reveal a dismissed incoming transfer")
+		button("Clear", in: reopened.contentView!).performClick(nil)
+		expect(history.isEmpty && rows().isEmpty && viewAll()==nil && reopenedTable.numberOfRows==0, "Incoming Clear must remove both history presentations")
+		expect(visible(reopened.contentView!).compactMap({$0 as? NSTextField}).contains {$0.stringValue=="No incoming transfers this session"}, "An emptied incoming history sheet must show a friendly empty state")
+		button("Done", in: reopened.contentView!).performClick(nil)
+		expect(waitUntil{window.attachedSheet==nil} && button("Cancel", in: main.view).isEnabled, "Clearing history must leave an active receive and its cancellation controls intact")
+		history=[batch]+(1..<4).map {transfer("new-\($0)", .completed)}
+		update()
+		layout(window)
+		viewAll()!.performClick(nil)
+		expect(waitUntil{window.attachedSheet != nil}, "Incoming history must be reopenable after clearing")
+		active=[transfer("approval", .awaitingApproval),transfer("live", .receiving)]
+		update()
+		expect(waitUntil{window.attachedSheet==nil} && button("Accept", in: main.view).isEnabled, "A new incoming approval must close history so its PIN and decision controls cannot be hidden")
 	}
 
 	static func testOutgoingHistory(){

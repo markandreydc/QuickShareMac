@@ -6,11 +6,11 @@ enum TransferDecision:Equatable{
 	case accept, acceptAndRemember, decline
 }
 
-enum IncomingTransferState{
+enum IncomingTransferState:Equatable{
 	case awaitingApproval, receiving, completed, failed, canceled
 }
 
-struct IncomingTransferDisplay{
+struct IncomingTransferDisplay:Equatable{
 	let id:String
 	let deviceName:String
 	let description:String
@@ -22,6 +22,7 @@ struct IncomingTransferDisplay{
 	let receivedBytes:Int64
 	let totalBytes:Int64
 	let savedFileURLs:[URL]
+	var finishedAt:Date=Date()
 }
 
 enum WindowUI{
@@ -338,6 +339,13 @@ final class MainWindowViewController:NSViewController{
 	private var listKeys:[String]=[]
 	private var pendingApprovalID:String?
 	private let recentHeading=WindowUI.stack(.horizontal)
+	private let recentTitle=WindowUI.label("", size: 13, weight: .semibold)
+	private let recentCard=CardView()
+	private let recentRows=WindowUI.stack(spacing: 0)
+	private let viewAllRecent=NSButton(title: "", target: nil, action: nil)
+	private var recentTransfers:[IncomingTransferDisplay]=[]
+	private var recentHistoryItems:[TransferHistoryItem]=[]
+	private var historySheet:TransferHistoryViewController?
 	private let activeHeading=WindowUI.label(NSLocalizedString("IncomingTransfers", value: "Incoming transfers", comment: ""), size: 13, weight: .semibold)
 	private var receiving=false
 
@@ -494,11 +502,22 @@ final class MainWindowViewController:NSViewController{
 		enableButton.action=#selector(enableReceiving(_:))
 		empty.addArrangedSubview(enableButton)
 		empty.edgeInsets=NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
-		recentHeading.addArrangedSubview(WindowUI.label(NSLocalizedString("RecentTransfers", value: "Recent transfers · this session", comment: ""), size: 13, weight: .semibold))
+		recentTitle.maximumNumberOfLines=1
+		recentTitle.lineBreakMode = .byTruncatingTail
+		recentTitle.toolTip=NSLocalizedString("IncomingHistorySession", value: "Incoming transfers from this session", comment: "")
+		recentHeading.addArrangedSubview(recentTitle)
 		recentHeading.addArrangedSubview(WindowUI.spacer())
 		let clear=NSButton(title: NSLocalizedString("ClearRecent", value: "Clear", comment: ""), target: self, action: #selector(clearRecent(_:)))
 		clear.bezelStyle = .inline
 		recentHeading.addArrangedSubview(clear)
+		recentCard.identifier=NSUserInterfaceItemIdentifier("IncomingHistoryCard")
+		recentCard.wantsLayer=true
+		recentCard.usesSoftAppearance=true
+		WindowUI.pin(recentRows, to: recentCard, inset: 0)
+		viewAllRecent.identifier=NSUserInterfaceItemIdentifier("ViewAllIncomingTransfers")
+		viewAllRecent.bezelStyle = .inline
+		viewAllRecent.target=self
+		viewAllRecent.action=#selector(viewAllHistory(_:))
 	}
 
 	override func viewDidAppear(){
@@ -607,12 +626,16 @@ final class MainWindowViewController:NSViewController{
 		}
 		let active=transfers.filter {$0.state == .receiving || ($0.state == .awaitingApproval && $0.id != pending.first?.id)}
 		let recent=transfers.filter {$0.state == .completed || $0.state == .failed || $0.state == .canceled}
-		let visible=active+recent
-		let visibleIDs=Set(visible.map(\.id))
+		if recent != recentTransfers{
+			recentTransfers=recent
+			recentHistoryItems=recent.map(TransferHistoryItem.init)
+			rebuildRecentHistory()
+		}
+		let visibleIDs=Set(active.map(\.id))
 		for id in Array(transferRows.keys) where !visibleIDs.contains(id){
 			transferRows.removeValue(forKey: id)?.removeFromSuperview()
 		}
-		for transfer in visible{
+		for transfer in active{
 			let row=transferRows[transfer.id] ?? TransferRowView()
 			row.onDecision={ [weak self] id, decision in self?.onTransferDecision?(id, decision) }
 			row.onReveal={ [weak self] id in self?.onRevealTransfer?(id) }
@@ -632,7 +655,8 @@ final class MainWindowViewController:NSViewController{
 		}
 		if !recent.isEmpty{
 			desired.append(("recent",recentHeading))
-			desired += recent.compactMap { transfer in transferRows[transfer.id].map {("transfer:"+transfer.id,$0)} }
+			desired.append(("history",recentCard))
+			if recent.count>3{desired.append(("viewAll",viewAllRecent))}
 		}
 		if desired.map({$0.0}) != listKeys{
 			for child in rows.arrangedSubviews{rows.removeArrangedSubview(child); child.removeFromSuperview()}
@@ -640,10 +664,60 @@ final class MainWindowViewController:NSViewController{
 			listKeys=desired.map {$0.0}
 		}
 		if newApproval{
+			// Never let a history sheet hide a newly arrived PIN/approval request.
+			closeHistory()
 			view.layoutSubtreeIfNeeded()
 			scrollView.contentView.scroll(to: .zero)
 			scrollView.reflectScrolledClipView(scrollView.contentView)
 		}
+		scheduleWindowFit()
+	}
+
+	private func rebuildRecentHistory(){
+		recentTitle.stringValue=String.localizedStringWithFormat(NSLocalizedString("RecentIncomingTransfersCount", value: "Recent incoming transfers · %d", comment: ""), recentHistoryItems.count)
+		viewAllRecent.title=String.localizedStringWithFormat(NSLocalizedString("ViewAllIncomingTransfers", value: "View all %d transfers →", comment: ""), recentHistoryItems.count)
+		for child in recentRows.arrangedSubviews{recentRows.removeArrangedSubview(child); child.removeFromSuperview()}
+		for (index,item) in recentHistoryItems.prefix(3).enumerated(){
+			if index>0{
+				let separator=NSBox()
+				separator.boxType = .separator
+				WindowUI.fill(separator, in: recentRows)
+			}
+			let row=TransferHistoryRowView(frame: .zero)
+			row.configure(item)
+			row.heightAnchor.constraint(equalToConstant: 58).isActive=true
+			row.onAction={ [weak self] in self?.revealRecent(item.id) }
+			row.onDismiss={ [weak self] in self?.dismissRecent(item.id) }
+			row.onExpand={ [weak self] in self?.showHistory(expanding: item.id) }
+			WindowUI.fill(row, in: recentRows)
+		}
+		historySheet?.update(recentHistoryItems)
+	}
+	private func revealRecent(_ id:String){
+		guard let transfer=recentTransfers.first(where: {$0.id==id}), transfer.state == .completed, !transfer.savedFileURLs.isEmpty else{return}
+		onRevealTransfer?(id)
+	}
+	private func dismissRecent(_ id:String){
+		guard recentTransfers.contains(where: {$0.id==id}) else{return}
+		onDismissTransfer?(id)
+	}
+	@objc private func viewAllHistory(_ sender:Any?){showHistory()}
+	private func showHistory(expanding id:String?=nil){
+		guard view.window != nil else{return}
+		if let sheet=historySheet{sheet.update(recentHistoryItems, expanding: id); return}
+		let sheet=TransferHistoryViewController(incoming: true)
+		sheet.onAction={ [weak self] id in self?.revealRecent(id) }
+		sheet.onDismiss={ [weak self] id in self?.dismissRecent(id) }
+		sheet.onClear={ [weak self] in self?.onClearRecentTransfers?() }
+		sheet.onClose={ [weak self] in self?.closeHistory() }
+		sheet.update(recentHistoryItems, expanding: id)
+		historySheet=sheet
+		presentAsSheet(sheet)
+	}
+	private func closeHistory(){
+		guard let sheet=historySheet else{return}
+		dismiss(sheet)
+		historySheet=nil
 		scheduleWindowFit()
 	}
 

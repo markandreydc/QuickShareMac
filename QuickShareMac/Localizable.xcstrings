@@ -1,6 +1,13 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "ReceivedFromDevice" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "From %@" } } } },
+    "IncomingHistoryReceived" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Received" } } } },
+    "IncomingHistoryFailed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Failed" } } } },
+    "IncomingHistorySession" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Incoming transfers from this session" } } } },
+    "NoIncomingHistory" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No incoming transfers this session" } } } },
+    "RecentIncomingTransfersCount" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Recent incoming transfers · %d" } } } },
+    "ViewAllIncomingTransfers" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "View all %d transfers →" } } } },
     "TransferSentNotificationTitle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Transfer sent" } } } },
     "TransferReceivedNotificationTitle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Transfer received" } } } },
     "TransferSentNotificationBody" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ sent to %@." } } } },

@@ -94,6 +94,12 @@ counted View all sheet. Checks cover fixed height with many transfers, light/dar
 and narrow-width layout, inline retry, virtualized history, expanding a 200-file
 batch, reaching its last filename, captured sizes, live updates, synchronized
 dismiss/clear actions, empty states, and preserving active transfers.
+Receive history reuses the same compact rows and full-history sheet. Checks cover
+the three-row limit and stable window height, sender/size/time summaries,
+Received/Failed/Canceled statuses, inline Finder access, overflow dismissal,
+large received-file batches, live progress without rebuilding history or losing
+scroll/expansion, stale actions, clearing without affecting active receives, and
+closing history when a new PIN approval arrives.
 Success-notification checks cover outgoing completion callbacks, cancellation and
 failure exclusion, batch/recipient wording for both directions, authorization,
 denied permissions, and deduplication while authorization is pending or finished.
